@@ -3,6 +3,8 @@ add_library(catro_capabilities STATIC
     src/snapshot_diff.cpp
     src/operating_profile.cpp
     src/local_envelope.cpp
+    src/candidate_ranking.cpp
+    src/policy.cpp
 )
 add_library(Catro::Capabilities ALIAS catro_capabilities)
 

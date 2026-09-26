@@ -343,6 +343,9 @@ private:
                 text(*name, base + ".name");
             }
             support(encoder.support, base + ".support");
+            std::vector<EncoderModeKey> keys;
+            std::ranges::transform(encoder.modes, std::back_inserter(keys), mode_key);
+            distinct(keys, base + ".modes");
             for (std::size_t index = 0; index < encoder.modes.size(); ++index) {
                 check_encoder_mode(encoder, encoder.modes[index], base + ".modes[" + std::to_string(index) + "]");
             }

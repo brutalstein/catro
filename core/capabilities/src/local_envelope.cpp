@@ -1,4 +1,4 @@
-#include <catro/capabilities/policy.hpp>
+#include "policy_internal.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -10,11 +10,17 @@
 namespace catro::capabilities {
 namespace {
 
-struct Ceiling {
-    Dimensions box;
-    Rational frame_rate;
-    bool hdr = false;
-};
+// Unknown limits or unknown support never justify more than this.
+constexpr Dimensions kUnknownLimitBox{1920, 1080};
+constexpr Rational kUnknownLimitRate{30, 1};
+
+Dimensions even(Dimensions dimensions) {
+    return {std::max(2U, dimensions.width & ~1U), std::max(2U, dimensions.height & ~1U)};
+}
+
+} // namespace
+
+namespace detail {
 
 Ceiling ceiling_for(OperatingProfile profile) {
     switch (profile) {
@@ -31,29 +37,14 @@ Ceiling ceiling_for(OperatingProfile profile) {
     return {{1280, 720}, Rational{30, 1}, false};
 }
 
-// Unknown limits or unknown support never justify more than this.
-constexpr Dimensions kUnknownLimitBox{1920, 1080};
-constexpr Rational kUnknownLimitRate{30, 1};
-
-template <class T>
-const T* known_value(const Observed<T>& observed) {
-    return observed.knowledge() == Knowledge::known && observed.value() ? &*observed.value() : nullptr;
-}
-
 std::uint64_t pixels(Dimensions dimensions) {
     return std::uint64_t{dimensions.width} * dimensions.height;
 }
 
-Dimensions even(Dimensions dimensions) {
-    return {std::max(2U, dimensions.width & ~1U), std::max(2U, dimensions.height & ~1U)};
-}
-
-// A landscape box applies to landscape sources and is turned for portrait ones.
 Dimensions oriented(Dimensions box, Dimensions source) {
     return source.height > source.width ? Dimensions{box.height, box.width} : box;
 }
 
-// Largest size with the source aspect ratio inside the bound, never upscaled.
 Dimensions fit(Dimensions source, Dimensions bound) {
     if (source.width <= bound.width && source.height <= bound.height) {
         return source;
@@ -66,32 +57,19 @@ Dimensions fit(Dimensions source, Dimensions bound) {
     return even({static_cast<std::uint32_t>(width * bound.height / height), bound.height});
 }
 
-struct Point {
-    Dimensions resolution;
-    Rational frame_rate;
-    bool degraded = false;
-    std::vector<ReasonCode> reasons;
-
-    void bound_size(Dimensions box, ReasonCode reason) {
-        const auto bounded = fit(resolution, box);
-        if (!(bounded == resolution)) {
-            resolution = bounded;
-            reasons.push_back(reason);
-        }
+void QualityPoint::bound_size(Dimensions box, ReasonCode reason) {
+    const auto bounded = fit(resolution, box);
+    if (!(bounded == resolution)) {
+        resolution = bounded;
+        reasons.push_back(reason);
     }
+}
 
-    void bound_rate(Rational limit, ReasonCode reason) {
-        if (limit < frame_rate) {
-            frame_rate = limit;
-            reasons.push_back(reason);
-        }
+void QualityPoint::bound_rate(Rational limit, ReasonCode reason) {
+    if (limit < frame_rate) {
+        frame_rate = limit;
+        reasons.push_back(reason);
     }
-};
-
-// Higher resolution, then higher frame rate, then better evidence; lexicographic, no scoring.
-bool better(const Point& lhs, const Point& rhs) {
-    return std::tuple{pixels(lhs.resolution), lhs.frame_rate, !lhs.degraded} >
-           std::tuple{pixels(rhs.resolution), rhs.frame_rate, !rhs.degraded};
 }
 
 const DisplayState* source_display(const CapabilitySnapshot& snapshot, const MediaDecisionRequest& request) {
@@ -113,12 +91,92 @@ const DisplayState* source_display(const CapabilitySnapshot& snapshot, const Med
     return displays.size() == 1 ? &displays.front() : nullptr;
 }
 
-bool usable(const SupportFact& fact) {
-    return fact.status != Support::unsupported;
+bool permission_denied(const CapabilitySnapshot& snapshot, const CapturePathId& path) {
+    const auto& permissions = snapshot.runtime.capture_permissions;
+    const auto state = std::ranges::find(permissions, path, &CapturePermissionState::path);
+    if (state == permissions.end()) {
+        return false;
+    }
+    const auto* permission = known_value(state->permission);
+    return permission && *permission == CapturePermission::denied;
 }
 
-bool supported(const SupportFact& fact) {
-    return fact.status == Support::supported;
+std::optional<QualityPoint> quality_point(const DisplayState& display, const CapturePathCapability& capture,
+                                          const EncoderModeCapability& mode, const Ceiling& ceiling) {
+    QualityPoint point;
+    if (const auto* active = known_value(display.active_mode)) {
+        point.resolution = even(active->pixels);
+        point.frame_rate = active->refresh_rate;
+    } else {
+        point.resolution = kUnknownLimitBox;
+        point.frame_rate = kUnknownLimitRate;
+        point.degraded = true;
+        point.reasons.push_back(ReasonCode::limited_by_unknown_limits);
+    }
+    const auto source_resolution = point.resolution;
+    const auto source_rate = point.frame_rate;
+
+    if (const auto* rates = known_value(capture.frame_rates)) {
+        point.bound_rate(rates->maximum, ReasonCode::limited_by_capture);
+    }
+
+    const bool trusted = supported(mode.support);
+    const auto* dimensions = trusted ? known_value(mode.dimensions) : nullptr;
+    if (dimensions) {
+        point.bound_size(dimensions->maximum, ReasonCode::limited_by_encoder);
+        if (point.resolution.width < dimensions->minimum.width || point.resolution.height < dimensions->minimum.height) {
+            return std::nullopt;
+        }
+    } else {
+        point.degraded = true;
+        point.bound_size(oriented(kUnknownLimitBox, point.resolution), ReasonCode::limited_by_unknown_limits);
+    }
+    if (const auto* rates = trusted ? known_value(mode.frame_rates) : nullptr) {
+        point.bound_rate(rates->maximum, ReasonCode::limited_by_encoder);
+    } else {
+        point.degraded = true;
+        point.bound_rate(kUnknownLimitRate, ReasonCode::limited_by_unknown_limits);
+    }
+
+    point.bound_size(oriented(ceiling.box, point.resolution), ReasonCode::limited_by_profile);
+    point.bound_rate(ceiling.frame_rate, ReasonCode::limited_by_profile);
+
+    if (point.resolution == source_resolution || point.frame_rate == source_rate) {
+        point.reasons.push_back(ReasonCode::limited_by_source);
+    }
+    return point;
+}
+
+bool hdr_mode(const EncoderModeCapability& mode) {
+    const auto* hdr = known_value(mode.hdr);
+    const auto* transfer = known_value(mode.transfer_function);
+    const auto* bit_depth = known_value(mode.bit_depth);
+    return supported(mode.support) && hdr && *hdr != HdrMode::sdr && transfer &&
+           (*transfer == TransferFunction::pq || *transfer == TransferFunction::hlg) && bit_depth && *bit_depth >= 10;
+}
+
+bool preserves_hdr(const CapturePathCapability& capture, const TransferPathCapability& transfer) {
+    const auto* conversions = known_value(transfer.conversions);
+    return supported(capture.hdr_output) && usable(transfer.evidence) && conversions &&
+           std::ranges::find(*conversions, Conversion::hdr_to_sdr) == conversions->end();
+}
+
+} // namespace detail
+
+namespace {
+
+using namespace detail;
+
+// Higher resolution, then higher frame rate, then better evidence, then the smaller set of
+// limiting reasons: lexicographic, no scoring, and independent of enumeration order.
+bool better(const QualityPoint& lhs, const QualityPoint& rhs) {
+    const auto key = [](const QualityPoint& point) {
+        return std::tuple{pixels(point.resolution), point.frame_rate, !point.degraded};
+    };
+    if (key(lhs) != key(rhs)) {
+        return key(lhs) > key(rhs);
+    }
+    return lhs.reasons < rhs.reasons;
 }
 
 class EnvelopeBuilder {
@@ -136,10 +194,10 @@ public:
             return not_viable(ReasonCode::no_capture_path);
         }
 
-        std::optional<Point> best;
+        std::optional<QualityPoint> best;
         for (const auto* capture : captures) {
             for (const auto* mode : reachable_modes(*capture)) {
-                auto point = candidate(*display, *capture, *mode);
+                auto point = quality_point(*display, *capture, *mode, ceiling_);
                 if (point && (!best || better(*point, *best))) {
                     best = std::move(point);
                 }
@@ -178,18 +236,9 @@ private:
     std::vector<const CapturePathCapability*> usable_captures() const {
         std::vector<const CapturePathCapability*> captures;
         for (const auto& capture : snapshot_.devices.capture_paths) {
-            if (capture.source != request_.source || !usable(capture.support)) {
-                continue;
+            if (capture.source == request_.source && usable(capture.support) && !permission_denied(snapshot_, capture.id)) {
+                captures.push_back(&capture);
             }
-            const auto& permissions = snapshot_.runtime.capture_permissions;
-            const auto state = std::ranges::find(permissions, capture.id, &CapturePermissionState::path);
-            if (state != permissions.end()) {
-                const auto* permission = known_value(state->permission);
-                if (permission && *permission == CapturePermission::denied) {
-                    continue;
-                }
-            }
-            captures.push_back(&capture);
         }
         return captures;
     }
@@ -219,52 +268,6 @@ private:
         return modes;
     }
 
-    std::optional<Point> candidate(const DisplayState& display, const CapturePathCapability& capture,
-                                   const EncoderModeCapability& mode) const {
-        Point point;
-        if (const auto* active = known_value(display.active_mode)) {
-            point.resolution = even(active->pixels);
-            point.frame_rate = active->refresh_rate;
-        } else {
-            point.resolution = kUnknownLimitBox;
-            point.frame_rate = kUnknownLimitRate;
-            point.degraded = true;
-            point.reasons.push_back(ReasonCode::limited_by_unknown_limits);
-        }
-        const auto source_resolution = point.resolution;
-        const auto source_rate = point.frame_rate;
-
-        if (const auto* rates = known_value(capture.frame_rates)) {
-            point.bound_rate(rates->maximum, ReasonCode::limited_by_capture);
-        }
-
-        const bool trusted = supported(mode.support);
-        const auto* dimensions = trusted ? known_value(mode.dimensions) : nullptr;
-        if (dimensions) {
-            point.bound_size(dimensions->maximum, ReasonCode::limited_by_encoder);
-            if (point.resolution.width < dimensions->minimum.width || point.resolution.height < dimensions->minimum.height) {
-                return std::nullopt;
-            }
-        } else {
-            point.degraded = true;
-            point.bound_size(oriented(kUnknownLimitBox, point.resolution), ReasonCode::limited_by_unknown_limits);
-        }
-        if (const auto* rates = trusted ? known_value(mode.frame_rates) : nullptr) {
-            point.bound_rate(rates->maximum, ReasonCode::limited_by_encoder);
-        } else {
-            point.degraded = true;
-            point.bound_rate(kUnknownLimitRate, ReasonCode::limited_by_unknown_limits);
-        }
-
-        point.bound_size(oriented(ceiling_.box, point.resolution), ReasonCode::limited_by_profile);
-        point.bound_rate(ceiling_.frame_rate, ReasonCode::limited_by_profile);
-
-        if (point.resolution == source_resolution || point.frame_rate == source_rate) {
-            point.reasons.push_back(ReasonCode::limited_by_source);
-        }
-        return point;
-    }
-
     // HDR needs an enabled HDR display, HDR capture output, a transfer that keeps HDR, and a
     // supported HDR encoder mode with a matching transfer function and bit depth.
     bool hdr_achievable(const DisplayState& display, const std::vector<const CapturePathCapability*>& captures) const {
@@ -278,13 +281,8 @@ private:
             return false;
         }
         for (const auto* capture : captures) {
-            if (!supported(capture->hdr_output)) {
-                continue;
-            }
             for (const auto& transfer : snapshot_.devices.transfer_paths) {
-                const auto* conversions = known_value(transfer.conversions);
-                if (transfer.source != capture->id || !usable(transfer.evidence) || !conversions ||
-                    std::ranges::find(*conversions, Conversion::hdr_to_sdr) != conversions->end()) {
+                if (transfer.source != capture->id || !preserves_hdr(*capture, transfer)) {
                     continue;
                 }
                 const auto* target = encoder(transfer.destination);
@@ -294,14 +292,6 @@ private:
             }
         }
         return false;
-    }
-
-    static bool hdr_mode(const EncoderModeCapability& mode) {
-        const auto* hdr = known_value(mode.hdr);
-        const auto* transfer = known_value(mode.transfer_function);
-        const auto* bit_depth = known_value(mode.bit_depth);
-        return supported(mode.support) && hdr && *hdr != HdrMode::sdr && transfer &&
-               (*transfer == TransferFunction::pq || *transfer == TransferFunction::hlg) && bit_depth && *bit_depth >= 10;
     }
 
     const CapabilitySnapshot& snapshot_;

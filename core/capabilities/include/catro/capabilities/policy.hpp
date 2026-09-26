@@ -2,45 +2,11 @@
 
 #include <catro/capabilities/media_plan.hpp>
 #include <catro/capabilities/model.hpp>
-
-#include <optional>
+#include <catro/capabilities/version.hpp>
 
 // Pure local media policy. Inputs are validated snapshots and explicit media-domain requests;
 // no UI state, peer, or network input participates, and no vendor or model name is consulted.
 namespace catro::capabilities {
-
-enum class LatencyClass {
-    interactive,
-    standard,
-};
-
-enum class OperatingPreference {
-    automatic,
-    performance,
-    balanced,
-    efficiency,
-};
-
-// What the caller would like; never evidence of what the machine can do.
-struct RequestedQuality {
-    Dimensions resolution{1920, 1080};
-    Rational frame_rate{60, 1};
-    bool hdr = false;
-
-    friend bool operator==(const RequestedQuality&, const RequestedQuality&) = default;
-};
-
-struct MediaDecisionRequest {
-    SourceKind source = SourceKind::display;
-    // The display being captured, or the display the window/application is on. When absent,
-    // the display the platform reports as primary is used.
-    std::optional<DisplayId> display;
-    LatencyClass latency = LatencyClass::interactive;
-    OperatingPreference preference = OperatingPreference::automatic;
-    RequestedQuality quality;
-
-    friend bool operator==(const MediaDecisionRequest&, const MediaDecisionRequest&) = default;
-};
 
 // Precedence: thermal pressure, constrained session (headless, remote, critical memory),
 // explicit preference, battery or low-power mode, unknown power source, mains power by role.
@@ -51,5 +17,14 @@ struct MediaDecisionRequest {
 [[nodiscard]] LocalQualityEnvelope derive_local_envelope(const CapabilitySnapshot& snapshot,
                                                         const MediaDecisionRequest& request,
                                                         OperatingProfile profile);
+
+// Rejects invalid snapshots, requests, and unsupported policy versions, then ranks every
+// capture/transfer/encoder/mode path by the contract's rule precedence: hard request
+// constraints, known-unsupported removal, known evidence, GPU affinity, transfer cost,
+// low-latency hardware, then the profile-bounded quality, the most conservative codec, and
+// typed identifiers. Software encoding is an explicit candidate with stated consequences and
+// is never selected in the safe local envelope. Deterministic for any inventory order.
+[[nodiscard]] MediaPlan derive_media_plan(const CapabilitySnapshot& snapshot, const MediaDecisionRequest& request,
+                                          PolicyVersion policy_version);
 
 } // namespace catro::capabilities

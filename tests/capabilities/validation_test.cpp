@@ -36,7 +36,10 @@ TEST_CASE("the reference desktop fixture is structurally valid") {
 TEST_CASE("every machine fixture is structurally valid") {
     for (const auto& snapshot : {fx::high_end_desktop(), fx::intel_laptop_on_battery(), fx::hybrid_laptop(),
                                  fx::apple_silicon_macbook(), fx::hot_apple_silicon(), fx::older_intel_mac(),
-                                 fx::headless_session(), fx::partial_probe_failure()}) {
+                                 fx::headless_session(), fx::partial_probe_failure(), fx::software_only(),
+                                 fx::missing_gpu_driver(), fx::unknown_codec_limits(), fx::no_microphone(),
+                                 fx::remote_session(), fx::mixed_refresh_desktop(), fx::hdr_desktop(),
+                                 fx::crowded_desktop(40)}) {
         const auto report = validate(snapshot);
         INFO(describe(report));
         REQUIRE(report.ok());
@@ -210,6 +213,17 @@ TEST_CASE("unordered sets cannot repeat entries") {
     snapshot = fx::valid_snapshot();
     snapshot.devices.transfer_paths.push_back(snapshot.devices.transfer_paths.front());
     REQUIRE(validate(snapshot).contains(ValidationCode::duplicate_entry));
+
+    // Two modes of one encoder with the same identity would make ranking order-dependent.
+    snapshot = fx::valid_snapshot();
+    auto& modes = snapshot.devices.encoders.front().modes;
+    modes.push_back(modes.front());
+    modes.back().frame_rates = fx::known(RationalRange{Rational{1, 1}, Rational{60, 1}}, fx::advertised(fx::kEncoderProbe));
+    const auto report = validate(snapshot);
+    REQUIRE(report.contains(ValidationCode::duplicate_entry));
+    REQUIRE(std::ranges::any_of(report.errors, [](const ValidationError& error) {
+        return error.code == ValidationCode::duplicate_entry && error.path == "devices.encoders[mft:h264:hardware:0].modes";
+    }));
 }
 
 TEST_CASE("runtime state references existing devices exactly once") {

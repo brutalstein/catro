@@ -332,6 +332,9 @@ ProbeRecord probe_record(std::string_view probe, ProbeFamily family, std::uint64
 
 GpuId desktop_gpu() { return {"luid:00000000:0000a001", IdentityScope::os_session}; }
 DisplayId desktop_display() { return {"display:00000000:0000a001:1", IdentityScope::os_session}; }
+DisplayId extra_display(std::uint32_t index) {
+    return {"display:00000000:0000a001:" + std::to_string(index), IdentityScope::os_session};
+}
 EncoderId hardware_h264() { return {"mft:h264:hardware:0", IdentityScope::service_lifetime}; }
 EncoderId software_h264() { return {"mft:h264:software:0", IdentityScope::service_lifetime}; }
 EncoderId hardware_hevc() { return {"mft:hevc:hardware:0", IdentityScope::service_lifetime}; }
@@ -600,6 +603,91 @@ CapabilitySnapshot partial_probe_failure() {
     snapshot.issues.push_back(ProbeIssue{.probe_id = std::string(kEncoderProbe), .code = IssueCode::timeout});
     snapshot.devices.encoders.clear();
     snapshot.devices.transfer_paths.clear();
+    return snapshot;
+}
+
+CapabilitySnapshot software_only() {
+    auto snapshot = valid_snapshot();
+    std::erase_if(snapshot.devices.encoders, [](const EncoderCapability& encoder) { return encoder.id == hardware_h264(); });
+    std::erase_if(snapshot.devices.transfer_paths,
+                  [](const TransferPathCapability& transfer) { return transfer.destination == hardware_h264(); });
+    return snapshot;
+}
+
+CapabilitySnapshot missing_gpu_driver() {
+    auto snapshot = valid_snapshot();
+    auto& gpu = snapshot.devices.gpus.front();
+    gpu.kind = known(GpuKind::software, advertised(kGpuDisplayProbe));
+    gpu.name = known(std::string("Basic Display Adapter"), advertised(kGpuDisplayProbe));
+    const auto failed = unsupported(make_provenance(kEncoderProbe, EvidenceMethod::probe_validated));
+    auto& encoder = *std::ranges::find(snapshot.devices.encoders, hardware_h264(), &EncoderCapability::id);
+    encoder.support = failed;
+    for (auto& encoder_mode : encoder.modes) {
+        encoder_mode.support = failed;
+    }
+    return snapshot;
+}
+
+CapabilitySnapshot unknown_codec_limits() {
+    auto snapshot = valid_snapshot();
+    auto& encoder_mode = std::ranges::find(snapshot.devices.encoders, hardware_h264(), &EncoderCapability::id)->modes.front();
+    encoder_mode.dimensions = unknown<DimensionRange>(kEncoderProbe, IssueCode::not_reported);
+    encoder_mode.frame_rates = unknown<RationalRange>(kEncoderProbe, IssueCode::not_reported);
+    return snapshot;
+}
+
+CapabilitySnapshot no_microphone() {
+    auto snapshot = valid_snapshot();
+    std::erase_if(snapshot.devices.audio_endpoints,
+                  [](const AudioEndpointCapability& endpoint) { return endpoint.id == microphone(); });
+    std::erase_if(snapshot.runtime.audio_endpoints,
+                  [](const AudioEndpointState& state) { return state.endpoint == microphone(); });
+    return snapshot;
+}
+
+CapabilitySnapshot remote_session() {
+    auto snapshot = valid_snapshot();
+    snapshot.runtime.remote_session = known(true, measured(kRuntimeProbe));
+    return snapshot;
+}
+
+CapabilitySnapshot mixed_refresh_desktop() {
+    auto snapshot = valid_snapshot();
+    const struct {
+        std::uint32_t index;
+        DisplayMode active;
+    } extras[] = {
+        {2, mode({1920, 1080}, {1920, 1080}, Rational{60'000, 1'001})},
+        {3, mode({1920, 1080}, {1920, 1080}, Rational{60, 1})},
+        {4, mode_1440p(Rational{120, 1})},
+    };
+    for (const auto& extra : extras) {
+        snapshot.devices.displays.push_back(display(extra_display(extra.index), known(desktop_gpu(), advertised(kGpuDisplayProbe)),
+                                                    {extra.active}, ColorGamut::srgb, 8, kGpuDisplayProbe));
+        auto state = display_state(extra_display(extra.index), extra.active, Rational{1, 1}, kGpuDisplayProbe);
+        state.primary = known(false, measured(kGpuDisplayProbe));
+        snapshot.runtime.displays.push_back(std::move(state));
+    }
+    return snapshot;
+}
+
+CapabilitySnapshot hdr_desktop() {
+    auto snapshot = high_end_desktop();
+    snapshot.runtime.displays.front().hdr_enabled = known(true, measured(kGpuDisplayProbe));
+    return snapshot;
+}
+
+CapabilitySnapshot crowded_desktop(std::uint32_t extra) {
+    auto snapshot = valid_snapshot();
+    for (std::uint32_t index = 0; index < extra; ++index) {
+        const EncoderId id{"mft:h264:hardware:x" + std::string(index < 10 ? "0" : "") + std::to_string(index),
+                           IdentityScope::service_lifetime};
+        snapshot.devices.encoders.push_back(hardware_encoder(id, Codec::h264, known(desktop_gpu(), advertised(kEncoderProbe)),
+                                                             EncoderBackend::media_foundation, kEncoderProbe,
+                                                             {hardware_mode(Codec::h264, false, kEncoderProbe)}));
+        snapshot.devices.transfer_paths.push_back(
+            transfer(display_capture(), id, desktop_gpu(), desktop_gpu(), TransferKind::same_resource, kEncoderProbe));
+    }
     return snapshot;
 }
 

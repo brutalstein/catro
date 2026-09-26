@@ -3,6 +3,7 @@
 #include <catro/capabilities/model.hpp>
 #include <catro/capabilities/policy.hpp>
 
+#include <cstdint>
 #include <string_view>
 #include <utility>
 
@@ -69,10 +70,30 @@ caps::CapabilitySnapshot older_intel_mac();
 caps::CapabilitySnapshot headless_session();
 // valid_snapshot() whose encoder family timed out: encoders and transfers are absent.
 caps::CapabilitySnapshot partial_probe_failure();
+// valid_snapshot() without the hardware encoder: software H.264 is the only encoder.
+caps::CapabilitySnapshot software_only();
+// valid_snapshot() on the basic display adapter: the hardware encoder is still enumerated but
+// its activation probe fails.
+caps::CapabilitySnapshot missing_gpu_driver();
+// valid_snapshot() whose hardware encoder reports no size or frame-rate limits.
+caps::CapabilitySnapshot unknown_codec_limits();
+// valid_snapshot() without an audio input endpoint.
+caps::CapabilitySnapshot no_microphone();
+// valid_snapshot() inside a remote desktop session.
+caps::CapabilitySnapshot remote_session();
+// valid_snapshot() plus secondary 59.94 Hz, 60 Hz, and 120 Hz displays (extra_display 2, 3, 4)
+// on the same GPU; the 144 Hz display stays primary.
+caps::CapabilitySnapshot mixed_refresh_desktop();
+// high_end_desktop() with HDR enabled on its display.
+caps::CapabilitySnapshot hdr_desktop();
+// valid_snapshot() plus `extra` identical hardware H.264 encoders on the same GPU, with
+// identifiers that sort after hardware_h264().
+caps::CapabilitySnapshot crowded_desktop(std::uint32_t extra);
 
 // Stable identifiers used by the fixtures.
 caps::GpuId desktop_gpu();
 caps::DisplayId desktop_display();
+caps::DisplayId extra_display(std::uint32_t index);
 caps::EncoderId hardware_h264();
 caps::EncoderId software_h264();
 caps::EncoderId hardware_hevc();

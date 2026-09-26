@@ -257,6 +257,23 @@ struct EncoderModeCapability {
     friend bool operator==(const EncoderModeCapability&, const EncoderModeCapability&) = default;
 };
 
+// Identity of a concrete mode within its encoder, independent of enumeration order.
+// Validation rejects two modes of one encoder with the same key.
+struct EncoderModeKey {
+    PixelFormat input_format = PixelFormat::nv12;
+    ChromaSubsampling chroma = ChromaSubsampling::yuv420;
+    std::optional<CodecProfile> profile;
+    std::optional<std::uint8_t> bit_depth;
+    std::optional<HdrMode> hdr;
+
+    friend std::strong_ordering operator<=>(const EncoderModeKey&, const EncoderModeKey&) = default;
+    friend bool operator==(const EncoderModeKey&, const EncoderModeKey&) = default;
+};
+
+inline EncoderModeKey mode_key(const EncoderModeCapability& mode) {
+    return {mode.input_format, mode.chroma, mode.profile.value(), mode.bit_depth.value(), mode.hdr.value()};
+}
+
 struct EncoderCapability {
     EncoderId id;
     Codec codec = Codec::h264;
