@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
@@ -41,14 +40,16 @@ enum class IssueCode {
     malformed_output,
     helper_terminated,
     not_reported,
+    not_applicable,
     relationship_unprovable,
 };
 
+// The observation generation of a fact is the generation recorded by the probe run named here,
+// so refreshing a family re-stamps one record instead of every fact it produced.
 struct Provenance {
     std::string probe_id;
     EvidenceMethod method = EvidenceMethod::measured;
     Confidence confidence = Confidence::high;
-    std::uint64_t generation = 0;
     std::optional<IssueCode> issue;
 
     friend bool operator==(const Provenance&, const Provenance&) = default;

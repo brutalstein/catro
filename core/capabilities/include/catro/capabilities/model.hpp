@@ -468,6 +468,8 @@ struct ProbeRecord {
     std::string probe_id;
     ProbeFamily family = ProbeFamily::system;
     std::uint32_t revision = 0;
+    // Snapshot generation in which this probe last ran; the observation generation of its facts.
+    std::uint64_t generation = 0;
     std::chrono::microseconds duration{0};
     ProbeOutcome outcome = ProbeOutcome::success;
     // Raw native code, included only when safe to expose.
