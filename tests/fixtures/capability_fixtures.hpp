@@ -117,4 +117,7 @@ caps::EncoderId mac_hevc();
 // A display-capture request for the fixture's primary display.
 caps::MediaDecisionRequest display_request();
 
+// The same snapshot with every collection whose order carries no meaning reordered.
+caps::CapabilitySnapshot shuffled(caps::CapabilitySnapshot snapshot, std::uint32_t seed);
+
 } // namespace catro::fixtures

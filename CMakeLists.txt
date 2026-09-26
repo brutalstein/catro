@@ -13,7 +13,10 @@ option(CATRO_BUILD_TESTS "Build Catro tests" ON)
 include(cmake/Dependencies.cmake)
 include(cmake/Warnings.cmake)
 
+catro_enable_reporting_dependency()
+
 add_subdirectory(core/capabilities)
+add_subdirectory(core/reporting)
 
 if(CATRO_BUILD_TESTS)
     enable_testing()

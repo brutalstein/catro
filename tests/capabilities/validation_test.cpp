@@ -46,6 +46,21 @@ TEST_CASE("every machine fixture is structurally valid") {
     }
 }
 
+TEST_CASE("device names are bounded, well-formed UTF-8") {
+    const auto named = [](std::string name) {
+        auto snapshot = fx::valid_snapshot();
+        snapshot.devices.gpus.front().name = fx::known(std::move(name), fx::advertised(fx::kGpuDisplayProbe));
+        return validate(snapshot);
+    };
+    REQUIRE(named("Grafik \xC4\xB0\xC5\x9Flemci").ok());
+    REQUIRE(named("").contains(ValidationCode::invalid_text));
+    REQUIRE(named(std::string(kMaxTextBytes + 1, 'g')).contains(ValidationCode::invalid_text));
+    REQUIRE(named("bad \xFF byte").contains(ValidationCode::invalid_text));
+    REQUIRE(named("overlong \xC0\xAF").contains(ValidationCode::invalid_text));
+    REQUIRE(named("surrogate \xED\xA0\x80").contains(ValidationCode::invalid_text));
+    REQUIRE(named("truncated \xE2\x82").contains(ValidationCode::invalid_text));
+}
+
 TEST_CASE("encoder cannot reference a missing GPU") {
     auto snapshot = fx::valid_snapshot();
     snapshot.devices.encoders.front().gpu = fx::known(GpuId{"missing", IdentityScope::snapshot}, fx::advertised(fx::kEncoderProbe));

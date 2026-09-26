@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <random>
 #include <utility>
 #include <vector>
 
@@ -33,28 +32,6 @@ MediaDecisionRequest request_for(const DisplayId& display, Rational frame_rate =
     request.display = display;
     request.quality.frame_rate = frame_rate;
     return request;
-}
-
-// Reorders every collection whose order carries no meaning.
-CapabilitySnapshot shuffled(CapabilitySnapshot snapshot, std::uint32_t seed) {
-    std::mt19937 random(seed);
-    const auto shuffle = [&random](auto& items) { std::ranges::shuffle(items, random); };
-    auto& devices = snapshot.devices;
-    shuffle(devices.gpus);
-    shuffle(devices.encoders);
-    for (auto& encoder : devices.encoders) {
-        shuffle(encoder.modes);
-    }
-    shuffle(devices.capture_paths);
-    shuffle(devices.displays);
-    shuffle(devices.audio_endpoints);
-    shuffle(devices.transfer_paths);
-    shuffle(snapshot.runtime.displays);
-    shuffle(snapshot.runtime.audio_endpoints);
-    shuffle(snapshot.runtime.capture_permissions);
-    shuffle(snapshot.probes);
-    shuffle(snapshot.issues);
-    return snapshot;
 }
 
 } // namespace
@@ -216,7 +193,7 @@ TEST_CASE("plans do not depend on inventory order") {
     for (const auto& [snapshot, request] : cases) {
         const auto expected = plan_for(snapshot, request);
         for (std::uint32_t seed = 1; seed <= 8; ++seed) {
-            REQUIRE(plan_for(shuffled(snapshot, seed), request) == expected);
+            REQUIRE(plan_for(fx::shuffled(snapshot, seed), request) == expected);
         }
     }
 }

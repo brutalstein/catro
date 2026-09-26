@@ -1,0 +1,2 @@
+# Golden canonical reports are compared byte for byte; keep them LF on every platform.
+tests/fixtures/*.json text eol=lf

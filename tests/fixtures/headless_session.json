@@ -1,0 +1,1071 @@
+{
+  "schema_id": "catro.capabilities",
+  "schema_version": {
+    "major": 1,
+    "minor": 0
+  },
+  "redaction": "none",
+  "snapshot": {
+    "header": {
+      "generation": 1,
+      "captured_at": {
+        "unix_microseconds": 1790000000000000
+      },
+      "probe_revision": 1
+    },
+    "platform": {
+      "os": "windows",
+      "version": {
+        "knowledge": "known",
+        "value": {
+          "major": 10,
+          "minor": 0,
+          "build": 26100
+        },
+        "provenance": {
+          "probe_id": "windows.system.v1",
+          "method": "measured",
+          "confidence": "high",
+          "issue": null
+        }
+      }
+    },
+    "hardware": {
+      "cpu": {
+        "native_architecture": {
+          "knowledge": "known",
+          "value": "x86_64",
+          "provenance": {
+            "probe_id": "windows.system.v1",
+            "method": "measured",
+            "confidence": "high",
+            "issue": null
+          }
+        },
+        "process_architecture": {
+          "knowledge": "known",
+          "value": "x86_64",
+          "provenance": {
+            "probe_id": "windows.system.v1",
+            "method": "measured",
+            "confidence": "high",
+            "issue": null
+          }
+        },
+        "translation": {
+          "knowledge": "known",
+          "value": "native",
+          "provenance": {
+            "probe_id": "windows.system.v1",
+            "method": "measured",
+            "confidence": "high",
+            "issue": null
+          }
+        },
+        "physical_cores": {
+          "knowledge": "known",
+          "value": 16,
+          "provenance": {
+            "probe_id": "windows.system.v1",
+            "method": "measured",
+            "confidence": "high",
+            "issue": null
+          }
+        },
+        "logical_cores": {
+          "knowledge": "known",
+          "value": 32,
+          "provenance": {
+            "probe_id": "windows.system.v1",
+            "method": "measured",
+            "confidence": "high",
+            "issue": null
+          }
+        },
+        "performance_cores": {
+          "knowledge": "known",
+          "value": 16,
+          "provenance": {
+            "probe_id": "windows.system.v1",
+            "method": "measured",
+            "confidence": "high",
+            "issue": null
+          }
+        },
+        "efficiency_cores": {
+          "knowledge": "known",
+          "value": 0,
+          "provenance": {
+            "probe_id": "windows.system.v1",
+            "method": "measured",
+            "confidence": "high",
+            "issue": null
+          }
+        },
+        "simd": {
+          "knowledge": "known",
+          "value": [
+            "sse4_2",
+            "avx",
+            "avx2"
+          ],
+          "provenance": {
+            "probe_id": "windows.system.v1",
+            "method": "measured",
+            "confidence": "high",
+            "issue": null
+          }
+        }
+      },
+      "installed_memory": {
+        "knowledge": "known",
+        "value": {
+          "bytes": 34359738368
+        },
+        "provenance": {
+          "probe_id": "windows.system.v1",
+          "method": "measured",
+          "confidence": "high",
+          "issue": null
+        }
+      },
+      "platform_role": {
+        "knowledge": "known",
+        "value": "desktop",
+        "provenance": {
+          "probe_id": "windows.system.v1",
+          "method": "advertised",
+          "confidence": "high",
+          "issue": null
+        }
+      }
+    },
+    "devices": {
+      "gpus": [
+        {
+          "id": {
+            "value": "luid:00000000:0000a001",
+            "scope": "os_session"
+          },
+          "vendor_id": {
+            "knowledge": "known",
+            "value": 4660,
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "device_id": {
+            "knowledge": "known",
+            "value": 22136,
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "name": {
+            "knowledge": "known",
+            "value": "Discrete GPU",
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "kind": {
+            "knowledge": "known",
+            "value": "discrete",
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "dedicated_memory": {
+            "knowledge": "known",
+            "value": {
+              "bytes": 12884901888
+            },
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "shared_memory": {
+            "knowledge": "known",
+            "value": {
+              "bytes": 17179869184
+            },
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "unified_memory": {
+            "knowledge": "known",
+            "value": false,
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "graphics_apis": {
+            "knowledge": "known",
+            "value": [
+              "direct3d11",
+              "direct3d12"
+            ],
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "preferred_for_minimum_power": {
+            "knowledge": "known",
+            "value": true,
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "preferred_for_high_performance": {
+            "knowledge": "known",
+            "value": true,
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          }
+        }
+      ],
+      "encoders": [
+        {
+          "id": {
+            "value": "mft:h264:hardware:0",
+            "scope": "service_lifetime"
+          },
+          "codec": "h264",
+          "backend": "media_foundation",
+          "implementation": "hardware",
+          "gpu": {
+            "knowledge": "known",
+            "value": {
+              "value": "luid:00000000:0000a001",
+              "scope": "os_session"
+            },
+            "provenance": {
+              "probe_id": "windows.encoders.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "name": {
+            "knowledge": "known",
+            "value": "Hardware H.264 Encoder",
+            "provenance": {
+              "probe_id": "windows.encoders.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "support": {
+            "status": "supported",
+            "provenance": {
+              "probe_id": "windows.encoders.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "modes": [
+            {
+              "codec": "h264",
+              "profile": {
+                "knowledge": "known",
+                "value": "h264_high",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "dimensions": {
+                "knowledge": "known",
+                "value": {
+                  "minimum": {
+                    "width": 128,
+                    "height": 128
+                  },
+                  "maximum": {
+                    "width": 4096,
+                    "height": 4096
+                  }
+                },
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "frame_rates": {
+                "knowledge": "known",
+                "value": {
+                  "minimum": {
+                    "numerator": 1,
+                    "denominator": 1
+                  },
+                  "maximum": {
+                    "numerator": 240,
+                    "denominator": 1
+                  }
+                },
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "input_format": "nv12",
+              "chroma": "yuv420",
+              "bit_depth": {
+                "knowledge": "known",
+                "value": 8,
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "color_range": {
+                "knowledge": "known",
+                "value": "limited",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "transfer_function": {
+                "knowledge": "known",
+                "value": "bt709",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "hdr": {
+                "knowledge": "known",
+                "value": "sdr",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "low_latency": {
+                "status": "supported",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "support": {
+                "status": "supported",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": {
+            "value": "mft:h264:software:0",
+            "scope": "service_lifetime"
+          },
+          "codec": "h264",
+          "backend": "media_foundation",
+          "implementation": "software",
+          "gpu": {
+            "knowledge": "unavailable",
+            "provenance": {
+              "probe_id": "windows.encoders.v1",
+              "method": "advertised",
+              "confidence": "degraded",
+              "issue": "not_applicable"
+            }
+          },
+          "name": {
+            "knowledge": "known",
+            "value": "Software H.264 Encoder",
+            "provenance": {
+              "probe_id": "windows.encoders.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "support": {
+            "status": "supported",
+            "provenance": {
+              "probe_id": "windows.encoders.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "modes": [
+            {
+              "codec": "h264",
+              "profile": {
+                "knowledge": "known",
+                "value": "h264_main",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "dimensions": {
+                "knowledge": "unknown",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "degraded",
+                  "issue": "not_reported"
+                }
+              },
+              "frame_rates": {
+                "knowledge": "unknown",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "degraded",
+                  "issue": "not_reported"
+                }
+              },
+              "input_format": "nv12",
+              "chroma": "yuv420",
+              "bit_depth": {
+                "knowledge": "known",
+                "value": 8,
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "color_range": {
+                "knowledge": "known",
+                "value": "limited",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "transfer_function": {
+                "knowledge": "known",
+                "value": "bt709",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "hdr": {
+                "knowledge": "known",
+                "value": "sdr",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              },
+              "low_latency": {
+                "status": "unknown",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "degraded",
+                  "issue": "not_reported"
+                }
+              },
+              "support": {
+                "status": "supported",
+                "provenance": {
+                  "probe_id": "windows.encoders.v1",
+                  "method": "advertised",
+                  "confidence": "high",
+                  "issue": null
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "capture_paths": [
+        {
+          "id": {
+            "value": "wgc:display",
+            "scope": "persistent"
+          },
+          "api": "windows_graphics_capture",
+          "source": "display",
+          "support": {
+            "status": "supported",
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "gpu": {
+            "knowledge": "unknown",
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "degraded",
+              "issue": "relationship_unprovable"
+            }
+          },
+          "output_formats": {
+            "knowledge": "known",
+            "value": [
+              "bgra8",
+              "rgba16f"
+            ],
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "hdr_output": {
+            "status": "supported",
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "frame_rates": {
+            "knowledge": "unknown",
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "degraded",
+              "issue": "not_reported"
+            }
+          }
+        }
+      ],
+      "displays": [],
+      "audio_endpoints": [
+        {
+          "id": {
+            "value": "mmdevice:input:0",
+            "scope": "persistent"
+          },
+          "direction": "input",
+          "name": {
+            "knowledge": "known",
+            "value": "Microphone",
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "channels": {
+            "knowledge": "known",
+            "value": 2,
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "sample_rate_hz": {
+            "knowledge": "known",
+            "value": 48000,
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "sample_formats": {
+            "knowledge": "known",
+            "value": [
+              "pcm_f32"
+            ],
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          }
+        },
+        {
+          "id": {
+            "value": "mmdevice:output:0",
+            "scope": "persistent"
+          },
+          "direction": "output",
+          "name": {
+            "knowledge": "known",
+            "value": "Speakers",
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "channels": {
+            "knowledge": "known",
+            "value": 2,
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "sample_rate_hz": {
+            "knowledge": "known",
+            "value": 48000,
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "sample_formats": {
+            "knowledge": "known",
+            "value": [
+              "pcm_f32"
+            ],
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          }
+        }
+      ],
+      "transfer_paths": [
+        {
+          "source": {
+            "value": "wgc:display",
+            "scope": "persistent"
+          },
+          "destination": {
+            "value": "mft:h264:hardware:0",
+            "scope": "service_lifetime"
+          },
+          "source_gpu": {
+            "value": "luid:00000000:0000a001",
+            "scope": "os_session"
+          },
+          "destination_gpu": {
+            "value": "luid:00000000:0000a001",
+            "scope": "os_session"
+          },
+          "transfer": "same_resource",
+          "conversions": {
+            "knowledge": "known",
+            "value": [
+              "pixel_format"
+            ],
+            "provenance": {
+              "probe_id": "windows.encoders.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "evidence": {
+            "status": "supported",
+            "provenance": {
+              "probe_id": "windows.encoders.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          }
+        },
+        {
+          "source": {
+            "value": "wgc:display",
+            "scope": "persistent"
+          },
+          "destination": {
+            "value": "mft:h264:software:0",
+            "scope": "service_lifetime"
+          },
+          "source_gpu": null,
+          "destination_gpu": null,
+          "transfer": "cpu_staging",
+          "conversions": {
+            "knowledge": "known",
+            "value": [
+              "pixel_format"
+            ],
+            "provenance": {
+              "probe_id": "windows.encoders.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "evidence": {
+            "status": "supported",
+            "provenance": {
+              "probe_id": "windows.encoders.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          }
+        }
+      ]
+    },
+    "runtime": {
+      "power_source": {
+        "knowledge": "known",
+        "value": "ac",
+        "provenance": {
+          "probe_id": "windows.runtime.v1",
+          "method": "measured",
+          "confidence": "high",
+          "issue": null
+        }
+      },
+      "battery_present": {
+        "knowledge": "known",
+        "value": false,
+        "provenance": {
+          "probe_id": "windows.runtime.v1",
+          "method": "measured",
+          "confidence": "high",
+          "issue": null
+        }
+      },
+      "low_power_mode": {
+        "knowledge": "known",
+        "value": false,
+        "provenance": {
+          "probe_id": "windows.runtime.v1",
+          "method": "measured",
+          "confidence": "high",
+          "issue": null
+        }
+      },
+      "thermal": {
+        "knowledge": "known",
+        "value": "nominal",
+        "provenance": {
+          "probe_id": "windows.runtime.v1",
+          "method": "measured",
+          "confidence": "high",
+          "issue": null
+        }
+      },
+      "memory_pressure": {
+        "knowledge": "known",
+        "value": "normal",
+        "provenance": {
+          "probe_id": "windows.runtime.v1",
+          "method": "measured",
+          "confidence": "high",
+          "issue": null
+        }
+      },
+      "remote_session": {
+        "knowledge": "known",
+        "value": false,
+        "provenance": {
+          "probe_id": "windows.runtime.v1",
+          "method": "measured",
+          "confidence": "high",
+          "issue": null
+        }
+      },
+      "headless": {
+        "knowledge": "known",
+        "value": true,
+        "provenance": {
+          "probe_id": "windows.runtime.v1",
+          "method": "measured",
+          "confidence": "high",
+          "issue": null
+        }
+      },
+      "displays": [],
+      "audio_endpoints": [
+        {
+          "endpoint": {
+            "value": "mmdevice:input:0",
+            "scope": "persistent"
+          },
+          "active": {
+            "knowledge": "known",
+            "value": true,
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "measured",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "default_roles": {
+            "knowledge": "known",
+            "value": [
+              "console",
+              "multimedia",
+              "communications"
+            ],
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "measured",
+              "confidence": "high",
+              "issue": null
+            }
+          }
+        },
+        {
+          "endpoint": {
+            "value": "mmdevice:output:0",
+            "scope": "persistent"
+          },
+          "active": {
+            "knowledge": "known",
+            "value": true,
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "measured",
+              "confidence": "high",
+              "issue": null
+            }
+          },
+          "default_roles": {
+            "knowledge": "known",
+            "value": [
+              "console",
+              "multimedia",
+              "communications"
+            ],
+            "provenance": {
+              "probe_id": "windows.audio.v1",
+              "method": "measured",
+              "confidence": "high",
+              "issue": null
+            }
+          }
+        }
+      ],
+      "capture_permissions": [
+        {
+          "path": {
+            "value": "wgc:display",
+            "scope": "persistent"
+          },
+          "permission": {
+            "knowledge": "known",
+            "value": "granted",
+            "provenance": {
+              "probe_id": "windows.gpu_display.v1",
+              "method": "advertised",
+              "confidence": "high",
+              "issue": null
+            }
+          }
+        }
+      ]
+    },
+    "probes": [
+      {
+        "probe_id": "windows.audio.v1",
+        "family": "audio",
+        "revision": 1,
+        "generation": 1,
+        "duration": {
+          "microseconds": 12000
+        },
+        "outcome": "success",
+        "native_error": null,
+        "fact_count": 8
+      },
+      {
+        "probe_id": "windows.encoders.v1",
+        "family": "encoders",
+        "revision": 1,
+        "generation": 1,
+        "duration": {
+          "microseconds": 12000
+        },
+        "outcome": "success",
+        "native_error": null,
+        "fact_count": 8
+      },
+      {
+        "probe_id": "windows.gpu_display.v1",
+        "family": "gpu_display",
+        "revision": 1,
+        "generation": 1,
+        "duration": {
+          "microseconds": 12000
+        },
+        "outcome": "success",
+        "native_error": null,
+        "fact_count": 8
+      },
+      {
+        "probe_id": "windows.runtime.v1",
+        "family": "runtime",
+        "revision": 1,
+        "generation": 1,
+        "duration": {
+          "microseconds": 12000
+        },
+        "outcome": "success",
+        "native_error": null,
+        "fact_count": 8
+      },
+      {
+        "probe_id": "windows.system.v1",
+        "family": "system",
+        "revision": 1,
+        "generation": 1,
+        "duration": {
+          "microseconds": 12000
+        },
+        "outcome": "success",
+        "native_error": null,
+        "fact_count": 8
+      }
+    ],
+    "issues": []
+  },
+  "plan": {
+    "schema_version": {
+      "major": 1,
+      "minor": 0
+    },
+    "policy_version": {
+      "major": 1,
+      "minor": 0,
+      "patch": 0
+    },
+    "status": "no_viable_path",
+    "reasons": [
+      "no_source_display"
+    ],
+    "request": {
+      "source": "display",
+      "display": null,
+      "latency": "interactive",
+      "preference": "automatic",
+      "quality": {
+        "resolution": {
+          "width": 1920,
+          "height": 1080
+        },
+        "frame_rate": {
+          "numerator": 60,
+          "denominator": 1
+        },
+        "hdr": false
+      }
+    },
+    "profile": {
+      "profile": "safe_local_envelope",
+      "rule": "constrained_session"
+    },
+    "envelope": {
+      "viable": false,
+      "resolution": {
+        "width": 0,
+        "height": 0
+      },
+      "frame_rate": {
+        "numerator": 0,
+        "denominator": 1
+      },
+      "bit_depth": 8,
+      "hdr": false,
+      "confidence": "high",
+      "reasons": [
+        "no_source_display"
+      ]
+    },
+    "selected": null,
+    "start": {
+      "resolution": {
+        "width": 0,
+        "height": 0
+      },
+      "frame_rate": {
+        "numerator": 0,
+        "denominator": 1
+      },
+      "bit_depth": 8,
+      "hdr": false
+    },
+    "downgrades": [],
+    "fallbacks": [],
+    "trace": {
+      "records": [],
+      "truncated": []
+    }
+  }
+}

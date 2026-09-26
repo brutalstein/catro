@@ -7,6 +7,8 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG 65ee68451d8eb2b5f3a30b410476ab83deb3289b
     GIT_PROGRESS TRUE
+    # Third-party headers are not held to Catro's warnings-as-errors policy.
+    SYSTEM
 )
 
 function(catro_enable_reporting_dependency)

@@ -18,6 +18,40 @@ bool is_identifier(std::string_view value) {
            std::ranges::all_of(value, [](char c) { return c > ' ' && c <= '~'; });
 }
 
+// Well-formed UTF-8: no overlong forms, surrogates, or code points above U+10FFFF.
+bool valid_utf8(std::string_view value) {
+    for (std::size_t index = 0; index < value.size();) {
+        const auto lead = static_cast<unsigned char>(value[index]);
+        std::size_t length = 1;
+        char32_t code_point = lead;
+        char32_t minimum = 0;
+        if (lead >= 0xF0 && lead <= 0xF7) {
+            length = 4, code_point = lead & 0x07U, minimum = 0x10000;
+        } else if (lead >= 0xE0) {
+            length = 3, code_point = lead & 0x0FU, minimum = 0x800;
+        } else if (lead >= 0xC0) {
+            length = 2, code_point = lead & 0x1FU, minimum = 0x80;
+        } else if (lead >= 0x80) {
+            return false;
+        }
+        if (lead >= 0xF8 || value.size() - index < length) {
+            return false;
+        }
+        for (std::size_t offset = 1; offset < length; ++offset) {
+            const auto next = static_cast<unsigned char>(value[index + offset]);
+            if ((next & 0xC0U) != 0x80U) {
+                return false;
+            }
+            code_point = (code_point << 6U) | (next & 0x3FU);
+        }
+        if (code_point < minimum || code_point > 0x10FFFF || (code_point >= 0xD800 && code_point <= 0xDFFF)) {
+            return false;
+        }
+        index += length;
+    }
+    return true;
+}
+
 template <class Tag>
 std::string at(std::string_view base, const ScopedId<Tag>& id) {
     return std::string(base) + "[" + id.value + "]";
@@ -208,7 +242,7 @@ private:
     }
 
     void text(const std::string& value, const std::string& path) {
-        if (value.empty() || value.size() > kMaxTextBytes) {
+        if (value.empty() || value.size() > kMaxTextBytes || !valid_utf8(value)) {
             error(ValidationCode::invalid_text, path);
         }
     }

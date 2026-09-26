@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <optional>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -357,6 +358,53 @@ EncoderId mac_hevc() { return {"vt:hevc:hardware", IdentityScope::service_lifeti
 
 MediaDecisionRequest display_request() {
     return MediaDecisionRequest{};
+}
+
+CapabilitySnapshot shuffled(CapabilitySnapshot snapshot, std::uint32_t seed) {
+    std::mt19937 random(seed);
+    const auto shuffle = [&random](auto& items) { std::ranges::shuffle(items, random); };
+    const auto shuffle_set = [&random]<class T>(Observed<std::vector<T>>& set) {
+        if (auto values = set.value()) {
+            std::ranges::shuffle(*values, random);
+            set = Observed<std::vector<T>>(set.knowledge(), std::move(values), set.provenance());
+        }
+    };
+    auto& devices = snapshot.devices;
+    shuffle(devices.gpus);
+    for (auto& gpu : devices.gpus) {
+        shuffle_set(gpu.graphics_apis);
+    }
+    shuffle(devices.encoders);
+    for (auto& encoder : devices.encoders) {
+        shuffle(encoder.modes);
+    }
+    shuffle(devices.capture_paths);
+    for (auto& capture : devices.capture_paths) {
+        shuffle_set(capture.output_formats);
+    }
+    shuffle(devices.displays);
+    for (auto& display : devices.displays) {
+        shuffle_set(display.modes);
+    }
+    shuffle(devices.audio_endpoints);
+    for (auto& endpoint : devices.audio_endpoints) {
+        shuffle_set(endpoint.sample_formats);
+    }
+    shuffle(devices.transfer_paths);
+    for (auto& transfer : devices.transfer_paths) {
+        shuffle_set(transfer.conversions);
+    }
+    shuffle_set(snapshot.hardware.cpu.simd);
+    auto& runtime = snapshot.runtime;
+    shuffle(runtime.displays);
+    shuffle(runtime.audio_endpoints);
+    for (auto& state : runtime.audio_endpoints) {
+        shuffle_set(state.default_roles);
+    }
+    shuffle(runtime.capture_permissions);
+    shuffle(snapshot.probes);
+    shuffle(snapshot.issues);
+    return snapshot;
 }
 
 CapabilitySnapshot valid_snapshot() {
