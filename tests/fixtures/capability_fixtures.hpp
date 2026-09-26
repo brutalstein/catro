@@ -1,6 +1,7 @@
 #pragma once
 
 #include <catro/capabilities/model.hpp>
+#include <catro/capabilities/policy.hpp>
 
 #include <string_view>
 #include <utility>
@@ -16,6 +17,11 @@ inline constexpr std::string_view kRuntimeProbe = "windows.runtime.v1";
 inline constexpr std::string_view kGpuDisplayProbe = "windows.gpu_display.v1";
 inline constexpr std::string_view kEncoderProbe = "windows.encoders.v1";
 inline constexpr std::string_view kAudioProbe = "windows.audio.v1";
+inline constexpr std::string_view kMacSystemProbe = "macos.system.v1";
+inline constexpr std::string_view kMacRuntimeProbe = "macos.runtime.v1";
+inline constexpr std::string_view kMacGpuDisplayProbe = "macos.gpu_display.v1";
+inline constexpr std::string_view kMacEncoderProbe = "macos.encoders.v1";
+inline constexpr std::string_view kMacAudioProbe = "macos.audio.v1";
 
 caps::Provenance measured(std::string_view probe);
 caps::Provenance advertised(std::string_view probe);
@@ -46,13 +52,48 @@ caps::ProbeRecord probe_record(std::string_view probe, caps::ProbeFamily family,
 // software H.264 encoder, source-specific display capture, one microphone, and one output.
 caps::CapabilitySnapshot valid_snapshot();
 
-// Stable identifiers used by valid_snapshot().
+// valid_snapshot() plus HDR-capable 10-bit HEVC and AV1 hardware encoders on the same GPU.
+caps::CapabilitySnapshot high_end_desktop();
+// One integrated GPU, 1920x1200 at 60 Hz, on battery with low-power mode enabled.
+caps::CapabilitySnapshot intel_laptop_on_battery();
+// The integrated GPU drives a 165 Hz panel; the discrete GPU carries more encoders but is only
+// reachable from display capture through a cross-adapter copy.
+caps::CapabilitySnapshot hybrid_laptop();
+// Unified-memory Apple Silicon laptop with a 120 Hz Retina panel at scale 2.
+caps::CapabilitySnapshot apple_silicon_macbook();
+// apple_silicon_macbook() under serious thermal pressure.
+caps::CapabilitySnapshot hot_apple_silicon();
+// Integrated plus discrete GPU Intel Mac where display, capture, and encoder affinity is unprovable.
+caps::CapabilitySnapshot older_intel_mac();
+// valid_snapshot() in a headless session with no attached display.
+caps::CapabilitySnapshot headless_session();
+// valid_snapshot() whose encoder family timed out: encoders and transfers are absent.
+caps::CapabilitySnapshot partial_probe_failure();
+
+// Stable identifiers used by the fixtures.
 caps::GpuId desktop_gpu();
 caps::DisplayId desktop_display();
 caps::EncoderId hardware_h264();
 caps::EncoderId software_h264();
+caps::EncoderId hardware_hevc();
+caps::EncoderId hardware_av1();
 caps::CapturePathId display_capture();
 caps::AudioEndpointId microphone();
 caps::AudioEndpointId speakers();
+
+caps::GpuId hybrid_integrated_gpu();
+caps::GpuId hybrid_discrete_gpu();
+caps::EncoderId hybrid_integrated_h264();
+caps::EncoderId hybrid_discrete_h264();
+caps::EncoderId hybrid_discrete_av1();
+caps::DisplayId laptop_display();
+
+caps::DisplayId mac_display();
+caps::CapturePathId mac_display_capture();
+caps::EncoderId mac_h264();
+caps::EncoderId mac_hevc();
+
+// A display-capture request for the fixture's primary display.
+caps::MediaDecisionRequest display_request();
 
 } // namespace catro::fixtures

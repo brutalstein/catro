@@ -33,6 +33,16 @@ TEST_CASE("the reference desktop fixture is structurally valid") {
     REQUIRE(report.ok());
 }
 
+TEST_CASE("every machine fixture is structurally valid") {
+    for (const auto& snapshot : {fx::high_end_desktop(), fx::intel_laptop_on_battery(), fx::hybrid_laptop(),
+                                 fx::apple_silicon_macbook(), fx::hot_apple_silicon(), fx::older_intel_mac(),
+                                 fx::headless_session(), fx::partial_probe_failure()}) {
+        const auto report = validate(snapshot);
+        INFO(describe(report));
+        REQUIRE(report.ok());
+    }
+}
+
 TEST_CASE("encoder cannot reference a missing GPU") {
     auto snapshot = fx::valid_snapshot();
     snapshot.devices.encoders.front().gpu = fx::known(GpuId{"missing", IdentityScope::snapshot}, fx::advertised(fx::kEncoderProbe));

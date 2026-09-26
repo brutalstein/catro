@@ -1,6 +1,8 @@
 add_library(catro_capabilities STATIC
     src/validation.cpp
     src/snapshot_diff.cpp
+    src/operating_profile.cpp
+    src/local_envelope.cpp
 )
 add_library(Catro::Capabilities ALIAS catro_capabilities)
 
