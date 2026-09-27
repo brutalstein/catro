@@ -73,7 +73,7 @@ void ServerView::ShowChannel(std::string_view id) {
     VoiceToolbar().Visibility(voice ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
     TextChannelGlyph().Visibility(voice ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
     VoiceChannelGlyph().Visibility(voice ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
-    ChannelTitle().Text(voice ? L"Voice" : L"general");
+    ChannelTitle().Text(voice ? VoiceChannelName().Text() : TextChannelName().Text());
 }
 
 } // namespace winrt::Catro::implementation
