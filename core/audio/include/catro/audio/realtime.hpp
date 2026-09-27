@@ -35,7 +35,15 @@ public:
 
     // Either side; exact for the calling side, a lower or upper bound for the other.
     [[nodiscard]] std::size_t size() const noexcept {
-        return head_.value.load(std::memory_order_acquire) - tail_.value.load(std::memory_order_acquire);
+        const auto head = head_.value.load(std::memory_order_acquire);
+        const auto tail = tail_.value.load(std::memory_order_acquire);
+        // A third-party diagnostics thread can observe the two independent atomics at slightly
+        // different logical instants. Clamp that non-coherent snapshot instead of exposing an
+        // underflow or a value larger than the bounded ring.
+        if (head < tail) {
+            return 0;
+        }
+        return std::min(head - tail, capacity());
     }
 
     // Producer only. Writes what fits and returns the count written.
