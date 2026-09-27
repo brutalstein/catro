@@ -33,6 +33,7 @@ struct NetworkStatistics {
     std::uint64_t send_backpressure_drops = 0;
     std::uint64_t received_packets = 0;
     std::uint64_t received_bytes = 0;
+    std::uint64_t oversized_packets = 0;
     std::uint64_t worker_late_resyncs = 0;
 };
 
@@ -150,6 +151,7 @@ void print_progress(std::ostream& out, std::int64_t elapsed_seconds,
         << " tx " << network.sent_packets << " pkts/" << network.sent_bytes << " B"
         << " rx " << network.received_packets << " pkts/" << network.received_bytes << " B"
         << " net-drop " << network.send_backpressure_drops
+        << " oversize " << network.oversized_packets
         << " reorder " << media.jitter.reordered
         << " late " << media.jitter.late
         << " fec " << media.jitter.fec
@@ -323,7 +325,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
     NetworkStatistics network;
     TimingAccumulator encode_timing;
     TimingAccumulator decode_timing;
-    std::array<std::byte, voice::kMaxVoiceDatagramBytes> receive_buffer{};
+    std::array<std::byte, voice::kMaxVoiceDatagramBytes + 1> receive_buffer{};
     voice::OutboundDatagram outbound;
 
     const auto started_at = Clock::now();
@@ -403,6 +405,10 @@ int run_voice_peer(std::span<const std::string_view> arguments,
                 for (int drained = 0; drained < kMaxReceiveDrain; ++drained) {
                     const auto received = socket->receive(receive_buffer);
                     if (const auto* failure = std::get_if<UdpError>(&received)) {
+                        if (failure->code == UdpErrorCode::datagram_too_large) {
+                            ++network.oversized_packets;
+                            continue;
+                        }
                         network_failure = *failure;
                         exit_code = voice_peer_network_failed;
                         break;
@@ -489,6 +495,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         << " tx " << network.sent_packets
         << ", rx " << network.received_packets
         << ", net-drop " << network.send_backpressure_drops
+        << ", oversize " << network.oversized_packets
         << ", malformed " << final_media.malformed_datagrams
         << ", duplicate " << final_media.jitter.duplicates
         << ", reordered " << final_media.jitter.reordered
