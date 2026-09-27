@@ -59,6 +59,9 @@ catro_add_test(diagnostics apps/diagnostics_test.cpp)
 target_link_libraries(catro_diagnostics_test PRIVATE catro_diagnostics)
 catro_add_test(audio_view_model apps/audio_view_model_test.cpp)
 target_link_libraries(catro_audio_view_model_test PRIVATE catro_diagnostics)
+
+catro_add_test(shell_model apps/shell_model_test.cpp)
+target_link_libraries(catro_shell_model_test PRIVATE Catro::Shell)
 catro_add_test(report_cli tools/report_cli_test.cpp)
 target_link_libraries(catro_report_cli_test PRIVATE catro_report_cli)
 
