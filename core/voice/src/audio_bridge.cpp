@@ -73,7 +73,7 @@ bool RenderBridge::try_push(const PcmFrame& frame) noexcept {
         return false;
     }
     frames_enqueued_.fetch_add(1, std::memory_order_relaxed);
-    primed_.store(true, std::memory_order_release);
+    primed_.store(true, std::memory_order_relaxed);
     update_peak(ring_.size());
     return true;
 }
@@ -90,7 +90,7 @@ void RenderBridge::on_render(std::span<float> frames) noexcept {
         const auto silence = frames.size() - read;
         std::fill(frames.begin() + static_cast<std::ptrdiff_t>(read), frames.end(), 0.0F);
         silence_samples_rendered_.fetch_add(silence, std::memory_order_relaxed);
-        if (primed_.load(std::memory_order_acquire)) {
+        if (primed_.load(std::memory_order_relaxed)) {
             underrun_callbacks_.fetch_add(1, std::memory_order_relaxed);
         } else {
             startup_silence_samples_.fetch_add(silence, std::memory_order_relaxed);
