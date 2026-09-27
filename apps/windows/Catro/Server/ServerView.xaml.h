@@ -12,6 +12,7 @@ struct ServerView : ServerViewT<ServerView> {
     void InitializeComponent();
     void OnTextChannel(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnVoiceChannel(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnSizeChanged(IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
 
 private:
     void ShowChannel(std::string_view id);
