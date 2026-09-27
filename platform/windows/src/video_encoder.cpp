@@ -19,6 +19,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <variant>
@@ -263,6 +264,7 @@ struct WindowsH264HardwareEncoder::Impl {
         }
         (void)video_context_.As(&video_context1_);
 
+        stats_ = {};
         config_ = next_config;
         frame_duration_100ns_ =
             static_cast<std::int64_t>((10'000'000ULL * config_.frame_rate_denominator) /
@@ -274,6 +276,13 @@ struct WindowsH264HardwareEncoder::Impl {
         if (const auto error = create_conversion_surface(first_source)) {
             return fail(*error);
         }
+
+        const auto apartment = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        if (FAILED(apartment) && apartment != RPC_E_CHANGED_MODE) {
+            return fail(HardwareEncoderError{
+                HardwareEncoderErrorCode::media_foundation_startup_failed, apartment});
+        }
+        apartment_initialized_ = SUCCEEDED(apartment);
 
         result = MFStartup(MF_VERSION, MFSTARTUP_LITE);
         if (FAILED(result)) {
@@ -498,6 +507,10 @@ struct WindowsH264HardwareEncoder::Impl {
         if (media_foundation_started_) {
             (void)MFShutdown();
             media_foundation_started_ = false;
+        }
+        if (apartment_initialized_) {
+            CoUninitialize();
+            apartment_initialized_ = false;
         }
     }
 
@@ -758,7 +771,8 @@ struct WindowsH264HardwareEncoder::Impl {
         }
 
         if (data.pSample != nullptr && data.pSample != sample.Get()) {
-            sample = data.pSample;
+            // ProcessOutput transfers ownership of a transform-provided sample to the caller.
+            sample.Attach(data.pSample);
         }
         if (data.pEvents != nullptr) {
             data.pEvents->Release();
@@ -811,6 +825,7 @@ struct WindowsH264HardwareEncoder::Impl {
     HardwareEncoderStatistics stats_{};
     bool running_ = false;
     bool media_foundation_started_ = false;
+    bool apartment_initialized_ = false;
     bool asynchronous_ = false;
     bool d3d11_aware_ = false;
     std::uint64_t adapter_luid_ = 0;
