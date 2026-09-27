@@ -16,6 +16,10 @@ Include the affected platform, the commit, and steps to reproduce.
   hard budget.
 - **Imported reports are untrusted.** Report parsing rejects inputs over 1 MiB before it parses
   them.
+- **The voice peer is an engineering transport, not a security boundary.** `catro-voice-peer`
+  uses connected UDP with a fixed maximum voice datagram and strict packet parsing, but it has no
+  encryption, authentication, ICE, DTLS-SRTP, or identity layer. Its default documentation uses
+  loopback; LAN use must be explicit. Do not expose it to the public Internet.
 
 ## Privacy
 
@@ -26,4 +30,6 @@ Include the affected platform, the commit, and steps to reproduce.
   such as adapter LUIDs, registry IDs, and endpoint IDs stay in place so that reports remain
   diagnosable, so a report is **not anonymous**. The JSON export is the complete report without
   redaction.
-- Nothing is sent over the network. This milestone has no server or telemetry.
+- Passive probes, reports, the diagnostics shell, and audio-check do not send telemetry. The
+  `catro-voice-peer` tool sends Opus voice packets only when the user explicitly launches it with
+  a peer address. The engineering transport is unencrypted.
