@@ -42,6 +42,28 @@ TEST_CASE("voice packet v1 round trips in network byte order") {
     CHECK(std::ranges::equal(view.payload, payload));
 }
 
+TEST_CASE("voice packet header can be written in place without copying encoded payload") {
+    std::array<std::byte, kVoiceHeaderBytes + 4> bytes{};
+    bytes[kVoiceHeaderBytes + 0] = std::byte{0xaa};
+    bytes[kVoiceHeaderBytes + 1] = std::byte{0xbb};
+    bytes[kVoiceHeaderBytes + 2] = std::byte{0xcc};
+    bytes[kVoiceHeaderBytes + 3] = std::byte{0xdd};
+
+    const auto written = write_packet_header(0x01020304U, 0xfffeU, 0x10203040U, 4, bytes);
+    REQUIRE(std::holds_alternative<std::size_t>(written));
+    CHECK(std::get<std::size_t>(written) == bytes.size());
+
+    const auto parsed = parse_packet(bytes);
+    REQUIRE(std::holds_alternative<VoicePacketView>(parsed));
+    const auto packet = std::get<VoicePacketView>(parsed);
+    CHECK(packet.stream_id == 0x01020304U);
+    CHECK(packet.sequence == 0xfffeU);
+    CHECK(packet.timestamp == 0x10203040U);
+    REQUIRE(packet.payload.size() == 4);
+    CHECK(packet.payload[0] == std::byte{0xaa});
+    CHECK(packet.payload[3] == std::byte{0xdd});
+}
+
 TEST_CASE("voice packet parser rejects malformed datagrams") {
     std::array<std::byte, kVoiceHeaderBytes + 1> bytes{};
     const std::array payload{std::byte{1}};
