@@ -23,8 +23,9 @@ void ServerView::SetLocalState(const catro::community::LocalState& state) {
     ProfileName().Text(to_hstring(state.identity.display_name));
     VoiceLocalName().Text(to_hstring(state.identity.display_name));
     MemberLocalName().Text(to_hstring(state.identity.display_name));
-    MemberCountLabel().Text(
-        to_hstring(std::string("MEMBERS — ") + std::to_string(state.personal_server.members.size())));
+    std::wstring member_count = L"MEMBERS \u2014 ";
+    member_count += std::to_wstring(state.personal_server.members.size());
+    MemberCountLabel().Text(hstring{member_count});
 
     for (const auto& channel : state.personal_server.channels) {
         if (channel.kind == catro::community::ChannelKind::text) {
