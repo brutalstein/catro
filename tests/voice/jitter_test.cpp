@@ -108,6 +108,25 @@ TEST_CASE("duplicates late packets wrong streams and far-ahead packets are bound
     CHECK(stats.outside_window == 1);
 }
 
+TEST_CASE("jitter preview never consumes media and distinguishes FEC from PLC") {
+    JitterBuffer buffer(1);
+    REQUIRE(push(buffer, 100, kTimestamp, std::byte{0x10}) == JitterPushResult::accepted);
+    CHECK(buffer.peek() == PlayoutKind::packet);
+    CHECK(buffer.statistics().buffered == 1);
+
+    PlayoutFrame frame;
+    REQUIRE(buffer.pull(frame) == PlayoutKind::packet);
+    CHECK(buffer.statistics().buffered == 0);
+    CHECK(buffer.peek() == PlayoutKind::plc);
+
+    REQUIRE(push(buffer, 102, kTimestamp + 2U * kFrameSamples, std::byte{0x12}) ==
+            JitterPushResult::accepted);
+    CHECK(buffer.peek() == PlayoutKind::fec);
+    CHECK(buffer.statistics().buffered == 1);
+    CHECK(buffer.peek() == PlayoutKind::fec);
+    CHECK(buffer.statistics().buffered == 1);
+}
+
 TEST_CASE("a missing packet uses the following packet for FEC without consuming it") {
     JitterBuffer buffer(1);
     REQUIRE(push(buffer, 100, kTimestamp, std::byte{0x10}) == JitterPushResult::accepted);
