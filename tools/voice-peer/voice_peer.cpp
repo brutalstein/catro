@@ -447,6 +447,10 @@ int run_voice_peer(std::span<const std::string_view> arguments,
                 exit_code = voice_peer_network_failed;
                 break;
             }
+            if (!std::get<bool>(ready) && discard_network_backlog) {
+                // select observed an empty receive queue, so the next packet is live media.
+                discard_network_backlog = false;
+            }
             if (std::get<bool>(ready)) {
                 for (int drained = 0; drained < kMaxReceiveDrain; ++drained) {
                     const auto received = socket->receive(receive_buffer);
