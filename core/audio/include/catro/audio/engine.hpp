@@ -69,6 +69,9 @@ public:
 
     [[nodiscard]] virtual const StreamInfo& info() const noexcept = 0;
     [[nodiscard]] virtual std::optional<AudioError> start() = 0;
+    // Idempotent and non-blocking enough for a platform failure callback. It must only ask the
+    // stream to stop; destruction is still the completion barrier and guarantees callbacks ended.
+    virtual void request_stop() noexcept = 0;
     // Discontinuities the OS reported, e.g. capture data lost to a late thread.
     [[nodiscard]] virtual std::uint64_t glitches() const noexcept = 0;
 };
@@ -161,7 +164,8 @@ struct AudioStatistics {
 }
 
 // Runs one session at a time. start, stop, and statistics may be called from any non-audio
-// thread; the failure handler runs on a platform thread.
+// thread. start and stop are serialized; the failure handler runs on a platform failure thread
+// after every stream in the failed session has been asked to stop.
 class AudioEngine {
 public:
     using FailureHandler = std::function<void(AudioError)>;
@@ -184,6 +188,9 @@ private:
 
     AudioPlatform& platform_;
     FailureHandler on_failure_;
+    // Serializes lifecycle transitions that can open/start/destroy platform streams. Failure
+    // callbacks never take this mutex because a stream destructor may be joining their thread.
+    std::mutex lifecycle_mutex_;
     mutable std::mutex mutex_;
     std::unique_ptr<Session> session_;
     std::uint64_t generation_ = 0;
