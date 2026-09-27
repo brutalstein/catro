@@ -65,7 +65,7 @@ std::variant<std::string, LocalStateError> read_file(const std::filesystem::path
     DWORD read = 0;
     if (!bytes.empty() &&
         (!ReadFile(file.get(), bytes.data(), static_cast<DWORD>(bytes.size()), &read, nullptr) ||
-         read != bytes.size())) {
+         read != static_cast<DWORD>(bytes.size()))) {
         return native_error(LocalStateErrorCode::read_failure, "failed to read complete local state");
     }
     return bytes;
@@ -100,6 +100,8 @@ std::filesystem::path staging_path(const std::filesystem::path& path) {
     auto staged = path;
     staged += L".tmp.";
     staged += std::to_wstring(GetCurrentProcessId());
+    staged += L".";
+    staged += std::to_wstring(GetCurrentThreadId());
     return staged;
 }
 
