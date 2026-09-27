@@ -137,6 +137,29 @@ JitterPushResult JitterBuffer::push(const VoicePacketView& packet) noexcept {
     return JitterPushResult::accepted;
 }
 
+PlayoutKind JitterBuffer::peek() const noexcept {
+    if (!started_.load(std::memory_order_relaxed)) {
+        if (buffered_.load(std::memory_order_relaxed) < target_packets_) {
+            return PlayoutKind::waiting;
+        }
+        const auto first_sequence = earliest_sequence();
+        const auto* first = find(first_sequence);
+        return first == nullptr ? PlayoutKind::waiting : PlayoutKind::packet;
+    }
+
+    const auto* current = find(next_sequence_);
+    if (current != nullptr && current->timestamp == next_timestamp_) {
+        return PlayoutKind::packet;
+    }
+
+    const auto* following = find(next_sequence_ + 1);
+    const auto following_timestamp = next_timestamp_ + kFrameSamples;
+    if (following != nullptr && following->timestamp == following_timestamp) {
+        return PlayoutKind::fec;
+    }
+    return PlayoutKind::plc;
+}
+
 PlayoutKind JitterBuffer::pull(PlayoutFrame& frame) noexcept {
     frame.kind = PlayoutKind::waiting;
     frame.stream_id = stream_id_;
