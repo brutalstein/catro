@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(Catro VERSION 0.1.0 LANGUAGES CXX)
+project(Catro VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +29,7 @@ catro_enable_reporting_dependency()
 add_subdirectory(core/capabilities)
 add_subdirectory(core/reporting)
 add_subdirectory(core/audio)
+add_subdirectory(core/voice)
 add_subdirectory(apps/diagnostics)
 # Portable translations build everywhere; native layers only with their platform toolchain.
 add_subdirectory(platform/macos)
