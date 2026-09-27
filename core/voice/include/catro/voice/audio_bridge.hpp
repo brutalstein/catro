@@ -23,6 +23,7 @@ struct CaptureBridgeStatistics {
     std::uint64_t dropped_callbacks = 0;
     std::uint64_t dropped_samples = 0;
     std::uint64_t frames_dequeued = 0;
+    std::uint64_t stale_frames_discarded = 0;
     std::size_t buffered_samples = 0;
     std::size_t peak_buffered_samples = 0;
 
@@ -53,6 +54,11 @@ public:
 
     void on_captured(std::span<const float> frames) noexcept override;
 
+    // Voice worker only. Drops complete oldest codec frames until at most keep_frames plus a
+    // possible partial device callback remain. This bounds conversational latency after a worker
+    // stall without ever disturbing the audio callback or breaking frame alignment.
+    std::size_t trim_backlog(std::size_t keep_frames) noexcept;
+
     // Voice worker only. Returns one exact 20 ms / 960-sample frame when ready.
     [[nodiscard]] bool try_pop(PcmFrame& frame) noexcept;
     [[nodiscard]] CaptureBridgeStatistics statistics() const noexcept;
@@ -67,6 +73,7 @@ private:
     std::atomic<std::uint64_t> dropped_callbacks_{0};
     std::atomic<std::uint64_t> dropped_samples_{0};
     std::atomic<std::uint64_t> frames_dequeued_{0};
+    std::atomic<std::uint64_t> stale_frames_discarded_{0};
     std::atomic<std::size_t> peak_buffered_samples_{0};
 };
 
