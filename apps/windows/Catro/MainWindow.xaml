@@ -117,57 +117,87 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel Spacing="8" HorizontalAlignment="Center">
-                        <Button x:Name="HomeButton"
-                                Tag="home"
-                                Style="{StaticResource CatroNavButtonStyle}"
-                                Click="OnNavigationClick"
-                                ToolTipService.ToolTip="Home"
-                                AutomationProperties.Name="Home">
-                            <FontIcon Glyph="&#xE80F;" FontSize="18" />
-                        </Button>
-                        <Button x:Name="VoiceButton"
-                                Tag="voice"
-                                Style="{StaticResource CatroNavButtonStyle}"
-                                Click="OnNavigationClick"
-                                ToolTipService.ToolTip="Voice"
-                                AutomationProperties.Name="Voice">
-                            <FontIcon Glyph="&#xE720;" FontSize="18" />
-                        </Button>
-                        <Button x:Name="ShareButton"
-                                Tag="share"
-                                Style="{StaticResource CatroNavButtonStyle}"
-                                Click="OnNavigationClick"
-                                ToolTipService.ToolTip="Screen share"
-                                AutomationProperties.Name="Screen share">
-                            <FontIcon Glyph="&#xE7F4;" FontSize="18" />
-                        </Button>
+                        <Grid Width="48" Height="48">
+                            <Border x:Name="HomeSelection"
+                                    CornerRadius="14"
+                                    Background="{ThemeResource CatroAccentSoftBrush}"
+                                    Visibility="Collapsed" />
+                            <Button x:Name="HomeButton"
+                                    Tag="home"
+                                    Style="{StaticResource CatroNavButtonStyle}"
+                                    Click="OnNavigationClick"
+                                    ToolTipService.ToolTip="Home"
+                                    AutomationProperties.Name="Home">
+                                <FontIcon Glyph="&#xE80F;" FontSize="18" />
+                            </Button>
+                        </Grid>
+                        <Grid Width="48" Height="48">
+                            <Border x:Name="VoiceSelection"
+                                    CornerRadius="14"
+                                    Background="{ThemeResource CatroAccentSoftBrush}"
+                                    Visibility="Collapsed" />
+                            <Button x:Name="VoiceButton"
+                                    Tag="voice"
+                                    Style="{StaticResource CatroNavButtonStyle}"
+                                    Click="OnNavigationClick"
+                                    ToolTipService.ToolTip="Voice"
+                                    AutomationProperties.Name="Voice">
+                                <FontIcon Glyph="&#xE720;" FontSize="18" />
+                            </Button>
+                        </Grid>
+                        <Grid Width="48" Height="48">
+                            <Border x:Name="ShareSelection"
+                                    CornerRadius="14"
+                                    Background="{ThemeResource CatroAccentSoftBrush}"
+                                    Visibility="Collapsed" />
+                            <Button x:Name="ShareButton"
+                                    Tag="share"
+                                    Style="{StaticResource CatroNavButtonStyle}"
+                                    Click="OnNavigationClick"
+                                    ToolTipService.ToolTip="Screen share"
+                                    AutomationProperties.Name="Screen share">
+                                <FontIcon Glyph="&#xE7F4;" FontSize="18" />
+                            </Button>
+                        </Grid>
 
                         <Border Height="1"
                                 Width="28"
                                 Margin="0,4"
                                 Background="{ThemeResource CatroStrokeBrush}" />
 
-                        <Button x:Name="DiagnosticsButton"
-                                Tag="diagnostics"
-                                Style="{StaticResource CatroNavButtonStyle}"
-                                Click="OnNavigationClick"
-                                ToolTipService.ToolTip="System diagnostics"
-                                AutomationProperties.Name="System diagnostics">
-                            <FontIcon Glyph="&#xE9D9;" FontSize="18" />
-                        </Button>
+                        <Grid Width="48" Height="48">
+                            <Border x:Name="DiagnosticsSelection"
+                                    CornerRadius="14"
+                                    Background="{ThemeResource CatroAccentSoftBrush}"
+                                    Visibility="Collapsed" />
+                            <Button x:Name="DiagnosticsButton"
+                                    Tag="diagnostics"
+                                    Style="{StaticResource CatroNavButtonStyle}"
+                                    Click="OnNavigationClick"
+                                    ToolTipService.ToolTip="System diagnostics"
+                                    AutomationProperties.Name="System diagnostics">
+                                <FontIcon Glyph="&#xE9D9;" FontSize="18" />
+                            </Button>
+                        </Grid>
                     </StackPanel>
 
                     <StackPanel Grid.Row="1"
                                 Spacing="8"
                                 HorizontalAlignment="Center">
-                        <Button x:Name="SettingsButton"
-                                Tag="settings"
-                                Style="{StaticResource CatroNavButtonStyle}"
-                                Click="OnNavigationClick"
-                                ToolTipService.ToolTip="Settings"
-                                AutomationProperties.Name="Settings">
-                            <FontIcon Glyph="&#xE713;" FontSize="18" />
-                        </Button>
+                        <Grid Width="48" Height="48">
+                            <Border x:Name="SettingsSelection"
+                                    CornerRadius="14"
+                                    Background="{ThemeResource CatroAccentSoftBrush}"
+                                    Visibility="Collapsed" />
+                            <Button x:Name="SettingsButton"
+                                    Tag="settings"
+                                    Style="{StaticResource CatroNavButtonStyle}"
+                                    Click="OnNavigationClick"
+                                    ToolTipService.ToolTip="Settings"
+                                    AutomationProperties.Name="Settings">
+                                <FontIcon Glyph="&#xE713;" FontSize="18" />
+                            </Button>
+                        </Grid>
 
                         <Border Width="38"
                                 Height="38"
