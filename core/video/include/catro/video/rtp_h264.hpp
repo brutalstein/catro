@@ -120,10 +120,12 @@ private:
     H264RtpConfig config_{};
     std::size_t size_ = 0;
     std::uint32_t timestamp_ = 0;
+    std::uint32_t locked_ssrc_ = 0;
     std::uint16_t expected_sequence_ = 0;
     std::uint8_t fu_nal_type_ = 0;
     H264ReassemblyError damage_error_ = H264ReassemblyError::none;
     bool active_ = false;
+    bool have_ssrc_ = false;
     bool have_sequence_ = false;
     bool damaged_ = false;
     bool fu_active_ = false;
