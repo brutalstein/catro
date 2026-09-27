@@ -23,13 +23,14 @@ void ServerView::SetLocalState(const catro::community::LocalState& state) {
     ProfileName().Text(to_hstring(state.identity.display_name));
     VoiceLocalName().Text(to_hstring(state.identity.display_name));
     MemberLocalName().Text(to_hstring(state.identity.display_name));
-    MemberCountLabel().Text(L"MEMBERS — " + to_hstring(state.personal_server.members.size()));
+    MemberCountLabel().Text(
+        to_hstring(std::string("MEMBERS — ") + std::to_string(state.personal_server.members.size())));
 
     for (const auto& channel : state.personal_server.channels) {
         if (channel.kind == catro::community::ChannelKind::text) {
             TextChannelName().Text(to_hstring(channel.name));
-            TextEmptyTitle().Text(L"# " + to_hstring(channel.name));
-            Composer().PlaceholderText(L"Message #" + to_hstring(channel.name));
+            TextEmptyTitle().Text(to_hstring(std::string("# ") + channel.name));
+            Composer().PlaceholderText(to_hstring(std::string("Message #") + channel.name));
             break;
         }
     }
