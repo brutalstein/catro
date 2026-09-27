@@ -153,12 +153,18 @@ void print_progress(std::ostream& out, std::int64_t elapsed_seconds,
         << " rx " << network.received_packets << " pkts/" << network.received_bytes << " B"
         << " net-drop " << network.send_backpressure_drops
         << " oversize " << network.oversized_packets
+        << " malformed " << media.malformed_datagrams
+        << " dup " << media.jitter.duplicates
         << " reorder " << media.jitter.reordered
         << " late " << media.jitter.late
+        << " window " << media.jitter.outside_window
+        << " wrong-stream " << media.jitter.wrong_stream
         << " fec " << media.jitter.fec
         << " plc " << media.jitter.plc
         << " jitter " << media.jitter.buffered << "/" << media.jitter.peak_buffered
+        << " cap-q " << media.capture.buffered_samples
         << " cap-drop " << media.capture.dropped_callbacks
+        << " render-q " << media.render.buffered_samples
         << " render-full " << media.render_queue_full
         << " underrun " << media.render.underrun_callbacks
         << " glitches " << audio_stats.glitches
