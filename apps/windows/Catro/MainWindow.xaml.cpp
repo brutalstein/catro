@@ -11,7 +11,11 @@
 
 #include <catro/platform/windows/local_state.hpp>
 
+#include <winrt/Microsoft.UI.Composition.h>
+#include <winrt/Microsoft.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.h>
+
+#include <chrono>
 
 namespace winrt::Catro::implementation {
 namespace {
@@ -25,6 +29,21 @@ void MainWindow::InitializeComponent() {
 
     ExtendsContentIntoTitleBar(true);
     SetTitleBar(AppTitleBar());
+
+    // Branding animation stays entirely on the compositor thread. No per-frame DispatcherQueue
+    // callback is created, so the mascot is effectively free while media/game workloads are active.
+    {
+        namespace composition = Microsoft::UI::Composition;
+        namespace hosting = Microsoft::UI::Xaml::Hosting;
+        auto visual = hosting::ElementCompositionPreview::GetElementVisual(CatroMascot());
+        auto pulse = visual.Compositor().CreateScalarKeyFrameAnimation();
+        pulse.InsertKeyFrame(0.0f, 0.76f);
+        pulse.InsertKeyFrame(0.5f, 1.0f);
+        pulse.InsertKeyFrame(1.0f, 0.76f);
+        pulse.Duration(std::chrono::milliseconds{2800});
+        pulse.IterationBehavior(composition::AnimationIterationBehavior::Forever);
+        visual.StartAnimation(L"Opacity", pulse);
+    }
 
     const auto transparent = Windows::UI::Color{0, 0, 0, 0};
     auto title_bar = AppWindow().TitleBar();
