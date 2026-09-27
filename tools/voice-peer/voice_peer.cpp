@@ -27,6 +27,7 @@ constexpr auto kFramePeriod = 20ms;
 constexpr int kMaxEncodeDrain = 4;
 constexpr int kMaxReceiveDrain = 64;
 constexpr int kMaxPlayoutCatchup = 3;
+constexpr int kStartupRenderPrimeFrames = 2;
 
 struct NetworkStatistics {
     std::uint64_t sent_packets = 0;
@@ -36,6 +37,7 @@ struct NetworkStatistics {
     std::uint64_t received_bytes = 0;
     std::uint64_t oversized_packets = 0;
     std::uint64_t peer_unreachable_events = 0;
+    std::uint64_t startup_prime_frames = 0;
     std::uint64_t worker_late_resyncs = 0;
 };
 
@@ -169,6 +171,7 @@ void print_progress(std::ostream& out, std::int64_t elapsed_seconds,
         << " cap-stale " << media.capture.stale_frames_discarded
         << " render-q " << media.render.buffered_samples
         << " render-full " << media.render_queue_full
+        << " prime " << network.startup_prime_frames
         << " underrun " << media.render.underrun_callbacks
         << " glitches " << audio_stats.glitches
         << " enc " << encode_timing.average_us() << "/" << encode_timing.max_us << " us"
@@ -468,8 +471,34 @@ int run_voice_peer(std::span<const std::string_view> arguments,
                 }
                 if (std::get<voice::DecodeStep>(decoded) != voice::DecodeStep::waiting) {
                     decode_timing.add(after - before);
+                    ++network.startup_prime_frames;
                     playout_started = true;
-                    next_playout = after + kFramePeriod;
+
+                    // Prime one extra real packet when the jitter store already has it. This keeps
+                    // roughly 20 ms of decoded PCM ahead of the 10 ms render callback without
+                    // manufacturing early PLC or increasing first-audio latency.
+                    for (int primed = 1; primed < kStartupRenderPrimeFrames; ++primed) {
+                        if (pipeline->statistics().jitter.buffered == 0) {
+                            break;
+                        }
+                        const auto extra_before = Clock::now();
+                        const auto extra = pipeline->decode_next();
+                        const auto extra_after = Clock::now();
+                        if (const auto* failure = std::get_if<voice::CodecError>(&extra)) {
+                            codec_failure = *failure;
+                            exit_code = voice_peer_codec_failed;
+                            break;
+                        }
+                        if (std::get<voice::DecodeStep>(extra) == voice::DecodeStep::waiting) {
+                            break;
+                        }
+                        decode_timing.add(extra_after - extra_before);
+                        ++network.startup_prime_frames;
+                    }
+                    if (exit_code != voice_peer_ok) {
+                        break;
+                    }
+                    next_playout = Clock::now() + kFramePeriod;
                 }
             } else {
                 int caught_up = 0;
@@ -530,6 +559,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         << ", capture-drop " << final_media.capture.dropped_callbacks
         << ", capture-stale " << final_media.capture.stale_frames_discarded
         << ", render-full " << final_media.render_queue_full
+        << ", startup-prime " << network.startup_prime_frames
         << ", underrun " << final_media.render.underrun_callbacks
         << ", startup-silence " << final_media.render.startup_silence_samples
         << ", glitches " << final_audio.glitches
