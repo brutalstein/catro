@@ -19,6 +19,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -197,8 +198,7 @@ void ServerView::InitializeComponent() {
         }
         if (screen_runtime_) {
             const auto share = screen_runtime_->snapshot();
-            if (share.state == catro::screen::ScreenShareState::starting ||
-                share.state == catro::screen::ScreenShareState::sharing) {
+            if (share.state != catro::screen::ScreenShareState::idle) {
                 screen_timer_.Start();
             }
         }
@@ -335,8 +335,25 @@ void ServerView::StartVoice() {
     deafened_ = false;
     if (catro_voice_runtime_start(voice_runtime_, &config) == 0) {
         voice_timer_.Start();
+
+        if (screen_runtime_) {
+            const auto video = direct_video_config();
+            const catro::screen::ScreenTransportConfig transport{
+                .bind = video.bind,
+                .peer = video.peer,
+            };
+            if (const auto failure =
+                    screen_runtime_->start_listening(transport)) {
+                controls::ToolTipService::SetToolTip(
+                    ShareScreenButton(),
+                    box_value(to_hstring(failure->message)));
+            } else {
+                screen_timer_.Start();
+            }
+        }
     }
     UpdateVoiceUi();
+    UpdateScreenShareUi();
 }
 
 void ServerView::StopVoice() {
@@ -344,6 +361,15 @@ void ServerView::StopVoice() {
         return;
     }
     StopScreenShare();
+    if (screen_runtime_) {
+        screen_runtime_->stop();
+    }
+    DetachRemoteSwapChain();
+    RemoteShareHost().Visibility(xaml::Visibility::Collapsed);
+    VoiceIdentityPanel().Visibility(xaml::Visibility::Visible);
+    if (screen_timer_) {
+        screen_timer_.Stop();
+    }
     catro_voice_runtime_stop(voice_runtime_);
     muted_ = false;
     deafened_ = false;
@@ -693,16 +719,31 @@ void ServerView::DetachPreviewSwapChain() noexcept {
     attached_preview_swap_chain_.Reset();
 }
 
-void ServerView::StopScreenShare() {
-    if (screen_timer_) {
-        screen_timer_.Stop();
+void ServerView::DetachRemoteSwapChain() noexcept {
+    try {
+        auto panel_native =
+            RemoteShareSwapChainPanel().as<ISwapChainPanelNative>();
+        (void)panel_native->SetSwapChain(nullptr);
+    } catch (...) {
     }
+    attached_remote_swap_chain_.Reset();
+}
+
+void ServerView::StopScreenShare() {
     if (screen_runtime_) {
-        screen_runtime_->stop();
+        screen_runtime_->stop_sharing();
     }
     DetachPreviewSwapChain();
     SharePreviewHost().Visibility(xaml::Visibility::Collapsed);
-    VoiceIdentityPanel().Visibility(xaml::Visibility::Visible);
+
+    const bool remote_active =
+        screen_runtime_ &&
+        screen_runtime_->snapshot().remote_active;
+    VoiceIdentityPanel().Visibility(
+        remote_active
+            ? xaml::Visibility::Collapsed
+            : xaml::Visibility::Visible);
+
     ShareScreenButton().Content(
         box_value(hstring{L"Share screen"}));
     controls::ToolTipService::SetToolTip(
@@ -716,33 +757,76 @@ void ServerView::UpdateScreenShareUi() {
     }
 
     const auto snapshot = screen_runtime_->snapshot();
-    const bool active =
+    const bool local_active =
         snapshot.state == catro::screen::ScreenShareState::starting ||
         snapshot.state == catro::screen::ScreenShareState::sharing;
+    const bool remote_active = snapshot.remote_active;
 
     ShareScreenButton().Content(
-        box_value(active ? hstring{L"Stop sharing"}
-                         : hstring{L"Share screen"}));
+        box_value(local_active ? hstring{L"Stop sharing"}
+                               : hstring{L"Share screen"}));
     controls::ToolTipService::SetToolTip(
         ShareScreenIconButton(),
-        box_value(active ? hstring{L"Stop sharing"}
-                         : hstring{L"Share screen"}));
+        box_value(local_active ? hstring{L"Stop sharing"}
+                               : hstring{L"Share screen"}));
 
-    if (active) {
+    VoiceIdentityPanel().Visibility(
+        local_active || remote_active
+            ? xaml::Visibility::Collapsed
+            : xaml::Visibility::Visible);
+
+    if (remote_active) {
+        RemoteShareHost().Visibility(xaml::Visibility::Visible);
+
+        const auto remote_swap =
+            screen_runtime_->remote_swap_chain();
+        if (remote_swap &&
+            attached_remote_swap_chain_.Get() !=
+                remote_swap.Get()) {
+            try {
+                auto panel_native =
+                    RemoteShareSwapChainPanel().as<ISwapChainPanelNative>();
+                if (SUCCEEDED(panel_native->SetSwapChain(
+                        remote_swap.Get()))) {
+                    attached_remote_swap_chain_ = remote_swap;
+                }
+            } catch (...) {
+            }
+        }
+
+        if (snapshot.remote_width != 0 &&
+            snapshot.remote_height != 0) {
+            std::wstring meta =
+                std::to_wstring(snapshot.remote_width);
+            meta += L"×";
+            meta += std::to_wstring(snapshot.remote_height);
+            meta += L"  ·  LIVE";
+            RemoteShareMetaText().Text(hstring{meta});
+        } else {
+            RemoteShareMetaText().Text(L"LIVE");
+        }
+    } else {
+        DetachRemoteSwapChain();
+        RemoteShareHost().Visibility(xaml::Visibility::Collapsed);
+    }
+
+    if (local_active) {
         SharePreviewHost().Visibility(xaml::Visibility::Visible);
-        VoiceIdentityPanel().Visibility(xaml::Visibility::Collapsed);
 
-        const auto swap_chain =
+        const auto local_swap =
             screen_runtime_->preview_swap_chain();
-        if (swap_chain &&
+        if (local_swap &&
             attached_preview_swap_chain_.Get() !=
-                swap_chain.Get()) {
-            auto panel_native =
-                LocalShareSwapChainPanel().as<ISwapChainPanelNative>();
-            winrt::check_hresult(
-                panel_native->SetSwapChain(
-                    swap_chain.Get()));
-            attached_preview_swap_chain_ = swap_chain;
+                local_swap.Get()) {
+            try {
+                auto panel_native =
+                    LocalShareSwapChainPanel().as<ISwapChainPanelNative>();
+                if (SUCCEEDED(panel_native->SetSwapChain(
+                        local_swap.Get()))) {
+                    attached_preview_swap_chain_ = local_swap;
+                }
+            } catch (...) {
+            }
         }
 
         ShareSourceText().Text(
@@ -761,23 +845,44 @@ void ServerView::UpdateScreenShareUi() {
         } else {
             ShareMetaText().Text(L"Starting…");
         }
-        return;
+
+        if (remote_active) {
+            SharePreviewHost().Width(300.0);
+            SharePreviewHost().Height(210.0);
+            SharePreviewHost().HorizontalAlignment(
+                xaml::HorizontalAlignment::Right);
+            SharePreviewHost().VerticalAlignment(
+                xaml::VerticalAlignment::Bottom);
+            SharePreviewHost().Margin(
+                xaml::Thickness{22.0, 22.0, 22.0, 22.0});
+            Microsoft::UI::Xaml::Controls::Canvas::SetZIndex(
+                SharePreviewHost(), 10);
+        } else {
+            SharePreviewHost().Width(
+                std::numeric_limits<double>::quiet_NaN());
+            SharePreviewHost().Height(
+                std::numeric_limits<double>::quiet_NaN());
+            SharePreviewHost().HorizontalAlignment(
+                xaml::HorizontalAlignment::Stretch);
+            SharePreviewHost().VerticalAlignment(
+                xaml::VerticalAlignment::Stretch);
+            SharePreviewHost().Margin(
+                xaml::Thickness{22.0, 22.0, 22.0, 22.0});
+            Microsoft::UI::Xaml::Controls::Canvas::SetZIndex(
+                SharePreviewHost(), 0);
+        }
+    } else {
+        DetachPreviewSwapChain();
+        SharePreviewHost().Visibility(xaml::Visibility::Collapsed);
     }
 
     if (snapshot.state ==
-        catro::screen::ScreenShareState::failed) {
-        DetachPreviewSwapChain();
-        SharePreviewHost().Visibility(xaml::Visibility::Collapsed);
-        VoiceIdentityPanel().Visibility(xaml::Visibility::Visible);
-        if (!snapshot.error.empty()) {
-            controls::ToolTipService::SetToolTip(
-                ShareScreenButton(),
-                box_value(to_hstring(snapshot.error)));
-            VoiceStateText().Text(L"Screen share error");
-        }
-        if (screen_timer_) {
-            screen_timer_.Stop();
-        }
+            catro::screen::ScreenShareState::failed &&
+        !snapshot.error.empty()) {
+        controls::ToolTipService::SetToolTip(
+            ShareScreenButton(),
+            box_value(to_hstring(snapshot.error)));
+        VoiceStateText().Text(L"Screen video error");
     }
 }
 
