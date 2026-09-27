@@ -81,6 +81,16 @@ bool set_nonblocking(NativeSocket socket) noexcept {
 }
 #endif
 
+bool development_address_allowed(const in_addr& address) noexcept {
+    const auto host = ntohl(address.s_addr);
+    const auto loopback = (host & 0xff000000U) == 0x7f000000U;
+    const auto private_10 = (host & 0xff000000U) == 0x0a000000U;
+    const auto private_172 = (host & 0xfff00000U) == 0xac100000U;
+    const auto private_192 = (host & 0xffff0000U) == 0xc0a80000U;
+    const auto link_local = (host & 0xffff0000U) == 0xa9fe0000U;
+    return loopback || private_10 || private_172 || private_192 || link_local;
+}
+
 bool make_address(const UdpEndpoint& endpoint, sockaddr_in& address, bool allow_zero_port) noexcept {
     if (endpoint.address.empty() || (!allow_zero_port && endpoint.port == 0)) {
         return false;
@@ -88,7 +98,12 @@ bool make_address(const UdpEndpoint& endpoint, sockaddr_in& address, bool allow_
     address = {};
     address.sin_family = AF_INET;
     address.sin_port = htons(endpoint.port);
-    return inet_pton(AF_INET, endpoint.address.c_str(), &address.sin_addr) == 1;
+    if (inet_pton(AF_INET, endpoint.address.c_str(), &address.sin_addr) != 1) {
+        return false;
+    }
+    // This executable is deliberately not an Internet transport. Enforce the documented trust
+    // boundary in code rather than relying on the operator to remember it.
+    return development_address_allowed(address.sin_addr);
 }
 
 void tune_socket(NativeSocket socket) noexcept {
