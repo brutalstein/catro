@@ -49,6 +49,21 @@ public:
         return count;
     }
 
+    // Producer only. Commits the whole block or nothing. Useful when a partial write would
+    // destroy a higher-level frame boundary.
+    bool write_exact(std::span<const T> items) noexcept {
+        const auto head = head_.value.load(std::memory_order_relaxed);
+        const auto tail = tail_.value.load(std::memory_order_acquire);
+        if (items.size() > capacity() - (head - tail)) {
+            return false;
+        }
+        for (std::size_t index = 0; index < items.size(); ++index) {
+            buffer_[(head + index) & mask_] = items[index];
+        }
+        head_.value.store(head + items.size(), std::memory_order_release);
+        return true;
+    }
+
     // Consumer only. Reads what is available and returns the count read.
     std::size_t read(std::span<T> out) noexcept {
         const auto tail = tail_.value.load(std::memory_order_relaxed);
@@ -59,6 +74,20 @@ public:
         }
         tail_.value.store(tail + count, std::memory_order_release);
         return count;
+    }
+
+    // Consumer only. Removes the whole requested block or nothing.
+    bool read_exact(std::span<T> out) noexcept {
+        const auto tail = tail_.value.load(std::memory_order_relaxed);
+        const auto head = head_.value.load(std::memory_order_acquire);
+        if (out.size() > head - tail) {
+            return false;
+        }
+        for (std::size_t index = 0; index < out.size(); ++index) {
+            out[index] = buffer_[(tail + index) & mask_];
+        }
+        tail_.value.store(tail + out.size(), std::memory_order_release);
+        return true;
     }
 
     // Consumer only. Drops up to `count` of the oldest items and returns the count dropped.
