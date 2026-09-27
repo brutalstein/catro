@@ -34,7 +34,8 @@
                     <StackPanel Orientation="Horizontal"
                                 Spacing="7"
                                 VerticalAlignment="Center">
-                        <TextBlock Text="My Server"
+                        <TextBlock x:Name="ServerName"
+                                   Text="My Server"
                                    FontWeight="SemiBold"
                                    Foreground="{ThemeResource CatroTextBrush}"
                                    VerticalAlignment="Center" />
@@ -79,7 +80,8 @@
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock Text="#" FontSize="18"
                                                Foreground="{ThemeResource CatroTextSecondaryBrush}" />
-                                    <TextBlock Text="general"
+                                    <TextBlock x:Name="TextChannelName"
+                                               Text="general"
                                                VerticalAlignment="Center"
                                                FontWeight="SemiBold" />
                                 </StackPanel>
@@ -109,7 +111,8 @@
                                     <FontIcon Glyph="&#xE720;"
                                               FontSize="14"
                                               Foreground="{ThemeResource CatroTextSecondaryBrush}" />
-                                    <TextBlock Text="Voice"
+                                    <TextBlock x:Name="VoiceChannelName"
+                                               Text="Voice"
                                                VerticalAlignment="Center"
                                                FontWeight="SemiBold" />
                                 </StackPanel>
@@ -139,7 +142,8 @@
                                        VerticalAlignment="Center" />
                         </Border>
                         <StackPanel VerticalAlignment="Center" Spacing="0">
-                            <TextBlock Text="You"
+                            <TextBlock x:Name="ProfileName"
+                                       Text="You"
                                        FontSize="12"
                                        FontWeight="SemiBold"
                                        Foreground="{ThemeResource CatroTextBrush}" />
@@ -244,7 +248,8 @@
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center" />
                         </Border>
-                        <TextBlock Text="# general"
+                        <TextBlock x:Name="TextEmptyTitle"
+                                   Text="# general"
                                    FontSize="20"
                                    FontWeight="SemiBold"
                                    Foreground="{ThemeResource CatroTextBrush}"
@@ -255,6 +260,7 @@
                              Margin="14"
                              MinHeight="42"
                              IsEnabled="False"
+                             x:Name="Composer"
                              PlaceholderText="Message #general"
                              Background="{ThemeResource CatroSurfaceAltBrush}"
                              BorderThickness="0"
@@ -291,7 +297,8 @@
                                          Margin="0,0,4,4" />
                             </Grid>
                         </Border>
-                        <TextBlock Text="You"
+                        <TextBlock x:Name="VoiceLocalName"
+                                   Text="You"
                                    FontSize="18"
                                    FontWeight="SemiBold"
                                    Foreground="{ThemeResource CatroTextBrush}"
@@ -349,7 +356,8 @@
                 BorderBrush="{ThemeResource CatroStrokeBrush}"
                 BorderThickness="1,0,0,0">
             <StackPanel Padding="14,16" Spacing="12">
-                <TextBlock Text="MEMBERS — 1"
+                <TextBlock x:Name="MemberCountLabel"
+                           Text="MEMBERS — 1"
                            FontSize="10"
                            FontWeight="SemiBold"
                            CharacterSpacing="80"
@@ -379,7 +387,8 @@
                                  HorizontalAlignment="Right"
                                  VerticalAlignment="Bottom" />
                     </Grid>
-                    <TextBlock Grid.Column="1"
+                    <TextBlock x:Name="MemberLocalName"
+                               Grid.Column="1"
                                Text="You"
                                Margin="7,0,0,0"
                                FontSize="12"
