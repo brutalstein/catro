@@ -98,8 +98,8 @@ non-blocking UDP and has **no encryption or authentication**. It must not be exp
 Internet. Each datagram is bounded to one Catro voice packet (maximum 1291 bytes), keeping it below
 a conservative Ethernet MTU once IP/UDP headers are included.
 
-The media worker sleeps in `select` with a 2 ms maximum poll interval instead of busy-spinning.
-Audio callbacks only copy through bounded SPSC queues. Encoding, socket I/O, packet parsing,
+The media worker sleeps in `select` with a 2 ms maximum poll interval and microsecond deadline precision instead of busy-spinning.
+Audio callbacks only copy through bounded SPSC queues whose producer/consumer indices are cache-line isolated. Encoding, socket I/O, packet parsing,
 jitter/FEC/PLC, and decoding remain on the worker thread. Once per second the tool prints packet,
 loss/backpressure, jitter, audio glitch/underrun, and encode/decode timing counters.
 
