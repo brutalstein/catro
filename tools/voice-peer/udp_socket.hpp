@@ -27,6 +27,7 @@ enum class UdpErrorCode {
     wait_failed,
     send_failed,
     receive_failed,
+    datagram_too_large,
     would_block,
 };
 
@@ -55,6 +56,8 @@ struct UdpError {
         return "send failed";
     case UdpErrorCode::receive_failed:
         return "receive failed";
+    case UdpErrorCode::datagram_too_large:
+        return "datagram too large";
     case UdpErrorCode::would_block:
         return "would block";
     }
