@@ -5,6 +5,7 @@ add_library(catro_voice STATIC
     src/codec.cpp
     src/jitter.cpp
     src/packet.cpp
+    src/pipeline.cpp
 )
 add_library(Catro::Voice ALIAS catro_voice)
 
