@@ -136,7 +136,7 @@ private:
     // Keep producer and consumer ownership on distinct cache lines. 128 bytes is conservative
     // across the x86 machines and Apple Silicon machines Catro targets; this costs only 256 bytes
     // per ring and avoids callback/worker cache-line ping-pong.
-    static_assert(sizeof(std::atomic<std::size_t>) <= 128);
+    static_assert(sizeof(std::atomic<std::size_t>) < 128);
     struct alignas(128) Index {
         std::atomic<std::size_t> value{0};
         char padding[128 - sizeof(std::atomic<std::size_t>)]{};
