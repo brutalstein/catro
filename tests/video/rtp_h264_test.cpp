@@ -208,6 +208,43 @@ TEST_CASE("H264 RTP reassembler rejects datagrams above its configured MTU") {
     CHECK(result.error == H264ReassemblyError::malformed_rtp);
 }
 
+TEST_CASE("H264 RTP reassembler can lock wildcard SSRC to the first stream") {
+    const auto access_unit = make_access_unit();
+    const H264RtpConfig sender{0x12345678U, 101, 1200};
+    PacketCollector collector;
+    REQUIRE(packetize_h264_annex_b(
+        access_unit, 9'000, 7, sender, &collector, &PacketCollector::collect));
+
+    std::array<std::byte, 4096> storage{};
+    H264RtpReassembler reassembler(
+        storage, H264RtpConfig{0, sender.payload_type, sender.mtu_bytes});
+
+    H264ReassemblyResult result;
+    for (const auto& datagram : collector.datagrams) {
+        result = reassembler.push(datagram);
+    }
+    REQUIRE(result.status == H264ReassemblyStatus::frame_ready);
+
+    auto alien = collector.datagrams.front();
+    alien[8] = std::byte{0x87};
+    alien[9] = std::byte{0x65};
+    alien[10] = std::byte{0x43};
+    alien[11] = std::byte{0x21};
+    result = reassembler.push(alien);
+    CHECK(result.status == H264ReassemblyStatus::packet_rejected);
+    CHECK(result.error == H264ReassemblyError::ssrc_mismatch);
+}
+
+TEST_CASE("H264 packetizer still rejects wildcard SSRC") {
+    const auto access_unit = make_access_unit();
+    PacketCollector collector;
+    const auto result = packetize_h264_annex_b(
+        access_unit, 0, 1, H264RtpConfig{0, 96, 1200},
+        &collector, &PacketCollector::collect);
+    CHECK_FALSE(result);
+    CHECK(result.error == H264PacketizeError::invalid_config);
+}
+
 TEST_CASE("H264 packetizer rejects bytes that are not Annex-B") {
     const std::array<std::byte, 4> bytes{
         std::byte{0x65}, std::byte{0x01}, std::byte{0x02}, std::byte{0x03}};
