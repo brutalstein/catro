@@ -229,8 +229,11 @@ struct WindowsH264HardwareEncoder::Impl {
 
         if (next_config.width == 0 || next_config.height == 0 ||
             (next_config.width & 1U) != 0 || (next_config.height & 1U) != 0 ||
-            next_config.frame_rate_numerator == 0 || next_config.frame_rate_denominator == 0 ||
-            next_config.bitrate < 128'000 || next_config.gop_frames == 0) {
+            next_config.width > 7680 || next_config.height > 4320 ||
+            next_config.frame_rate_numerator == 0 || next_config.frame_rate_numerator > 120 ||
+            next_config.frame_rate_denominator == 0 ||
+            next_config.bitrate < 128'000 || next_config.bitrate > 50'000'000 ||
+            next_config.gop_frames == 0) {
             return fail(HardwareEncoderError{HardwareEncoderErrorCode::invalid_config});
         }
 
@@ -525,6 +528,12 @@ struct WindowsH264HardwareEncoder::Impl {
 
         source_width_ = source_description.Width;
         source_height_ = source_description.Height;
+        if (static_cast<std::uint64_t>(source_width_) * config_.height !=
+            static_cast<std::uint64_t>(source_height_) * config_.width) {
+            // Screen sharing must not stretch UI/text. The media policy chooses an aspect-matched
+            // encode size; letterbox/crop policy belongs above this primitive.
+            return HardwareEncoderError{HardwareEncoderErrorCode::invalid_config};
+        }
 
         D3D11_VIDEO_PROCESSOR_CONTENT_DESC content{};
         content.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
