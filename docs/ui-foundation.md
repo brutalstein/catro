@@ -1,79 +1,81 @@
 # Native UI foundation
 
-Catro's product shell is intentionally native and visually quiet. The design goal is not to render
-the most effects; it is to keep UI cost predictable while leaving CPU/GPU budget to voice, capture,
-encode, and the game.
+Catro uses a server-first native shell with the familiar gaming-chat layout: server rail, channel
+rail, active channel, and member list. The visual tree is deliberately flat and effect-free so the
+game and realtime media pipeline keep the machine budget.
 
-## Layout contract
+## Product contract
 
-The Windows shell uses three stable regions:
+First run creates one personal server for the local identity. The account/persistence milestone must
+supply durable opaque identifiers; the UI never treats a display name as identity.
 
-1. **72 px global rail** — Home, Voice, Share, System, Settings.
-2. **220–248 px context pane** — rooms, sources, or section-local navigation. It collapses below
-   800 logical pixels and is also removed for the diagnostics workspace.
-3. **Workspace** — the only large content subtree attached to the visual tree.
+The personal server contract is:
 
-The title bar is 44 px. The launch size is 1280 × 820 logical pixels. No page is allowed to assume
-that size; the workspace owns the remaining width.
+- one identity owns its personal server;
+- owner is the only elevated role;
+- everyone else is a normal member;
+- joining happens through an opaque invite code;
+- the default server contains exactly one text channel (`general`) and one voice channel
+  (`Voice`);
+- voice is where mute, deafen, and screen-share controls live;
+- the member pane always reflects server membership, not voice membership.
 
-The portable `apps/shell/ShellModel` is the stable navigation contract. Product backends should
-bind to those sections instead of teaching the native shell about transport or media internals.
+The current branch implements the shell and its state contract. Identity generation, durable
+persistence, invite resolution, messaging, membership synchronization, and production voice
+sessions are deliberately not faked in the UI.
 
-## Performance model
+## Windows layout
 
-The shell follows these invariants:
+The main window uses four bounded regions:
 
-- **No Mica, Acrylic, blur, backdrop, or decorative shadow passes.** Every major surface is a solid
-  brush. This avoids a persistent composition/backdrop cost while a game is rendering.
-- **No continuous UI animation.** Speaking/meter state may update later, but animation is never the
-  source of truth.
-- **Lazy workspace construction.** Home is built at launch. Voice, Share, System, and Settings are
-  instantiated only on first visit. Only one page is attached to `ContentControl` at a time.
-- **Constant-size global navigation.** Five destinations make selection/update cost O(1) with a
-  fixed upper bound; there is no runtime navigation collection or reflection.
-- **Resize policy is constant-time C++.** One width comparison selects 0/220/248 px for the context
-  pane. There is no adaptive visual-state graph to evaluate on every layout transition.
-- **Realtime media never executes in XAML/SwiftUI callbacks.** UI surfaces consume snapshots and
-  commands; WASAPI/CoreAudio, Opus, jitter, capture, and transport remain below the presentation
-  layer.
-- **Dynamic people/room lists must virtualize.** When those models arrive, list cost must scale with
-  visible rows, not total membership.
-- **High-frequency diagnostics stay local to the page that needs them.** The existing audio meter is
-  10 Hz and stops its timer when not running. Future speaking indicators should follow the same
-  bounded-update rule.
-- **No bitmap decoration is required.** The shell uses text, vector glyphs, borders, and flat fills,
-  avoiding image decode/upload work at startup.
+1. **64 px server rail** — personal server now; joined servers later.
+2. **232 px channel rail** — server header, one text channel, one voice channel, local profile.
+3. **active channel** — text timeline/composer or voice stage.
+4. **216 px member rail** — server members and owner indication.
 
-The practical objective is that idle shell cost approaches the cost of one static WinUI/SwiftUI
-tree plus event dispatch. Media threads should not be able to distinguish whether Home, Voice, or
-Share is visible except for bounded snapshot publication.
+Below 920 logical pixels the member rail is removed. Below 760 logical pixels the channel rail
+shrinks to 196 px. Resize handling is constant-time C++ with two comparisons and no visual-state
+graph.
+
+System diagnostics and Settings remain reachable from the server rail. Diagnostics is created only
+when opened and released when leaving.
+
+## Performance invariants
+
+- no Electron, browser runtime, WebView UI, Mica, Acrylic, blur, backdrop, large shadow, or
+  decorative bitmap;
+- no continuous UI animation;
+- solid semantic brushes only;
+- only one top-level workspace attached to the window at a time;
+- fixed-count server/channel chrome on first run, so ordinary navigation is O(1);
+- dynamic message/member lists must use virtualization when their real models arrive;
+- realtime media never executes on the XAML thread;
+- speaking/meter state must be snapshot-driven and rate-bounded;
+- diagnostics and device probing are not kept alive while the normal server surface is visible.
+
+The UI policy test rejects expensive composition primitives and the stock blue accent colors from
+the product XAML.
 
 ## Visual system
 
-The theme deliberately avoids blue. The main palette is warm neutral with restrained semantic color:
+The application deliberately avoids a blue theme. Light and dark palettes use warm neutral
+backgrounds with muted terracotta as the primary accent, desaturated sage for healthy/connected
+state, and dusty rose only for secondary semantic emphasis.
 
-- background: warm ivory / charcoal
-- surface: off-white / warm graphite
-- accent: muted terracotta
-- positive: desaturated sage
-- secondary emphasis: dusty rose and sand
+The product surface stays dense: 36–54 px navigation rows, small labels, minimal empty-state copy,
+and no marketing text inside the application.
 
-Spacing uses 4/8/12/16/24/32 px steps. Cards use 12–18 px radii. Large shadows and glass effects are
-not part of the product language.
+## Integration boundaries
 
-Light, dark, and high-contrast resources share semantic keys, so product views do not carry literal
-theme colors.
+The shell should receive immutable/snapshot-style models from future services:
 
-## Connection boundaries
+- **Identity**: stable user id, display name, avatar token.
+- **Server**: stable server id, owner id, display name.
+- **Invite**: opaque code, server id, expiry/revocation state.
+- **Channels**: stable channel id, kind, name, ordering.
+- **Members**: user id, presence, owner/member role.
+- **Text**: virtualized message snapshots plus send command.
+- **Voice**: join/leave/mute/deafen/share commands plus bounded speaking/session snapshots.
 
-The current surfaces are intentionally sparse but their integration points are fixed:
-
-- **Home** — recent spaces, people, and local media summary.
-- **Voice** — room selection, participant roster, mute/deafen/share controls, speaking state.
-- **Share** — source picker, capability-derived quality plan, system/microphone audio policy.
-- **System** — capability evidence and audio diagnostics.
-- **Settings** — appearance, device defaults, and user-facing performance policy.
-
-Room/account/network state must not be stored inside XAML controls. It belongs in plain/native model
-objects and is projected into the shell. That keeps the UI replaceable and testable while the media
-core remains independent.
+XAML controls do not own those records. The existing native audio/voice core remains below these
+presentation contracts.
