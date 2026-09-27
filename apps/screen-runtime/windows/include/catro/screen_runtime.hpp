@@ -106,6 +106,7 @@ struct ScreenShareSnapshot {
     std::uint64_t remote_packet_rejects = 0;
     std::uint64_t remote_decode_failures = 0;
     std::uint64_t remote_present_drops = 0;
+    std::uint64_t remote_stream_resets = 0;
 };
 
 // One full-duplex video transport per voice-room membership. The connected UDP socket is shared by
