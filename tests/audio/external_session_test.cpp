@@ -5,8 +5,10 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <latch>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -128,6 +130,28 @@ public:
     std::vector<std::string> start_order;
 };
 
+class BlockingPlatform final : public AudioPlatform {
+public:
+    OpenResult open_capture(const std::optional<AudioEndpointId>& device, CaptureSink&,
+                            StreamFailure) override {
+        capture_opened.count_down();
+        release_capture.wait();
+        return std::make_unique<Stream>(
+            StreamInfo{device.value_or(endpoint("default-in")), 48000, 1, 480, 0},
+            capture_started, start_order, "capture");
+    }
+
+    OpenResult open_render(const std::optional<AudioEndpointId>&, RenderSource&,
+                           StreamFailure) override {
+        return AudioError{AudioErrorCode::os_failure};
+    }
+
+    std::latch capture_opened{1};
+    std::latch release_capture{1};
+    std::atomic_bool capture_started = false;
+    std::vector<std::string> start_order;
+};
+
 } // namespace
 
 TEST_CASE("external duplex session starts render before capture and exposes native stream info") {
@@ -233,4 +257,33 @@ TEST_CASE("external session failure requests both streams to stop and ignores st
     stale(AudioError{AudioErrorCode::os_failure});
     CHECK(session.statistics().state == EngineState::running);
     CHECK(failures.size() == 1);
+}
+
+TEST_CASE("external session stop waits for an in-flight start and leaves no native stream running") {
+    BlockingPlatform platform;
+    Sink sink;
+    Source source;
+    ExternalAudioSession session(platform);
+    std::atomic_bool stop_returned = false;
+
+    std::thread starter([&] {
+        (void)session.start({.mode = ExternalSessionMode::capture_only}, sink, source);
+    });
+    platform.capture_opened.wait();
+
+    std::thread stopper([&] {
+        session.stop();
+        stop_returned.store(true, std::memory_order_release);
+    });
+
+    std::this_thread::yield();
+    CHECK_FALSE(stop_returned.load(std::memory_order_acquire));
+
+    platform.release_capture.count_down();
+    starter.join();
+    stopper.join();
+
+    CHECK(stop_returned.load(std::memory_order_acquire));
+    CHECK_FALSE(platform.capture_started.load(std::memory_order_relaxed));
+    CHECK(session.statistics().state == EngineState::idle);
 }
