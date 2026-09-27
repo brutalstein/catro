@@ -63,6 +63,7 @@ public:
 
     [[nodiscard]] std::variant<std::size_t, CodecError> encode(std::span<const float> pcm,
                                                                std::span<std::byte> output) noexcept;
+    [[nodiscard]] std::optional<CodecError> reset() noexcept;
 
 private:
     struct Impl;
