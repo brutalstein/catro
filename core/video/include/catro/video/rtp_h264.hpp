@@ -111,7 +111,8 @@ public:
 
 private:
     [[nodiscard]] bool append(std::span<const std::byte> bytes) noexcept;
-    void begin_frame(std::uint32_t timestamp, std::uint16_t sequence) noexcept;
+    void begin_frame(std::uint32_t timestamp) noexcept;
+    void clear_frame_state() noexcept;
     void mark_damage(H264ReassemblyError error) noexcept;
     [[nodiscard]] H264ReassemblyResult finish_or_drop(bool marker) noexcept;
 
@@ -123,6 +124,7 @@ private:
     std::uint8_t fu_nal_type_ = 0;
     H264ReassemblyError damage_error_ = H264ReassemblyError::none;
     bool active_ = false;
+    bool have_sequence_ = false;
     bool damaged_ = false;
     bool fu_active_ = false;
     bool keyframe_ = false;
