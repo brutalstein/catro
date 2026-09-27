@@ -43,7 +43,7 @@ Commit boundary: one green commit after local MSVC tests.
 - Audio callback path is only fixed-capacity SPSC memory movement, relaxed counters, and silence fill.
 - Capture callback writes are all-or-nothing; overload drops a whole callback block rather than corrupting a 20 ms codec frame.
 - Worker-to-render writes are one complete 960-sample decoded frame or a queue-full rejection. The bridge counts rejection attempts; the pipeline counts actual decoded frames dropped at that boundary.
-- Default queue storage is eight voice frames per direction and constructor input is clamped to 64 frames.
+- Default queue storage is four voice frames per direction (about 85 ms after power-of-two rounding) and constructor input is clamped to 64 frames.
 - SPSC copies use at most two `memcpy` segments around the ring wrap; no per-sample callback loop is required.
 - `VoicePipeline` owns Opus encoder/decoder, sequence/timestamp generation, packet parsing, jitter/FEC/PLC decisions, and the two real-time bridges while remaining transport-agnostic.
 - Opus encodes directly into the datagram payload region; the fixed header is written afterward, avoiding a second payload copy.
