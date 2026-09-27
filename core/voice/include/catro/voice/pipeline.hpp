@@ -16,6 +16,7 @@
 namespace catro::voice {
 
 inline constexpr std::size_t kMaxVoiceDatagramBytes = kVoiceHeaderBytes + kVoiceMaxPayloadBytes;
+static_assert(kMaxVoiceDatagramBytes < 1400, "voice datagrams must stay below a conservative MTU payload budget");
 
 struct VoicePipelineConfig {
     std::uint32_t local_stream_id = 1;
