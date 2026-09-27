@@ -10,6 +10,7 @@
 #include <avrt.h>
 #elif defined(__APPLE__)
 #include <pthread.h>
+#include <sys/qos.h>
 #endif
 
 namespace catro::tools {
