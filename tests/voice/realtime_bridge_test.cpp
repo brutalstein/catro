@@ -197,6 +197,36 @@ TEST_CASE("render bridge emits queued PCM then silence instead of blocking on un
     CHECK(stats.push_rejections == 0);
 }
 
+TEST_CASE("render bridge deafen outputs silence while draining live PCM") {
+    RenderBridge bridge(2);
+    PcmFrame one{};
+    PcmFrame two{};
+    std::fill(one.begin(), one.end(), 0.25F);
+    std::fill(two.begin(), two.end(), -0.5F);
+    REQUIRE(bridge.try_push(one));
+    REQUIRE(bridge.try_push(two));
+
+    bridge.set_deafened(true);
+    CHECK(bridge.deafened());
+
+    std::array<float, 480> output{};
+    std::fill(output.begin(), output.end(), 1.0F);
+    bridge.on_render(output);
+    CHECK(std::ranges::all_of(output, [](float sample) { return sample == 0.0F; }));
+    bridge.on_render(output);
+    CHECK(std::ranges::all_of(output, [](float sample) { return sample == 0.0F; }));
+
+    auto stats = bridge.statistics();
+    CHECK(stats.buffered_samples == kFrameSamples);
+    CHECK(stats.deafened_samples_rendered == 960);
+    CHECK(stats.underrun_callbacks == 0);
+
+    bridge.set_deafened(false);
+    CHECK_FALSE(bridge.deafened());
+    bridge.on_render(output);
+    CHECK(std::ranges::all_of(output, [](float sample) { return sample == -0.5F; }));
+}
+
 TEST_CASE("render queue is bounded and drops complete decoded frames when full") {
     RenderBridge bridge(2);
     PcmFrame one{};
