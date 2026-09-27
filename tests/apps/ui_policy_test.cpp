@@ -22,9 +22,7 @@ TEST_CASE("product shell XAML stays on the low-cost composition path") {
     const std::array files{
         "App.xaml",
         "MainWindow.xaml",
-        "Home/HomeView.xaml",
-        "Voice/VoiceView.xaml",
-        "Share/ShareView.xaml",
+        "Server/ServerView.xaml",
         "Settings/SettingsView.xaml",
     };
     const std::array<std::string_view, 8> forbidden{
