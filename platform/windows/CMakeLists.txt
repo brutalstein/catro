@@ -13,6 +13,7 @@ endif()
 add_library(catro_platform_windows STATIC
     src/audio_platform.cpp
     src/screen_capture.cpp
+    src/video_encoder.cpp
     src/local_state.cpp
     src/capability_service.cpp
     src/process_probe_executor.cpp
