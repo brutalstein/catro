@@ -24,6 +24,8 @@ struct CaptureBridgeStatistics {
     std::uint64_t dropped_samples = 0;
     std::uint64_t frames_dequeued = 0;
     std::uint64_t stale_frames_discarded = 0;
+    std::uint64_t resync_events = 0;
+    std::uint64_t resync_samples = 0;
     std::size_t buffered_samples = 0;
     std::size_t peak_buffered_samples = 0;
 
@@ -66,6 +68,7 @@ public:
 
 private:
     void update_peak(std::size_t depth) noexcept;
+    bool resynchronize_if_needed() noexcept;
 
     audio::SpscRing<float> ring_;
     std::atomic<std::uint64_t> callbacks_{0};
@@ -74,6 +77,9 @@ private:
     std::atomic<std::uint64_t> dropped_samples_{0};
     std::atomic<std::uint64_t> frames_dequeued_{0};
     std::atomic<std::uint64_t> stale_frames_discarded_{0};
+    std::atomic<std::uint64_t> resync_events_{0};
+    std::atomic<std::uint64_t> resync_samples_{0};
+    std::atomic_bool resync_requested_{false};
     std::atomic<std::size_t> peak_buffered_samples_{0};
 };
 
