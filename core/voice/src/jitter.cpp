@@ -56,8 +56,9 @@ void JitterBuffer::copy_payload(const Slot& slot, PlayoutFrame& frame) const noe
 void JitterBuffer::erase(Slot& slot) noexcept {
     slot.occupied = false;
     slot.payload_size = 0;
-    if (buffered_ > 0) {
-        --buffered_;
+    const auto buffered = buffered_.load(std::memory_order_relaxed);
+    if (buffered > 0) {
+        buffered_.store(buffered - 1, std::memory_order_relaxed);
     }
 }
 
@@ -71,7 +72,7 @@ JitterPushResult JitterBuffer::push(const VoicePacketView& packet) noexcept {
         return JitterPushResult::invalid_payload;
     }
     if (stream_set_ && packet.stream_id != stream_id_) {
-        ++statistics_.wrong_stream;
+        wrong_stream_.fetch_add(1, std::memory_order_relaxed);
         return JitterPushResult::wrong_stream;
     }
 
@@ -80,19 +81,19 @@ JitterPushResult JitterBuffer::push(const VoicePacketView& packet) noexcept {
         extended = unwrap_near(packet.sequence);
     }
 
-    if (started_) {
+    if (started_.load(std::memory_order_relaxed)) {
         if (extended < next_sequence_) {
-            ++statistics_.late;
+            late_.fetch_add(1, std::memory_order_relaxed);
             return JitterPushResult::late;
         }
         if (extended - next_sequence_ >= kWindow) {
-            ++statistics_.outside_window;
+            outside_window_.fetch_add(1, std::memory_order_relaxed);
             return JitterPushResult::outside_window;
         }
     } else if (have_reference_) {
         const auto distance = extended - highest_seen_;
         if (distance <= -kWindow || distance >= kWindow) {
-            ++statistics_.outside_window;
+            outside_window_.fetch_add(1, std::memory_order_relaxed);
             return JitterPushResult::outside_window;
         }
     }
@@ -100,10 +101,10 @@ JitterPushResult JitterBuffer::push(const VoicePacketView& packet) noexcept {
     auto& slot = slots_[index_for(extended)];
     if (slot.occupied) {
         if (slot.extended_sequence == extended) {
-            ++statistics_.duplicates;
+            duplicates_.fetch_add(1, std::memory_order_relaxed);
             return JitterPushResult::duplicate;
         }
-        ++statistics_.outside_window;
+        outside_window_.fetch_add(1, std::memory_order_relaxed);
         return JitterPushResult::outside_window;
     }
 
@@ -123,13 +124,16 @@ JitterPushResult JitterBuffer::push(const VoicePacketView& packet) noexcept {
         highest_seen_ = extended;
         have_reference_ = true;
     }
-    ++buffered_;
-    ++statistics_.accepted;
+    const auto buffered = buffered_.fetch_add(1, std::memory_order_relaxed) + 1;
+    accepted_.fetch_add(1, std::memory_order_relaxed);
     if (reordered) {
-        ++statistics_.reordered;
+        reordered_.fetch_add(1, std::memory_order_relaxed);
     }
-    statistics_.peak_buffered = std::max(statistics_.peak_buffered, buffered_);
-    statistics_.buffered = buffered_;
+    auto peak = peak_buffered_.load(std::memory_order_relaxed);
+    while (buffered > peak &&
+           !peak_buffered_.compare_exchange_weak(peak, buffered, std::memory_order_relaxed,
+                                                 std::memory_order_relaxed)) {
+    }
     return JitterPushResult::accepted;
 }
 
@@ -141,8 +145,8 @@ PlayoutKind JitterBuffer::pull(PlayoutFrame& frame) noexcept {
     frame.timestamp = 0;
     frame.payload_size = 0;
 
-    if (!started_) {
-        if (buffered_ < target_packets_) {
+    if (!started_.load(std::memory_order_relaxed)) {
+        if (buffered_.load(std::memory_order_relaxed) < target_packets_) {
             return frame.kind;
         }
         next_sequence_ = earliest_sequence();
@@ -151,7 +155,7 @@ PlayoutKind JitterBuffer::pull(PlayoutFrame& frame) noexcept {
             return frame.kind;
         }
         next_timestamp_ = first->timestamp;
-        started_ = true;
+        started_.store(true, std::memory_order_relaxed);
     }
 
     frame.stream_id = stream_id_;
@@ -163,15 +167,14 @@ PlayoutKind JitterBuffer::pull(PlayoutFrame& frame) noexcept {
         frame.kind = PlayoutKind::packet;
         copy_payload(*current, frame);
         erase(*current);
-        ++statistics_.played;
+        played_.fetch_add(1, std::memory_order_relaxed);
         advance_playout();
-        statistics_.buffered = buffered_;
         return frame.kind;
     }
 
     if (current != nullptr) {
         erase(*current);
-        ++statistics_.timestamp_mismatches;
+        timestamp_mismatches_.fetch_add(1, std::memory_order_relaxed);
     }
 
     const auto* following = find(next_sequence_ + 1);
@@ -179,14 +182,13 @@ PlayoutKind JitterBuffer::pull(PlayoutFrame& frame) noexcept {
     if (following != nullptr && following->timestamp == following_timestamp) {
         frame.kind = PlayoutKind::fec;
         copy_payload(*following, frame);
-        ++statistics_.fec;
+        fec_.fetch_add(1, std::memory_order_relaxed);
     } else {
         frame.kind = PlayoutKind::plc;
-        ++statistics_.plc;
+        plc_.fetch_add(1, std::memory_order_relaxed);
     }
 
     advance_playout();
-    statistics_.buffered = buffered_;
     return frame.kind;
 }
 
@@ -199,17 +201,38 @@ void JitterBuffer::reset() noexcept {
     stream_id_ = 0;
     have_reference_ = false;
     highest_seen_ = 0;
-    started_ = false;
+    started_.store(false, std::memory_order_relaxed);
     next_sequence_ = 0;
     next_timestamp_ = 0;
-    buffered_ = 0;
-    statistics_ = {};
+    buffered_.store(0, std::memory_order_relaxed);
+    accepted_.store(0, std::memory_order_relaxed);
+    duplicates_.store(0, std::memory_order_relaxed);
+    late_.store(0, std::memory_order_relaxed);
+    reordered_.store(0, std::memory_order_relaxed);
+    outside_window_.store(0, std::memory_order_relaxed);
+    wrong_stream_.store(0, std::memory_order_relaxed);
+    timestamp_mismatches_.store(0, std::memory_order_relaxed);
+    played_.store(0, std::memory_order_relaxed);
+    fec_.store(0, std::memory_order_relaxed);
+    plc_.store(0, std::memory_order_relaxed);
+    peak_buffered_.store(0, std::memory_order_relaxed);
 }
 
 JitterStatistics JitterBuffer::statistics() const noexcept {
-    auto result = statistics_;
-    result.buffered = buffered_;
-    return result;
+    return {
+        .accepted = accepted_.load(std::memory_order_relaxed),
+        .duplicates = duplicates_.load(std::memory_order_relaxed),
+        .late = late_.load(std::memory_order_relaxed),
+        .reordered = reordered_.load(std::memory_order_relaxed),
+        .outside_window = outside_window_.load(std::memory_order_relaxed),
+        .wrong_stream = wrong_stream_.load(std::memory_order_relaxed),
+        .timestamp_mismatches = timestamp_mismatches_.load(std::memory_order_relaxed),
+        .played = played_.load(std::memory_order_relaxed),
+        .fec = fec_.load(std::memory_order_relaxed),
+        .plc = plc_.load(std::memory_order_relaxed),
+        .buffered = buffered_.load(std::memory_order_relaxed),
+        .peak_buffered = peak_buffered_.load(std::memory_order_relaxed),
+    };
 }
 
 } // namespace catro::voice
