@@ -104,13 +104,26 @@ std::optional<CodecError> Encoder::reset() noexcept {
     // Reapply every user-visible setting so reset semantics cannot silently drift across libopus
     // versions. This path runs only after a capture discontinuity and never on the audio callback.
     const auto& config = impl_->config;
-    if ((result = opus_encoder_ctl(impl_->handle, OPUS_SET_BITRATE(config.bitrate))) != OPUS_OK ||
-        (result = opus_encoder_ctl(impl_->handle, OPUS_SET_COMPLEXITY(config.complexity))) != OPUS_OK ||
-        (result = opus_encoder_ctl(impl_->handle, OPUS_SET_VBR(config.vbr ? 1 : 0))) != OPUS_OK ||
-        (result = opus_encoder_ctl(impl_->handle, OPUS_SET_INBAND_FEC(config.inband_fec ? 1 : 0))) != OPUS_OK ||
-        (result = opus_encoder_ctl(impl_->handle,
-                                   OPUS_SET_PACKET_LOSS_PERC(config.expected_packet_loss_percent))) != OPUS_OK) {
-        return opus_error(result);
+    if (const auto configured = opus_encoder_ctl(impl_->handle, OPUS_SET_BITRATE(config.bitrate));
+        configured != OPUS_OK) {
+        return opus_error(configured);
+    }
+    if (const auto configured = opus_encoder_ctl(impl_->handle, OPUS_SET_COMPLEXITY(config.complexity));
+        configured != OPUS_OK) {
+        return opus_error(configured);
+    }
+    if (const auto configured = opus_encoder_ctl(impl_->handle, OPUS_SET_VBR(config.vbr ? 1 : 0));
+        configured != OPUS_OK) {
+        return opus_error(configured);
+    }
+    if (const auto configured = opus_encoder_ctl(impl_->handle, OPUS_SET_INBAND_FEC(config.inband_fec ? 1 : 0));
+        configured != OPUS_OK) {
+        return opus_error(configured);
+    }
+    if (const auto configured =
+            opus_encoder_ctl(impl_->handle, OPUS_SET_PACKET_LOSS_PERC(config.expected_packet_loss_percent));
+        configured != OPUS_OK) {
+        return opus_error(configured);
     }
     return std::nullopt;
 }
