@@ -58,6 +58,17 @@ Windows shell is not usable with a screen reader.
 
 **Live monitor howls** The monitor plays the microphone back live. Use headphones.
 
+**Voice peer prints a narrowband input warning** The selected device's mix rate is below 32 kHz.
+For validation, choose an active 48 kHz input endpoint from the capability report with `--input`.
+
+**Voice peer cannot bind** Another process already owns the requested UDP port. Give the two peers
+different local ports. Loopback examples use 50000 and 50001.
+
+**LAN voice peer sends but receives nothing** Confirm both peers use each other's numeric IPv4
+address and opposite ports. The development transport is connected UDP, so packets from any other
+source address/port are ignored by the OS. A host firewall may also need to allow the executable.
+Do not open these ports to the public Internet; this harness is unencrypted.
+
 ## Collecting a report for a bug
 
 ```powershell
