@@ -203,6 +203,8 @@ void ServerView::StartVoice() {
     }
 
     const auto direct = direct_voice_config();
+    const auto input = environment("CATRO_VOICE_INPUT");
+    const auto output = environment("CATRO_VOICE_OUTPUT");
     const CatroVoiceRuntimeConfig config{
         .bind_address = direct.bind.address.c_str(),
         .bind_port = direct.bind.port,
@@ -211,6 +213,8 @@ void ServerView::StartVoice() {
         .stream_id = LocalStreamId(),
         .jitter_packets = 3,
         .bitrate = 48'000,
+        .input_endpoint = input ? input->c_str() : nullptr,
+        .output_endpoint = output ? output->c_str() : nullptr,
     };
 
     muted_ = false;
