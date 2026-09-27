@@ -215,7 +215,7 @@ public:
         source = &render_source;
         render_failure = std::move(failure);
         return std::make_unique<FakeStream>(StreamInfo{device.value_or(endpoint("default-out")), 48000, 2, 480, 144},
-                                            std::nullopt, render_started);
+                                            std::nullopt, render_started, &start_order, "render");
     }
 
     int capture_opens = 0;
