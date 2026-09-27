@@ -91,15 +91,17 @@ std::variant<VoicePacketView, PacketError> parse_packet(std::span<const std::byt
     if (get_u16(datagram, 10) != 0) {
         return PacketError::nonzero_reserved;
     }
-    if (get_u32(datagram, 4) == 0) {
-        return PacketError::invalid_stream_id;
-    }
     const auto payload = datagram.subspan(kVoiceHeaderBytes);
     if (payload.empty()) {
         return PacketError::empty_payload;
     }
+    // Bound attacker-controlled datagrams before semantic field validation. This keeps malformed
+    // packet classification deterministic and avoids accepting ambiguity from an oversized body.
     if (payload.size() > kVoiceMaxPayloadBytes) {
         return PacketError::payload_too_large;
+    }
+    if (get_u32(datagram, 4) == 0) {
+        return PacketError::invalid_stream_id;
     }
     return VoicePacketView{
         .stream_id = get_u32(datagram, 4),
