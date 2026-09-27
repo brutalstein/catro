@@ -62,6 +62,19 @@ TEST_CASE("capture overload drops whole callback blocks without corrupting queue
     CHECK_FALSE(bridge.try_pop(out));
 }
 
+TEST_CASE("render bridge startup silence is not reported as an underrun") {
+    RenderBridge bridge(2);
+    std::array<float, 480> output{};
+    std::fill(output.begin(), output.end(), 1.0F);
+    bridge.on_render(output);
+
+    CHECK(std::ranges::all_of(output, [](float sample) { return sample == 0.0F; }));
+    const auto stats = bridge.statistics();
+    CHECK(stats.underrun_callbacks == 0);
+    CHECK(stats.startup_silence_samples == output.size());
+    CHECK(stats.silence_samples_rendered == output.size());
+}
+
 TEST_CASE("render bridge emits queued PCM then silence instead of blocking on underrun") {
     RenderBridge bridge(2);
     PcmFrame frame{};
