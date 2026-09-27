@@ -45,7 +45,7 @@ std::variant<EncodeStep, CodecError> VoicePipeline::encode_next(OutboundDatagram
     auto payload = output.subspan(kVoiceHeaderBytes);
     const auto encoded = encoder_->encode(capture_frame_, payload);
     if (const auto* error = std::get_if<CodecError>(&encoded)) {
-        ++encode_errors_;
+        encode_errors_.fetch_add(1, std::memory_order_relaxed);
         return *error;
     }
 
@@ -57,18 +57,18 @@ std::variant<EncodeStep, CodecError> VoicePipeline::encode_next(OutboundDatagram
     }
 
     datagram.size = std::get<std::size_t>(header);
-    ++encoded_frames_;
-    outbound_bytes_ += datagram.size;
+    encoded_frames_.fetch_add(1, std::memory_order_relaxed);
+    outbound_bytes_.fetch_add(datagram.size, std::memory_order_relaxed);
     ++next_sequence_;
     next_timestamp_ += kFrameSamples;
     return EncodeStep::packet_ready;
 }
 
 ReceiveResult VoicePipeline::receive(std::span<const std::byte> datagram) noexcept {
-    ++received_datagrams_;
+    received_datagrams_.fetch_add(1, std::memory_order_relaxed);
     const auto parsed = parse_packet(datagram);
     if (const auto* error = std::get_if<PacketError>(&parsed)) {
-        ++malformed_datagrams_;
+        malformed_datagrams_.fetch_add(1, std::memory_order_relaxed);
         return *error;
     }
     return jitter_.push(std::get<VoicePacketView>(parsed));
@@ -101,7 +101,7 @@ std::variant<DecodeStep, CodecError> VoicePipeline::decode_next() noexcept {
     }
 
     if (const auto* error = std::get_if<CodecError>(&decoded)) {
-        ++decode_errors_;
+        decode_errors_.fetch_add(1, std::memory_order_relaxed);
         return *error;
     }
     if (std::get<std::size_t>(decoded) != kFrameSamples) {
@@ -109,9 +109,9 @@ std::variant<DecodeStep, CodecError> VoicePipeline::decode_next() noexcept {
         return CodecError{CodecErrorCode::codec_failure};
     }
 
-    ++decoded_frames_;
+    decoded_frames_.fetch_add(1, std::memory_order_relaxed);
     if (!render_.try_push(decoded_frame_)) {
-        ++render_queue_full_;
+        render_queue_full_.fetch_add(1, std::memory_order_relaxed);
         return DecodeStep::render_queue_full;
     }
     return step;
@@ -119,14 +119,14 @@ std::variant<DecodeStep, CodecError> VoicePipeline::decode_next() noexcept {
 
 VoicePipelineStatistics VoicePipeline::statistics() const noexcept {
     return {
-        .encoded_frames = encoded_frames_,
-        .encode_errors = encode_errors_,
-        .outbound_bytes = outbound_bytes_,
-        .received_datagrams = received_datagrams_,
-        .malformed_datagrams = malformed_datagrams_,
-        .decoded_frames = decoded_frames_,
-        .decode_errors = decode_errors_,
-        .render_queue_full = render_queue_full_,
+        .encoded_frames = encoded_frames_.load(std::memory_order_relaxed),
+        .encode_errors = encode_errors_.load(std::memory_order_relaxed),
+        .outbound_bytes = outbound_bytes_.load(std::memory_order_relaxed),
+        .received_datagrams = received_datagrams_.load(std::memory_order_relaxed),
+        .malformed_datagrams = malformed_datagrams_.load(std::memory_order_relaxed),
+        .decoded_frames = decoded_frames_.load(std::memory_order_relaxed),
+        .decode_errors = decode_errors_.load(std::memory_order_relaxed),
+        .render_queue_full = render_queue_full_.load(std::memory_order_relaxed),
         .capture = capture_.statistics(),
         .render = render_.statistics(),
         .jitter = jitter_.statistics(),
