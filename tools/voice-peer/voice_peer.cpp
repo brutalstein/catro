@@ -4,6 +4,7 @@
 #include <catro/voice/pipeline.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <charconv>
 #include <chrono>
@@ -287,7 +288,9 @@ int run_voice_peer(std::span<const std::string_view> arguments,
     }
     auto pipeline = std::move(std::get<std::unique_ptr<voice::VoicePipeline>>(pipeline_result));
 
-    audio::ExternalAudioSession audio_session(platform);
+    std::atomic_bool audio_failed{false};
+    audio::ExternalAudioSession audio_session(
+        platform, [&](audio::AudioError) { audio_failed.store(true, std::memory_order_release); });
     const audio::ExternalSessionConfig audio_config{
         .mode = audio_mode(options->mode),
         .input = options->input,
@@ -329,8 +332,8 @@ int run_voice_peer(std::span<const std::string_view> arguments,
     std::optional<audio::AudioError> audio_failure;
 
     while (Clock::now() < deadline) {
-        const auto audio_stats = audio_session.statistics();
-        if (audio_stats.state == audio::EngineState::failed) {
+        if (audio_failed.load(std::memory_order_acquire)) {
+            const auto audio_stats = audio_session.statistics();
             audio_failure = audio_stats.error.value_or(audio::AudioError{audio::AudioErrorCode::os_failure});
             exit_code = voice_peer_audio_failed;
             break;
