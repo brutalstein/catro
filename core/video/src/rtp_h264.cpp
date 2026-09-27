@@ -48,9 +48,18 @@ void write_be32(std::byte* output, std::uint32_t number) noexcept {
            static_cast<std::uint32_t>(value(input[3]));
 }
 
-[[nodiscard]] bool valid_config(const H264RtpConfig& config) noexcept {
-    return config.ssrc != 0 && config.payload_type <= 127 &&
+[[nodiscard]] bool valid_transport_shape(const H264RtpConfig& config) noexcept {
+    return config.payload_type <= 127 &&
            config.mtu_bytes >= 256 && config.mtu_bytes <= 1500;
+}
+
+[[nodiscard]] bool valid_packetizer_config(const H264RtpConfig& config) noexcept {
+    return config.ssrc != 0 && valid_transport_shape(config);
+}
+
+[[nodiscard]] bool valid_reassembler_config(const H264RtpConfig& config) noexcept {
+    // ssrc == 0 means "lock to the first valid non-zero SSRC" for pre-signaling receive paths.
+    return valid_transport_shape(config);
 }
 
 struct StartCode {
@@ -145,7 +154,7 @@ H264PacketizeResult packetize_h264_annex_b(
     H264PacketizeResult result;
     result.next_sequence = first_sequence;
 
-    if (!valid_config(config) || sink == nullptr || access_unit.empty()) {
+    if (!valid_packetizer_config(config) || sink == nullptr || access_unit.empty()) {
         result.error = H264PacketizeError::invalid_config;
         return result;
     }
@@ -246,10 +255,17 @@ H264PacketizeResult packetize_h264_annex_b(
 
 H264RtpReassembler::H264RtpReassembler(
     std::span<std::byte> frame_storage, H264RtpConfig config) noexcept
-    : storage_(frame_storage), config_(config) {}
+    : storage_(frame_storage), config_(config) {
+    if (config_.ssrc != 0) {
+        locked_ssrc_ = config_.ssrc;
+        have_ssrc_ = true;
+    }
+}
 
 void H264RtpReassembler::reset() noexcept {
     clear_frame_state();
+    locked_ssrc_ = config_.ssrc;
+    have_ssrc_ = config_.ssrc != 0;
     expected_sequence_ = 0;
     have_sequence_ = false;
 }
@@ -319,7 +335,7 @@ H264ReassemblyResult H264RtpReassembler::finish_or_drop(bool marker) noexcept {
 
 H264ReassemblyResult H264RtpReassembler::push(
     std::span<const std::byte> datagram) noexcept {
-    if (!valid_config(config_) || storage_.empty()) {
+    if (!valid_reassembler_config(config_) || storage_.empty()) {
         return {
             H264ReassemblyStatus::packet_rejected,
             H264ReassemblyError::invalid_config,
@@ -352,7 +368,16 @@ H264ReassemblyResult H264RtpReassembler::push(
     const auto timestamp = read_be32(datagram.data() + 4);
     const auto ssrc = read_be32(datagram.data() + 8);
     const bool marker = (second & kRtpMarker) != 0;
-    if (ssrc != config_.ssrc) {
+    if (ssrc == 0) {
+        return {
+            H264ReassemblyStatus::packet_rejected,
+            H264ReassemblyError::ssrc_mismatch,
+            {}};
+    }
+    if (!have_ssrc_) {
+        locked_ssrc_ = ssrc;
+        have_ssrc_ = true;
+    } else if (ssrc != locked_ssrc_) {
         return {
             H264ReassemblyStatus::packet_rejected,
             H264ReassemblyError::ssrc_mismatch,
