@@ -38,7 +38,10 @@ if(WIN32 AND MSVC)
     add_subdirectory(tools/capability-probe)
 elseif(APPLE)
     add_subdirectory(tools/capability-probe)
-    add_subdirectory(apps/macos)
+    # Swift needs the Xcode or Ninja generator; other generators build everything but the shell.
+    if(CMAKE_GENERATOR MATCHES "Xcode|Ninja")
+        add_subdirectory(apps/macos)
+    endif()
 endif()
 add_subdirectory(tools/capability-report)
 

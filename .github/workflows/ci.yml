@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# Hosted runners have no reliable GPU, encoder, or display; reports from them are collected as
+# artifacts and never treated as evidence of hardware capability.
+jobs:
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prerequisites
+        run: ./scripts/bootstrap.ps1
+      - name: Build core, tools, tests, and shell
+        run: ./scripts/build.ps1 -Configuration Debug
+      - name: Test
+        run: ./scripts/test.ps1 -Configuration Debug
+      - name: Capability report
+        run: ./scripts/run.ps1 -Report --format json --output out/capability-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capability-report-windows
+          path: out/capability-report.json
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prerequisites
+        run: scripts/bootstrap.sh
+      - name: Build core, tools, tests, and shell
+        run: scripts/build.sh Debug
+      - name: Test
+        run: scripts/test.sh Debug
+      - name: Capability report
+        run: scripts/run.sh --report --format json --output out/capability-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capability-report-${{ matrix.runner }}
+          path: out/capability-report.json
+
+  # AddressSanitizer and UndefinedBehaviorSanitizer over the shared core and its tests. The
+  # Makefile generator skips the Swift shell.
+  sanitizers:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >
+          cmake -S . -B out/build/sanitizers -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined"
+          -DCMAKE_OBJCXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+      - name: Build
+        run: cmake --build out/build/sanitizers --parallel
+      - name: Test
+        run: ctest --test-dir out/build/sanitizers --output-on-failure
