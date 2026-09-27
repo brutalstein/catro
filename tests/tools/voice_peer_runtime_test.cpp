@@ -263,6 +263,62 @@ TEST_CASE("voice peer full duplex exchanges audible media in both directions") {
     CHECK(second_error.str().empty());
 }
 
+TEST_CASE("voice peer runtime applies mute and deafen without restarting the session") {
+    const auto [first_port, second_port] = reserve_ports();
+    FakeAudioPlatform first_audio(0.25F);
+    FakeAudioPlatform second_audio(-0.20F);
+
+    VoicePeerOptions first_options;
+    first_options.bind = {"127.0.0.1", first_port};
+    first_options.peer = {"127.0.0.1", second_port};
+    first_options.mode = VoicePeerMode::duplex;
+    first_options.duration = 5s;
+    first_options.stream_id = 5101;
+    first_options.jitter_packets = 2;
+
+    VoicePeerOptions second_options = first_options;
+    second_options.bind.port = second_port;
+    second_options.peer.port = first_port;
+    second_options.stream_id = 5102;
+
+    VoicePeerControl first_control;
+    VoicePeerControl second_control;
+    std::ostringstream first_out;
+    std::ostringstream first_error;
+    std::ostringstream second_out;
+    std::ostringstream second_error;
+    int first_exit = -1;
+    int second_exit = -1;
+
+    std::thread first([&] {
+        first_exit = run_voice_peer(first_options, first_audio, first_out, first_error, &first_control);
+    });
+    std::thread second([&] {
+        second_exit = run_voice_peer(second_options, second_audio, second_out, second_error, &second_control);
+    });
+
+    std::this_thread::sleep_for(150ms);
+    first_control.muted.store(true, std::memory_order_release);
+    second_control.deafened.store(true, std::memory_order_release);
+    std::this_thread::sleep_for(100ms);
+    CHECK(first_control.muted.load(std::memory_order_acquire));
+    CHECK(second_control.deafened.load(std::memory_order_acquire));
+
+    first_control.muted.store(false, std::memory_order_release);
+    second_control.deafened.store(false, std::memory_order_release);
+    std::this_thread::sleep_for(100ms);
+
+    first_control.stop_requested.store(true, std::memory_order_release);
+    second_control.stop_requested.store(true, std::memory_order_release);
+    first.join();
+    second.join();
+
+    CHECK(first_exit == voice_peer_ok);
+    CHECK(second_exit == voice_peer_ok);
+    CHECK(first_error.str().empty());
+    CHECK(second_error.str().empty());
+}
+
 TEST_CASE("voice peer cooperative stop releases audio and UDP resources for immediate restart") {
     const auto [local_port, peer_port] = reserve_ports();
     auto args = arguments(local_port, peer_port, "send", 4001);
@@ -272,17 +328,17 @@ TEST_CASE("voice peer cooperative stop releases audio and UDP resources for imme
         FakeAudioPlatform audio(0.10F + 0.01F * static_cast<float>(attempt));
         std::ostringstream out;
         std::ostringstream error;
-        std::atomic_bool stop_requested{false};
+        VoicePeerControl control;
         int exit_code = -1;
 
         const auto started = std::chrono::steady_clock::now();
         std::thread peer([&] {
             const auto current = views(args);
-            exit_code = run_voice_peer(current, audio, out, error, &stop_requested);
+            exit_code = run_voice_peer(current, audio, out, error, &control);
         });
 
         std::this_thread::sleep_for(50ms);
-        stop_requested.store(true, std::memory_order_release);
+        control.stop_requested.store(true, std::memory_order_release);
         peer.join();
         const auto elapsed = std::chrono::steady_clock::now() - started;
 
