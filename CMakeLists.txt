@@ -49,6 +49,7 @@ elseif(APPLE)
 endif()
 add_subdirectory(tools/capability-report)
 add_subdirectory(tools/audio-check)
+add_subdirectory(tools/capture-check)
 add_subdirectory(tools/voice-peer)
 add_subdirectory(apps/voice-runtime/windows)
 
