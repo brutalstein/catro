@@ -26,6 +26,15 @@ catro_add_test(canonical_determinism capabilities/canonical_determinism_test.cpp
 target_link_libraries(catro_canonical_determinism_test PRIVATE Catro::Reporting)
 target_compile_definitions(catro_canonical_determinism_test PRIVATE CATRO_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 
+catro_add_test(diagnostics apps/diagnostics_test.cpp)
+target_link_libraries(catro_diagnostics_test PRIVATE catro_diagnostics)
+catro_add_test(report_cli tools/report_cli_test.cpp)
+target_link_libraries(catro_report_cli_test PRIVATE catro_report_cli)
+
+# The macOS translation is plain C++, so its rules are tested on every platform.
+catro_add_test(macos_translation macos/translation_test.cpp)
+target_link_libraries(catro_macos_translation_test PRIVATE catro_macos_translation)
+
 # Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.
 if(WIN32 AND MSVC)
     add_executable(catro_hanging_probe_helper helpers/hanging_probe_helper.cpp)

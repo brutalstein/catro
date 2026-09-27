@@ -118,7 +118,7 @@ public:
         std::set<std::string> seen;
         for (const auto& encoder : native) {
             auto id = encoder_id(encoder);
-            if (!identifier(id.value)) {
+            if (!identifier(encoder.encoder_id) || !identifier(id.value)) {
                 absent(caps::IssueCode::not_reported);
                 continue;
             }
