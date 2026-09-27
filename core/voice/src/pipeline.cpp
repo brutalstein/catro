@@ -52,7 +52,7 @@ std::variant<EncodeStep, CodecError> VoicePipeline::encode_next(OutboundDatagram
     const auto payload_size = std::get<std::size_t>(encoded);
     const auto header = write_packet_header(stream_id_, next_sequence_, next_timestamp_, payload_size, output);
     if (const auto* error = std::get_if<PacketError>(&header)) {
-        ++encode_errors_;
+        encode_errors_.fetch_add(1, std::memory_order_relaxed);
         return CodecError{CodecErrorCode::codec_failure, -static_cast<int>(*error) - 1};
     }
 
@@ -105,7 +105,7 @@ std::variant<DecodeStep, CodecError> VoicePipeline::decode_next() noexcept {
         return *error;
     }
     if (std::get<std::size_t>(decoded) != kFrameSamples) {
-        ++decode_errors_;
+        decode_errors_.fetch_add(1, std::memory_order_relaxed);
         return CodecError{CodecErrorCode::codec_failure};
     }
 
