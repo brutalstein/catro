@@ -210,8 +210,9 @@ struct WindowsH264D3D11Decoder::Impl {
 
         ComPtr<ID3D10Multithread> multithread;
         if (SUCCEEDED(device_.As(&multithread)) && multithread) {
+            (void)multithread->SetMultithreadProtected(TRUE);
             stats_.multithread_protected =
-                multithread->SetMultithreadProtected(TRUE) != FALSE;
+                multithread->GetMultithreadProtected() != FALSE;
         }
 
         const auto apartment =
@@ -321,6 +322,26 @@ struct WindowsH264D3D11Decoder::Impl {
             return fail(*error);
         }
 
+        MFT_INPUT_STREAM_INFO input_info{};
+        result = transform_->GetInputStreamInfo(0, &input_info);
+        if (FAILED(result)) {
+            return fail(H264DecoderError{
+                H264DecoderErrorCode::decoder_activation_failed,
+                result});
+        }
+        stats_.input_does_not_addref =
+            (input_info.dwFlags & MFT_INPUT_STREAM_DOES_NOT_ADDREF) != 0;
+        stats_.input_holds_buffers =
+            (input_info.dwFlags & MFT_INPUT_STREAM_HOLDS_BUFFERS) != 0;
+        if (stats_.input_holds_buffers) {
+            // We deliberately keep one reusable compressed sample instead of allocating per frame.
+            // That is safe only when the MFT releases input no later than the following
+            // ProcessOutput call. A transform that retains samples longer requires a tracked,
+            // bounded input pool and is rejected until that path is explicitly implemented.
+            return fail(H264DecoderError{
+                H264DecoderErrorCode::input_retention_unsupported});
+        }
+
         if (FAILED(transform_->ProcessMessage(
                 MFT_MESSAGE_COMMAND_FLUSH, 0)) ||
             FAILED(transform_->ProcessMessage(
@@ -406,7 +427,9 @@ struct WindowsH264D3D11Decoder::Impl {
             } else {
                 ++stats_.output_failures;
             }
-            return error;
+            const auto failure = *error;
+            stop();
+            return failure;
         }
 
         const auto decode_us = elapsed_us(decode_started);
