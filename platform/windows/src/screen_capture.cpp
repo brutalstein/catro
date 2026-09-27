@@ -418,6 +418,7 @@ struct WindowsGraphicsCapture::Impl {
                 mailbox_overwrites_.fetch_add(1, std::memory_order_relaxed);
             }
             latest_ = GpuCaptureFrame{
+                .lease = std::move(frame),
                 .texture = std::move(texture),
                 .sequence = sequence,
                 .width = description.Width,
