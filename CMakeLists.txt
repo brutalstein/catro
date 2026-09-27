@@ -28,6 +28,7 @@ catro_enable_reporting_dependency()
 
 add_subdirectory(core/capabilities)
 add_subdirectory(core/reporting)
+add_subdirectory(core/audio)
 add_subdirectory(apps/diagnostics)
 # Portable translations build everywhere; native layers only with their platform toolchain.
 add_subdirectory(platform/macos)
