@@ -117,6 +117,7 @@ HardwareEncoderConfig make_encoder_config(
     config.frame_rate_denominator = 1;
     config.bitrate = options.bitrate;
     config.gop_frames = options.fps * 2U;
+    config.max_access_unit_bytes = options.max_access_unit_bytes;
     config.adapter_luid = adapter_luid;
     return config;
 }
@@ -167,7 +168,7 @@ std::variant<std::unique_ptr<UdpPeerSocket>, UdpError> open_socket(
     if (const auto* failure = std::get_if<UdpError>(&connected)) {
         return *failure;
     }
-    return socket;
+    return std::move(socket);
 }
 
 bool stop_requested(const VideoPeerControl* control) noexcept {

@@ -55,8 +55,10 @@ The encoder intentionally keeps one frame in flight. This trades some maximum th
 Because only one frame can be in flight, the Media Foundation input sample wrapping the persistent
 NV12 texture is allocated once per stable source size and reused after output completes. If an MFT
 requires caller-provided output samples, that sample and its backing buffer are also allocated once
-and reused. The diagnostic exposes both allocation counters so accidental per-frame allocator churn
-is visible during real-machine validation.
+and reused. Application-owned compressed output is hard-bounded by
+`HardwareEncoderConfig::max_access_unit_bytes` before any vector resize/copy; an oversized hardware
+sample fails closed instead of growing process memory. The diagnostic exposes allocation counters so
+accidental per-frame allocator churn is visible during real-machine validation.
 
 Low-latency mode is requested through `ICodecAPI` and reported as confirmed or unconfirmed rather
 than assumed.

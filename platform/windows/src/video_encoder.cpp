@@ -230,7 +230,9 @@ struct WindowsH264HardwareEncoder::Impl {
             next_config.frame_rate_numerator == 0 || next_config.frame_rate_numerator > 120 ||
             next_config.frame_rate_denominator == 0 ||
             next_config.bitrate < 128'000 || next_config.bitrate > 50'000'000 ||
-            next_config.gop_frames == 0) {
+            next_config.gop_frames == 0 ||
+            next_config.max_access_unit_bytes < 64U * 1024U ||
+            next_config.max_access_unit_bytes > 64U * 1024U * 1024U) {
             return fail(HardwareEncoderError{HardwareEncoderErrorCode::invalid_config});
         }
 
@@ -773,10 +775,18 @@ struct WindowsH264HardwareEncoder::Impl {
                 return HardwareEncoderError{HardwareEncoderErrorCode::output_failed, result};
             }
 
+            const auto preferred_bytes =
+                std::min<std::size_t>(kFallbackOutputBytes, config_.max_access_unit_bytes);
             const auto bytes =
-                std::max<std::uint32_t>(output_stream_info_.cbSize, kFallbackOutputBytes);
+                std::max<std::size_t>(output_stream_info_.cbSize, preferred_bytes);
+            if (bytes > config_.max_access_unit_bytes ||
+                bytes > static_cast<std::size_t>(std::numeric_limits<DWORD>::max())) {
+                ++stats_.oversized_outputs;
+                return HardwareEncoderError{HardwareEncoderErrorCode::output_too_large};
+            }
+
             ComPtr<IMFMediaBuffer> buffer;
-            result = MFCreateMemoryBuffer(bytes, &buffer);
+            result = MFCreateMemoryBuffer(static_cast<DWORD>(bytes), &buffer);
             if (FAILED(result) || !buffer) {
                 return HardwareEncoderError{HardwareEncoderErrorCode::output_failed, result};
             }
@@ -847,10 +857,19 @@ struct WindowsH264HardwareEncoder::Impl {
             return HardwareEncoderError{HardwareEncoderErrorCode::output_failed, result};
         }
 
-        BYTE* bytes = nullptr;
         DWORD current_length = 0;
-        result = contiguous->Lock(&bytes, nullptr, &current_length);
-        if (FAILED(result) || bytes == nullptr) {
+        result = contiguous->GetCurrentLength(&current_length);
+        if (FAILED(result)) {
+            return HardwareEncoderError{HardwareEncoderErrorCode::output_failed, result};
+        }
+        if (static_cast<std::size_t>(current_length) > config_.max_access_unit_bytes) {
+            ++stats_.oversized_outputs;
+            return HardwareEncoderError{HardwareEncoderErrorCode::output_too_large};
+        }
+
+        BYTE* bytes = nullptr;
+        result = contiguous->Lock(&bytes, nullptr, nullptr);
+        if (FAILED(result) || (current_length > 0 && bytes == nullptr)) {
             return HardwareEncoderError{HardwareEncoderErrorCode::output_failed, result};
         }
 

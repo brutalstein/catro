@@ -24,6 +24,7 @@ enum class HardwareEncoderErrorCode : std::uint8_t {
     stream_start_failed,
     input_failed,
     output_failed,
+    output_too_large,
     output_timeout,
 };
 
@@ -60,6 +61,8 @@ struct HardwareEncoderError {
         return "H.264 encoder rejected GPU input";
     case HardwareEncoderErrorCode::output_failed:
         return "H.264 encoder output failed";
+    case HardwareEncoderErrorCode::output_too_large:
+        return "H.264 encoder output exceeded the configured bounded access-unit size";
     case HardwareEncoderErrorCode::output_timeout:
         return "H.264 encoder output timed out";
     }
@@ -73,6 +76,8 @@ struct HardwareEncoderConfig {
     std::uint32_t frame_rate_denominator = 1;
     std::uint32_t bitrate = 6'000'000;
     std::uint32_t gop_frames = 60;
+    // Application-owned compressed output memory is hard-bounded before vector resize/copy.
+    std::size_t max_access_unit_bytes = 16U * 1024U * 1024U;
     std::optional<std::uint64_t> adapter_luid;
 };
 
@@ -100,6 +105,7 @@ struct HardwareEncoderStatistics {
     std::uint64_t conversion_failures = 0;
     std::uint64_t input_failures = 0;
     std::uint64_t output_failures = 0;
+    std::uint64_t oversized_outputs = 0;
     std::uint64_t output_timeouts = 0;
     // Successful Media Foundation sample allocations. With a stable source size, input should
     // remain at one for the lifetime of the encoder; caller-provided output should be at most one.
