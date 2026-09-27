@@ -233,16 +233,28 @@ std::optional<LocalStateError> save_local_state_atomic(const std::filesystem::pa
 
 std::variant<LocalState, LocalStateError> load_or_create_local_state(
     const std::filesystem::path& path, community::EntropySource& entropy) {
+    // Normal startup is a single bounded read with no lock. Atomic replacement means a reader
+    // always observes either the previous complete file or the next complete file.
+    auto existing = load_local_state(path);
+    if (std::holds_alternative<LocalState>(existing)) {
+        return std::get<LocalState>(existing);
+    }
+    if (std::get<LocalStateError>(existing).code != LocalStateErrorCode::not_found) {
+        return std::get<LocalStateError>(existing);
+    }
+
     if (const auto error = ensure_parent_directory(path)) {
         return *error;
     }
 
+    // Only first-run creation takes the cross-process lock. Re-read after acquiring it because
+    // another process may have committed the identity while this process was waiting.
     FileStateLock lock(path);
     if (const auto error = lock.acquire()) {
         return *error;
     }
 
-    const auto existing = load_local_state(path);
+    existing = load_local_state(path);
     if (std::holds_alternative<LocalState>(existing)) {
         return std::get<LocalState>(existing);
     }
