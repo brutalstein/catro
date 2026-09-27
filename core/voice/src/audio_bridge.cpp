@@ -36,6 +36,7 @@ void CaptureBridge::on_captured(std::span<const float> frames) noexcept {
     if (!ring_.write_exact(frames)) {
         dropped_callbacks_.fetch_add(1, std::memory_order_relaxed);
         dropped_samples_.fetch_add(frames.size(), std::memory_order_relaxed);
+        pending_gap_samples_.fetch_add(frames.size(), std::memory_order_relaxed);
         // Never splice pre-gap and post-gap PCM into one Opus frame. The worker will flush the
         // stale queued prefix at its next opportunity and restart framing on fresh capture data.
         resync_requested_.store(true, std::memory_order_release);
@@ -49,32 +50,43 @@ bool CaptureBridge::resynchronize_if_needed() noexcept {
         return false;
     }
     const auto discarded = ring_.discard(ring_.size());
+    const auto dropped = pending_gap_samples_.exchange(0, std::memory_order_acq_rel);
+    const auto lost_samples = static_cast<std::uint64_t>(discarded) + dropped;
+    const auto skipped_frames =
+        (lost_samples + static_cast<std::uint64_t>(kFrameSamples) - 1U) /
+        static_cast<std::uint64_t>(kFrameSamples);
+
     resync_events_.fetch_add(1, std::memory_order_relaxed);
     resync_samples_.fetch_add(discarded, std::memory_order_relaxed);
+    timeline_frames_skipped_.fetch_add(skipped_frames, std::memory_order_relaxed);
+    unreported_timeline_frames_ += skipped_frames;
     return true;
 }
 
-std::size_t CaptureBridge::trim_backlog(std::size_t keep_frames) noexcept {
-    if (resynchronize_if_needed()) {
-        return 0;
-    }
+std::uint64_t CaptureBridge::trim_backlog(std::size_t keep_frames) noexcept {
+    (void)resynchronize_if_needed();
     keep_frames = std::clamp<std::size_t>(keep_frames, 1, kMaxRealtimeQueueFrames);
     const auto buffered = ring_.size();
     const auto keep_samples = keep_frames * static_cast<std::size_t>(kFrameSamples);
     if (buffered <= keep_samples) {
-        return 0;
+        const auto skipped = unreported_timeline_frames_;
+        unreported_timeline_frames_ = 0;
+        return skipped;
     }
 
     // Only discard complete 20 ms frames. Any partial native callback remains attached to the
     // same codec-frame phase, so subsequent read_exact() keeps deterministic frame boundaries.
     const auto discard_frames = (buffered - keep_samples) / static_cast<std::size_t>(kFrameSamples);
-    if (discard_frames == 0) {
-        return 0;
+    if (discard_frames > 0) {
+        const auto discard_samples = discard_frames * static_cast<std::size_t>(kFrameSamples);
+        const auto discarded = ring_.discard(discard_samples) / static_cast<std::size_t>(kFrameSamples);
+        stale_frames_discarded_.fetch_add(discarded, std::memory_order_relaxed);
+        timeline_frames_skipped_.fetch_add(discarded, std::memory_order_relaxed);
+        unreported_timeline_frames_ += discarded;
     }
-    const auto discard_samples = discard_frames * static_cast<std::size_t>(kFrameSamples);
-    const auto discarded = ring_.discard(discard_samples) / static_cast<std::size_t>(kFrameSamples);
-    stale_frames_discarded_.fetch_add(discarded, std::memory_order_relaxed);
-    return discarded;
+    const auto skipped = unreported_timeline_frames_;
+    unreported_timeline_frames_ = 0;
+    return skipped;
 }
 
 bool CaptureBridge::try_pop(PcmFrame& frame) noexcept {
@@ -98,6 +110,7 @@ CaptureBridgeStatistics CaptureBridge::statistics() const noexcept {
         .stale_frames_discarded = stale_frames_discarded_.load(std::memory_order_relaxed),
         .resync_events = resync_events_.load(std::memory_order_relaxed),
         .resync_samples = resync_samples_.load(std::memory_order_relaxed),
+        .timeline_frames_skipped = timeline_frames_skipped_.load(std::memory_order_relaxed),
         .buffered_samples = ring_.size(),
         .peak_buffered_samples = peak_buffered_samples_.load(std::memory_order_relaxed),
     };
