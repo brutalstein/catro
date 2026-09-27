@@ -221,6 +221,7 @@ struct WindowsH264HardwareEncoder::Impl {
     std::optional<HardwareEncoderError> start(
         const HardwareEncoderConfig& next_config, ID3D11Texture2D& first_source) {
         stop();
+        stats_ = {};
 
         if (next_config.width == 0 || next_config.height == 0 ||
             (next_config.width & 1U) != 0 || (next_config.height & 1U) != 0 ||
@@ -262,7 +263,6 @@ struct WindowsH264HardwareEncoder::Impl {
         }
         (void)video_context_.As(&video_context1_);
 
-        stats_ = {};
         config_ = next_config;
         frame_duration_100ns_ =
             static_cast<std::int64_t>((10'000'000ULL * config_.frame_rate_denominator) /
