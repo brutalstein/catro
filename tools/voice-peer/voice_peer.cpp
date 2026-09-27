@@ -413,9 +413,9 @@ int run_voice_peer(std::span<const std::string_view> arguments,
             wake_at = std::min(wake_at, next_playout);
         }
         const auto remaining = std::max(Clock::duration::zero(), wake_at - now);
-        auto timeout = std::chrono::duration_cast<std::chrono::milliseconds>(remaining);
-        if (remaining > Clock::duration::zero() && timeout == std::chrono::milliseconds::zero()) {
-            timeout = 1ms;
+        auto timeout = std::chrono::duration_cast<std::chrono::microseconds>(remaining);
+        if (remaining > Clock::duration::zero() && timeout == std::chrono::microseconds::zero()) {
+            timeout = 1us;
         }
 
         if (receives(options->mode)) {
@@ -453,7 +453,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
                     break;
                 }
             }
-        } else if (timeout > std::chrono::milliseconds::zero()) {
+        } else if (timeout > std::chrono::microseconds::zero()) {
             std::this_thread::sleep_for(timeout);
         } else {
             std::this_thread::yield();
