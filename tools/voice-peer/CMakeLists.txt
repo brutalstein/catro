@@ -2,6 +2,7 @@ add_library(catro_voice_peer_transport STATIC udp_socket.cpp)
 target_include_directories(catro_voice_peer_transport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 if(WIN32)
     target_link_libraries(catro_voice_peer_transport PUBLIC ws2_32)
+    target_compile_definitions(catro_voice_peer_transport PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0A00)
 endif()
 catro_enable_warnings(catro_voice_peer_transport)
 
