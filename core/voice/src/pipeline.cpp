@@ -153,6 +153,9 @@ std::variant<DecodeStep, CodecError> VoicePipeline::decode_next() noexcept {
     decoded_frames_.fetch_add(1, std::memory_order_relaxed);
     if (!render_.try_push(decoded_frame_)) {
         render_queue_full_.fetch_add(1, std::memory_order_relaxed);
+        // Preserve live conversational latency: the render callback owns the consumer index and
+        // will flush its stale backlog on the next native audio period.
+        render_.request_resync();
         return DecodeStep::render_queue_full;
     }
     return step;
