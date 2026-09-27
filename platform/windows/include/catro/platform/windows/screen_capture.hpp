@@ -33,6 +33,22 @@ struct ScreenCaptureError {
     friend bool operator==(const ScreenCaptureError&, const ScreenCaptureError&) = default;
 };
 
+[[nodiscard]] constexpr const char* name(ScreenCaptureErrorCode code) noexcept {
+    switch (code) {
+    case ScreenCaptureErrorCode::unsupported:
+        return "Windows Graphics Capture unsupported";
+    case ScreenCaptureErrorCode::source_unavailable:
+        return "capture source unavailable";
+    case ScreenCaptureErrorCode::device_creation_failed:
+        return "D3D11 capture device creation failed";
+    case ScreenCaptureErrorCode::capture_creation_failed:
+        return "capture session creation failed";
+    case ScreenCaptureErrorCode::frame_failure:
+        return "capture frame failure";
+    }
+    return "screen capture failure";
+}
+
 struct GpuCaptureFrame {
     Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
     std::uint64_t sequence = 0;
