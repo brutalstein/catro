@@ -310,6 +310,11 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         << " bit/s, jitter target " << options->jitter_packets * 20 << " ms\n";
     if (initial_audio.input) {
         out << "input: " << audio_info(*initial_audio.input) << '\n';
+        if (initial_audio.input->device_sample_rate < 32'000) {
+            error << "catro-voice-peer: warning: selected input is narrowband ("
+                  << initial_audio.input->device_sample_rate
+                  << " Hz device mix); prefer an active 48 kHz endpoint for voice validation\n";
+        }
     }
     if (initial_audio.output) {
         out << "output: " << audio_info(*initial_audio.output) << '\n';
