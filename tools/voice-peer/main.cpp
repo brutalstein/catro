@@ -89,8 +89,12 @@ int main(int argc, char** argv) {
     const auto previous_int = std::signal(SIGINT, stop_signal_handler);
     const auto previous_term = std::signal(SIGTERM, stop_signal_handler);
     const auto result = run(std::vector<std::string>(argv + 1, argv + argc));
-    (void)std::signal(SIGINT, previous_int);
-    (void)std::signal(SIGTERM, previous_term);
+    if (previous_int != SIG_ERR) {
+        (void)std::signal(SIGINT, previous_int);
+    }
+    if (previous_term != SIG_ERR) {
+        (void)std::signal(SIGTERM, previous_term);
+    }
     return result;
 }
 #endif
