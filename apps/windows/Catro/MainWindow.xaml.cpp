@@ -64,7 +64,7 @@ xaml::UIElement MainWindow::PageFor(catro::app::AppDestination destination) {
         if (!server_page_) {
             auto page = Catro::ServerView{};
             if (local_state_) {
-                get_self<implementation::ServerView>(page)->SetLocalState(*local_state_);
+                get_self<winrt::Catro::implementation::ServerView>(page)->SetLocalState(*local_state_);
             }
             server_page_ = page;
         }
