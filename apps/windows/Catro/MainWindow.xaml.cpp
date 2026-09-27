@@ -41,6 +41,9 @@ void MainWindow::InitializeComponent() {
     const auto scale = GetDpiForWindow(hwnd) / 96.0;
     AppWindow().Resize({static_cast<int32_t>(1280 * scale), static_cast<int32_t>(820 * scale)});
 
+    ShellGrid().SizeChanged([this](auto&&, xaml::SizeChangedEventArgs const& args) {
+        UpdateResponsiveLayout(args.NewSize().Width);
+    });
     Activate(catro::app::ShellSection::home);
 }
 
@@ -102,6 +105,14 @@ void MainWindow::Activate(catro::app::ShellSection section) {
     // so startup avoids constructing diagnostics/probe controls or future heavy media surfaces.
     WorkspaceHost().Content(PageFor(section));
     UpdateNavigationVisuals(section);
+    UpdateResponsiveLayout(ShellGrid().ActualWidth());
+}
+
+void MainWindow::UpdateResponsiveLayout(double width) {
+    const bool diagnostics = shell_state_.active() == catro::app::ShellSection::diagnostics;
+    const double context_width = diagnostics ? 0.0 : (width >= 1040.0 ? 248.0 : (width >= 800.0 ? 220.0 : 0.0));
+    ContextColumn().Width(xaml::GridLengthHelper::FromPixels(context_width));
+    ContextPane().Visibility(context_width > 0.0 ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
 }
 
 void MainWindow::UpdateNavigationVisuals(catro::app::ShellSection section) {
