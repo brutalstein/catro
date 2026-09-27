@@ -7,33 +7,57 @@
 
 using namespace catro::app;
 
-TEST_CASE("shell sections have stable unique ids and non-empty presentation") {
-    std::set<std::string> ids;
-    for (const auto& section : kShellSections) {
-        CHECK_FALSE(section.id.empty());
-        CHECK_FALSE(section.title.empty());
-        CHECK_FALSE(section.eyebrow.empty());
-        CHECK_FALSE(section.summary.empty());
-        CHECK_FALSE(section.empty_title.empty());
-        CHECK_FALSE(section.empty_detail.empty());
-        CHECK(ids.insert(std::string(section.id)).second);
-        CHECK(shell_section_spec(section.section) == section);
-        REQUIRE(shell_section_from_id(section.id));
-        CHECK(*shell_section_from_id(section.id) == section.section);
-    }
+TEST_CASE("personal server contract stays one-owner and invite-code based") {
+    CHECK(kPersonalServerContract.identity_owns_server);
+    CHECK(kPersonalServerContract.owner_is_only_elevated_role);
+    CHECK(kPersonalServerContract.invite_code_required_to_join);
+    CHECK(kPersonalServerContract.default_text_channels == 1);
+    CHECK(kPersonalServerContract.default_voice_channels == 1);
+    CHECK(can_manage_server(ServerRole::owner));
+    CHECK_FALSE(can_manage_server(ServerRole::member));
 }
 
-TEST_CASE("shell state changes only for valid distinct destinations") {
+TEST_CASE("first-run server has exactly one text and one voice channel") {
+    REQUIRE(kDefaultChannels.size() == 2);
+
+    std::set<std::string> ids;
+    std::size_t text = 0;
+    std::size_t voice = 0;
+    for (const auto& channel : kDefaultChannels) {
+        CHECK_FALSE(channel.id.empty());
+        CHECK_FALSE(channel.name.empty());
+        CHECK(ids.insert(std::string(channel.id)).second);
+        REQUIRE(channel_kind(channel.id));
+        CHECK(*channel_kind(channel.id) == channel.kind);
+        text += channel.kind == ChannelKind::text ? 1U : 0U;
+        voice += channel.kind == ChannelKind::voice ? 1U : 0U;
+    }
+    CHECK(text == 1);
+    CHECK(voice == 1);
+    CHECK_FALSE(channel_kind("missing"));
+}
+
+TEST_CASE("shell opens personal server and switches channels without invalid state") {
     ShellState state;
-    CHECK(state.active() == ShellSection::home);
-    CHECK(state.active_spec().id == "home");
+    CHECK(state.destination() == AppDestination::server);
+    CHECK(state.channel_id() == "general");
+    CHECK(state.active_channel_kind() == ChannelKind::text);
 
-    CHECK(state.activate("voice"));
-    CHECK(state.active() == ShellSection::voice);
-    CHECK_FALSE(state.activate("voice"));
-    CHECK_FALSE(state.activate("not-a-section"));
-    CHECK(state.active() == ShellSection::voice);
+    CHECK(state.select_channel("voice"));
+    CHECK(state.channel_id() == "voice");
+    CHECK(state.active_channel_kind() == ChannelKind::voice);
+    CHECK_FALSE(state.select_channel("voice"));
 
-    CHECK(state.activate(ShellSection::settings));
-    CHECK(state.active_spec().id == "settings");
+    CHECK(state.open_settings());
+    CHECK(state.destination() == AppDestination::settings);
+    CHECK(state.select_channel("general"));
+    CHECK(state.destination() == AppDestination::server);
+    CHECK(state.channel_id() == "general");
+
+    CHECK_FALSE(state.select_channel("not-a-channel"));
+    CHECK(state.channel_id() == "general");
+
+    CHECK(state.open_diagnostics());
+    CHECK(state.open_server());
+    CHECK(state.destination() == AppDestination::server);
 }
