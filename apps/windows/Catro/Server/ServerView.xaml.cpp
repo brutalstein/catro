@@ -64,7 +64,7 @@ void ServerView::ShowChannel(std::string_view id) {
         return;
     }
     (void)state_.select_channel(id);
-    const bool voice = state_.active_channel_kind() == catro::app::ChannelKind::voice;
+    const bool voice = state_.active_channel_kind() == catro::community::ChannelKind::voice;
 
     TextSelection().Visibility(voice ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
     VoiceSelection().Visibility(voice ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
