@@ -1,6 +1,7 @@
 #include "udp_socket.hpp"
 
 #include <algorithm>
+#include <climits>
 #include <new>
 #include <utility>
 
