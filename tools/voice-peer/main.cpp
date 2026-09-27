@@ -16,11 +16,11 @@
 namespace {
 
 using Platform = catro::platform::windows::WasapiAudioPlatform;
-std::atomic_bool g_stop_requested{false};
+catro::tools::VoicePeerControl g_control{};
 
 BOOL WINAPI console_control_handler(DWORD event) {
     if (event == CTRL_C_EVENT || event == CTRL_BREAK_EVENT) {
-        g_stop_requested.store(true, std::memory_order_relaxed);
+        g_control.stop_requested.store(true, std::memory_order_relaxed);
         return TRUE;
     }
     return FALSE;
@@ -50,7 +50,7 @@ static_assert(std::atomic_bool::is_always_lock_free);
 std::atomic_bool g_stop_requested{false};
 
 void stop_signal_handler(int) {
-    g_stop_requested.store(true, std::memory_order_relaxed);
+    g_control.stop_requested.store(true, std::memory_order_relaxed);
 }
 
 } // namespace
@@ -62,7 +62,7 @@ int run(const std::vector<std::string>& storage) {
     const std::vector<std::string_view> arguments(storage.begin(), storage.end());
     Platform platform;
     return catro::tools::run_voice_peer(arguments, platform, std::cout, std::cerr,
-                                        &g_stop_requested);
+                                        &g_control);
 }
 
 } // namespace
@@ -75,7 +75,7 @@ int wmain(int argc, wchar_t** argv) {
         storage.push_back(utf8(argv[index]));
     }
 
-    g_stop_requested.store(false, std::memory_order_relaxed);
+    g_control.stop_requested.store(false, std::memory_order_relaxed);
     const auto installed = SetConsoleCtrlHandler(console_control_handler, TRUE) != FALSE;
     const auto result = run(storage);
     if (installed) {
@@ -85,7 +85,7 @@ int wmain(int argc, wchar_t** argv) {
 }
 #else
 int main(int argc, char** argv) {
-    g_stop_requested.store(false, std::memory_order_relaxed);
+    g_control.stop_requested.store(false, std::memory_order_relaxed);
     const auto previous_int = std::signal(SIGINT, stop_signal_handler);
     const auto previous_term = std::signal(SIGTERM, stop_signal_handler);
     const auto result = run(std::vector<std::string>(argv + 1, argv + argc));
