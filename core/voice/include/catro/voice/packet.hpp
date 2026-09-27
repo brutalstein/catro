@@ -52,6 +52,11 @@ struct VoicePacketView {
     std::span<const std::byte> payload;
 };
 
+[[nodiscard]] std::variant<std::size_t, PacketError> write_packet_header(std::uint32_t stream_id,
+                                                                            std::uint16_t sequence,
+                                                                            std::uint32_t timestamp,
+                                                                            std::size_t payload_size,
+                                                                            std::span<std::byte> output) noexcept;
 [[nodiscard]] std::variant<std::size_t, PacketError> serialize_packet(const VoicePacketView& packet,
                                                                       std::span<std::byte> output) noexcept;
 [[nodiscard]] std::variant<VoicePacketView, PacketError> parse_packet(std::span<const std::byte> datagram) noexcept;
