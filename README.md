@@ -2,11 +2,13 @@
 
 Catro is a native desktop application for Windows and macOS. This repository currently holds its
 foundation: a portable C++20 capability core, isolated passive hardware probes for each platform,
-a low-latency audio engine (microphone meter, test tone, live monitor), and a native diagnostics
-shell on each platform (WinUI 3 on Windows, SwiftUI on macOS).
+a low-latency audio engine (microphone meter, test tone, live monitor), the transport-agnostic
+Opus voice core (packet format, bounded jitter/loss handling, and real-time PCM bridges), and a
+native diagnostics shell on each platform (WinUI 3 on Windows, SwiftUI on macOS).
 
-There is no Electron, Qt, or browser runtime. The milestone also contains no server, account,
-screen capture, streaming, or WebRTC code.
+There is no Electron, Qt, or browser runtime. The repository still contains no production voice
+transport, server, account, screen capture, streaming, or WebRTC code; the current voice work stops
+at the transport boundary until the development peer is validated.
 
 ## Layout
 
@@ -15,6 +17,7 @@ screen capture, streaming, or WebRTC code.
 | `core/capabilities` | Capability model, validation, snapshot diffing, deterministic media policy. Standard library only. |
 | `core/reporting` | Canonical JSON and human reports, strict parsing, redaction. |
 | `core/audio` | Real-time audio primitives and the session engine. Standard library only. |
+| `core/voice` | Opus codec wrapper, packet v1, bounded jitter/loss handling, real-time PCM bridges, transport-agnostic media pipeline. |
 | `platform/windows`, `platform/macos` | Passive probes, the out-of-process probe executor, the capability service, and the audio backends (WASAPI, CoreAudio AUHAL). |
 | `apps/diagnostics` | Shared plain C++ view model for both shells. |
 | `apps/windows`, `apps/macos` | Native diagnostics shells. |
