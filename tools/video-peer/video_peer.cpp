@@ -1,6 +1,7 @@
 #include "video_peer.hpp"
 
 #include <catro/platform/windows/screen_capture.hpp>
+#include <catro/platform/windows/video_decoder.hpp>
 #include <catro/platform/windows/video_encoder.hpp>
 #include <catro/video/geometry.hpp>
 #include <catro/video/rtp_h264.hpp>
@@ -25,10 +26,14 @@ using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 using platform::windows::EncodedAccessUnit;
 using platform::windows::GpuCaptureFrame;
+using platform::windows::DecodedGpuFrame;
+using platform::windows::H264DecoderConfig;
+using platform::windows::H264DecoderError;
 using platform::windows::HardwareEncoderConfig;
 using platform::windows::HardwareEncoderError;
 using platform::windows::ScreenCaptureError;
 using platform::windows::WindowsGraphicsCapture;
+using platform::windows::WindowsH264D3D11Decoder;
 using platform::windows::WindowsH264HardwareEncoder;
 
 constexpr std::size_t kReceiveDatagramBytes = 1500;
@@ -112,6 +117,22 @@ void report_encoder_error(std::ostream& error, const HardwareEncoderError& failu
         error << " (native " << failure.native_code << ")";
     }
     error << '\n';
+}
+
+void report_decoder_error(std::ostream& error, const H264DecoderError& failure) {
+    error << "catro-video-peer: decoder "
+          << platform::windows::name(failure.code);
+    if (failure.native_code != 0) {
+        error << " (native " << failure.native_code << ")";
+    }
+    error << '\n';
+}
+
+[[nodiscard]] std::int64_t rtp_timestamp_to_100ns(
+    std::uint32_t timestamp_90khz) noexcept {
+    // 10,000,000 / 90,000 = 1000 / 9. A 32-bit RTP timestamp times 1000 fits in uint64_t.
+    return static_cast<std::int64_t>(
+        (static_cast<std::uint64_t>(timestamp_90khz) * 1000ULL + 4ULL) / 9ULL);
 }
 
 std::variant<std::unique_ptr<UdpPeerSocket>, UdpError> open_socket(
@@ -422,6 +443,15 @@ int run_receiver(
             frame_memory.get(), options.max_access_unit_bytes),
         rtp);
 
+    WindowsH264D3D11Decoder decoder;
+    H264DecoderConfig decoder_config;
+    decoder_config.max_access_unit_bytes =
+        options.max_access_unit_bytes;
+    if (const auto failure = decoder.start(decoder_config)) {
+        report_decoder_error(error, *failure);
+        return video_peer_decoder_failed;
+    }
+
     std::array<std::byte, kReceiveDatagramBytes> datagram{};
     std::uint64_t packets = 0;
     std::uint64_t bytes = 0;
@@ -431,8 +461,14 @@ int run_receiver(
     std::uint64_t rejected_packets = 0;
     std::uint64_t peer_unreachable_events = 0;
 
+    const auto initial_decoder = decoder.statistics();
     out << "mode: receive\n"
-        << "path: UDP RTP -> bounded H264 reassembly; decoder/display not enabled in this gate\n"
+        << "decoder: "
+        << (initial_decoder.decoder_name.empty()
+                ? "<unnamed H264 decoder>"
+                : initial_decoder.decoder_name)
+        << "\n"
+        << "path: UDP RTP -> bounded H264 reassembly -> D3D11 H264 decode; presentation not enabled yet\n"
         << "rtp: ssrc " << options.ssrc
         << ", pt " << static_cast<unsigned>(options.payload_type)
         << ", mtu " << options.mtu_bytes
@@ -482,6 +518,18 @@ int run_receiver(
                     if (result.frame.keyframe) {
                         ++keyframes;
                     }
+
+                    DecodedGpuFrame decoded;
+                    const auto decode_failure = decoder.decode(
+                        result.frame.annex_b,
+                        rtp_timestamp_to_100ns(
+                            result.frame.timestamp_90khz),
+                        decoded);
+                    if (decode_failure) {
+                        report_decoder_error(error, *decode_failure);
+                        decoder.stop();
+                        return video_peer_decoder_failed;
+                    }
                 } else if (
                     result.status ==
                     video::H264ReassemblyStatus::frame_dropped) {
@@ -499,11 +547,22 @@ int run_receiver(
             const auto elapsed =
                 std::chrono::duration_cast<std::chrono::seconds>(
                     now - started).count();
+            const auto decoder_stats = decoder.statistics();
+            const auto decoded =
+                std::max<std::uint64_t>(
+                    decoder_stats.frames_decoded, 1);
             out << elapsed << "s:"
                 << " rx-pkt " << packets
                 << " rx-bytes " << bytes
                 << " frames " << frames
                 << " key " << keyframes
+                << " decoded " << decoder_stats.frames_decoded
+                << " decode "
+                << (decoder_stats.decode_total_us / decoded)
+                << "/" << decoder_stats.decode_max_us << " us"
+                << " stream-change " << decoder_stats.stream_changes
+                << " input-buf " << decoder_stats.input_sample_allocations
+                << " gpu-fail " << decoder_stats.gpu_output_failures
                 << " frame-drop " << dropped_frames
                 << " reject " << rejected_packets
                 << " peer-miss " << peer_unreachable_events
@@ -514,16 +573,31 @@ int run_receiver(
         }
     }
 
+    const auto decoder_stats = decoder.statistics();
+    decoder.stop();
+
     out << "final:"
         << " packets " << packets
         << ", bytes " << bytes
         << ", frames " << frames
         << ", keyframes " << keyframes
+        << ", decoded " << decoder_stats.frames_decoded
+        << ", decode-input-fail " << decoder_stats.input_failures
+        << ", decode-output-fail " << decoder_stats.output_failures
+        << ", gpu-output-fail " << decoder_stats.gpu_output_failures
+        << ", stream-changes " << decoder_stats.stream_changes
+        << ", decoder-input-buffers " << decoder_stats.input_sample_allocations
         << ", frame-drops " << dropped_frames
         << ", rejected " << rejected_packets
         << ", peer-miss " << peer_unreachable_events
         << '\n';
 
+    if ((frames > 0 && decoder_stats.frames_decoded == 0) ||
+        decoder_stats.input_failures != 0 ||
+        decoder_stats.output_failures != 0 ||
+        decoder_stats.gpu_output_failures != 0) {
+        return video_peer_decoder_failed;
+    }
     return video_peer_ok;
 }
 

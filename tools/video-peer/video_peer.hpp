@@ -24,8 +24,8 @@ struct VideoPeerOptions {
     UdpEndpoint peer;
     std::chrono::seconds duration{30};
 
-    // The sender preserves the source aspect ratio exactly and never upscales. These are ceilings,
-    // not a forced output size, so 16:9, 16:10 and ultrawide displays stay geometrically correct.
+    // The sender never upscales. These are ceilings, not a forced output size. Common display
+    // ratios remain exact; odd source dimensions use at most one-pixel even rounding for NV12.
     std::uint32_t max_width = 2560;
     std::uint32_t max_height = 1080;
     std::uint32_t fps = 30;
@@ -51,6 +51,7 @@ enum VideoPeerExit : int {
     video_peer_encoder_failed = 7,
     video_peer_packetization_failed = 8,
     video_peer_memory_failed = 9,
+    video_peer_decoder_failed = 10,
 };
 
 inline constexpr std::string_view kVideoPeerUsage =
