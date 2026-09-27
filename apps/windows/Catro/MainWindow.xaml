@@ -68,7 +68,7 @@
             </Border>
         </Grid>
 
-        <Grid x:Name="ShellGrid" Grid.Row="1">
+        <Grid x:Name="ShellGrid" Grid.Row="1" SizeChanged="OnShellSizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="72" />
                 <ColumnDefinition x:Name="ContextColumn" Width="248" />
