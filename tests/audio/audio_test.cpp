@@ -165,13 +165,18 @@ AudioEndpointId endpoint(const char* value) {
 
 class FakeStream final : public AudioStream {
 public:
-    FakeStream(StreamInfo info, std::optional<AudioError> start_error, std::atomic_bool& started)
-        : info_(std::move(info)), start_error_(start_error), started_(started) {}
+    FakeStream(StreamInfo info, std::optional<AudioError> start_error, std::atomic_bool& started,
+               std::vector<std::string>* start_order = nullptr, std::string label = {})
+        : info_(std::move(info)), start_error_(start_error), started_(started),
+          start_order_(start_order), label_(std::move(label)) {}
 
     ~FakeStream() override { started_.store(false); }
 
     const StreamInfo& info() const noexcept override { return info_; }
     std::optional<AudioError> start() override {
+        if (start_order_) {
+            start_order_->push_back(label_);
+        }
         started_.store(!start_error_);
         return start_error_;
     }
@@ -182,6 +187,8 @@ private:
     StreamInfo info_;
     std::optional<AudioError> start_error_;
     std::atomic_bool& started_;
+    std::vector<std::string>* start_order_;
+    std::string label_;
 };
 
 class FakePlatform final : public AudioPlatform {
@@ -196,7 +203,7 @@ public:
         capture_failure = std::move(failure);
         return std::make_unique<FakeStream>(
             StreamInfo{device.value_or(endpoint("default-in")), 44100, 1, 480, 96}, capture_start_error,
-            capture_started);
+            capture_started, &start_order, "capture");
     }
 
     OpenResult open_render(const std::optional<AudioEndpointId>& device, RenderSource& render_source,
@@ -222,6 +229,7 @@ public:
     StreamFailure render_failure;
     std::atomic_bool capture_started = false;
     std::atomic_bool render_started = false;
+    std::vector<std::string> start_order;
 };
 
 class FailureRecorder {
@@ -304,6 +312,13 @@ TEST_CASE("a tone session renders the test tone on the default output") {
     const auto statistics = engine.statistics();
     CHECK(statistics.output->device == endpoint("default-out"));
     CHECK(statistics.output_peak == Approx(0.2F).epsilon(0.01));
+}
+
+TEST_CASE("a monitor session starts render before capture") {
+    FakePlatform platform;
+    AudioEngine engine(platform);
+    REQUIRE_FALSE(engine.start({.mode = SessionMode::monitor}));
+    CHECK(platform.start_order == std::vector<std::string>{"render", "capture"});
 }
 
 TEST_CASE("a monitor session carries capture to render and estimates latency") {
