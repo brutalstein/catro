@@ -225,16 +225,16 @@ UdpPeerSocket::SizeResult UdpPeerSocket::send(std::span<const std::byte> datagra
     return static_cast<std::size_t>(sent);
 }
 
-UdpPeerSocket::WaitResult UdpPeerSocket::wait_readable(std::chrono::milliseconds timeout) noexcept {
-    const auto clamped = std::max(timeout, std::chrono::milliseconds::zero());
+UdpPeerSocket::WaitResult UdpPeerSocket::wait_readable(std::chrono::microseconds timeout) noexcept {
+    const auto clamped = std::max(timeout, std::chrono::microseconds::zero());
 
     fd_set read_set;
     FD_ZERO(&read_set);
     FD_SET(impl_->socket, &read_set);
 
     timeval wait{};
-    wait.tv_sec = static_cast<long>(clamped.count() / 1000);
-    wait.tv_usec = static_cast<long>((clamped.count() % 1000) * 1000);
+    wait.tv_sec = static_cast<long>(clamped.count() / 1'000'000);
+    wait.tv_usec = static_cast<long>(clamped.count() % 1'000'000);
 
 #if defined(_WIN32)
     const auto result = select(0, &read_set, nullptr, nullptr, &wait);
