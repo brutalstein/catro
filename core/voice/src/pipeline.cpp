@@ -37,6 +37,9 @@ VoicePipeline::CreateResult VoicePipeline::create(const VoicePipelineConfig& con
 
 std::variant<EncodeStep, CodecError> VoicePipeline::encode_next(OutboundDatagram& datagram) noexcept {
     datagram.size = 0;
+    // Keep at most 40 ms of complete microphone frames after scheduler/network stalls. Encoding
+    // stale speech is worse than dropping it for an interactive voice product.
+    (void)capture_.trim_backlog(2);
     if (!capture_.try_pop(capture_frame_)) {
         return EncodeStep::no_frame;
     }
