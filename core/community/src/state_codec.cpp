@@ -11,11 +11,11 @@ namespace {
 
 using json = nlohmann::json;
 
-std::string_view kind_name(ChannelKind kind) noexcept {
+const char* kind_name(ChannelKind kind) noexcept {
     return kind == ChannelKind::voice ? "voice" : "text";
 }
 
-std::string_view role_name(ServerRole role) noexcept {
+const char* role_name(ServerRole role) noexcept {
     return role == ServerRole::owner ? "owner" : "member";
 }
 
@@ -52,7 +52,7 @@ std::variant<std::string, CodecError> encode_local_state(const LocalState& state
 
     json root;
     root["schema"] = {
-        {"id", kLocalStateSchema},
+        {"id", std::string(kLocalStateSchema)},
         {"major", kLocalStateMajor},
         {"minor", kLocalStateMinor},
     };
