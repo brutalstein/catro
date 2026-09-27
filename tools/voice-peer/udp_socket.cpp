@@ -1,0 +1,256 @@
+#include "udp_socket.hpp"
+
+#include <algorithm>
+#include <new>
+#include <utility>
+
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <mstcpip.h>
+#else
+#include <arpa/inet.h>
+#include <cerrno>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
+namespace catro::tools {
+namespace {
+
+#if defined(_WIN32)
+using NativeSocket = SOCKET;
+constexpr NativeSocket kInvalidSocket = INVALID_SOCKET;
+
+int last_socket_error() noexcept {
+    return WSAGetLastError();
+}
+
+bool would_block(int code) noexcept {
+    return code == WSAEWOULDBLOCK;
+}
+
+void close_socket(NativeSocket socket) noexcept {
+    if (socket != kInvalidSocket) {
+        closesocket(socket);
+    }
+}
+
+bool set_nonblocking(NativeSocket socket) noexcept {
+    u_long enabled = 1;
+    return ioctlsocket(socket, FIONBIO, &enabled) == 0;
+}
+#else
+using NativeSocket = int;
+constexpr NativeSocket kInvalidSocket = -1;
+
+int last_socket_error() noexcept {
+    return errno;
+}
+
+bool would_block(int code) noexcept {
+    return code == EAGAIN || code == EWOULDBLOCK;
+}
+
+void close_socket(NativeSocket socket) noexcept {
+    if (socket != kInvalidSocket) {
+        close(socket);
+    }
+}
+
+bool set_nonblocking(NativeSocket socket) noexcept {
+    const auto flags = fcntl(socket, F_GETFL, 0);
+    return flags >= 0 && fcntl(socket, F_SETFL, flags | O_NONBLOCK) == 0;
+}
+#endif
+
+bool make_address(const UdpEndpoint& endpoint, sockaddr_in& address, bool allow_zero_port) noexcept {
+    if (endpoint.address.empty() || (!allow_zero_port && endpoint.port == 0)) {
+        return false;
+    }
+    address = {};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(endpoint.port);
+    return inet_pton(AF_INET, endpoint.address.c_str(), &address.sin_addr) == 1;
+}
+
+void tune_socket(NativeSocket socket) noexcept {
+    const int receive_bytes = 256 * 1024;
+    const int send_bytes = 128 * 1024;
+#if defined(_WIN32)
+    (void)setsockopt(socket, SOL_SOCKET, SO_RCVBUF,
+                     reinterpret_cast<const char*>(&receive_bytes), sizeof(receive_bytes));
+    (void)setsockopt(socket, SOL_SOCKET, SO_SNDBUF,
+                     reinterpret_cast<const char*>(&send_bytes), sizeof(send_bytes));
+
+    // Windows otherwise turns an ICMP port-unreachable into WSAECONNRESET on a later recv. A
+    // development peer may legitimately start before its partner, so keep the UDP socket alive.
+    BOOL behavior = FALSE;
+    DWORD bytes = 0;
+    (void)WSAIoctl(socket, SIO_UDP_CONNRESET, &behavior, sizeof(behavior), nullptr, 0, &bytes,
+                   nullptr, nullptr);
+#else
+    (void)setsockopt(socket, SOL_SOCKET, SO_RCVBUF, &receive_bytes, sizeof(receive_bytes));
+    (void)setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &send_bytes, sizeof(send_bytes));
+#endif
+}
+
+} // namespace
+
+struct UdpPeerSocket::Impl {
+    NativeSocket socket = kInvalidSocket;
+#if defined(_WIN32)
+    bool winsock_started = false;
+#endif
+};
+
+UdpPeerSocket::UdpPeerSocket(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
+
+UdpPeerSocket::~UdpPeerSocket() {
+    if (!impl_) {
+        return;
+    }
+    close_socket(impl_->socket);
+#if defined(_WIN32)
+    if (impl_->winsock_started) {
+        WSACleanup();
+    }
+#endif
+}
+
+UdpPeerSocket::OpenResult UdpPeerSocket::bind(const UdpEndpoint& local) noexcept {
+    sockaddr_in address{};
+    if (!make_address(local, address, true)) {
+        return UdpError{UdpErrorCode::invalid_endpoint};
+    }
+
+    auto impl = std::unique_ptr<Impl>(new (std::nothrow) Impl());
+    if (!impl) {
+        return UdpError{UdpErrorCode::socket_create_failed};
+    }
+
+#if defined(_WIN32)
+    WSADATA data{};
+    const auto startup = WSAStartup(MAKEWORD(2, 2), &data);
+    if (startup != 0) {
+        return UdpError{UdpErrorCode::network_startup_failed, startup};
+    }
+    impl->winsock_started = true;
+#endif
+
+    impl->socket = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (impl->socket == kInvalidSocket) {
+        return UdpError{UdpErrorCode::socket_create_failed, last_socket_error()};
+    }
+
+    tune_socket(impl->socket);
+    if (!set_nonblocking(impl->socket)) {
+        return UdpError{UdpErrorCode::socket_create_failed, last_socket_error()};
+    }
+
+    if (::bind(impl->socket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
+        return UdpError{UdpErrorCode::bind_failed, last_socket_error()};
+    }
+
+    auto result = std::unique_ptr<UdpPeerSocket>(new (std::nothrow) UdpPeerSocket(std::move(impl)));
+    if (!result) {
+        return UdpError{UdpErrorCode::socket_create_failed};
+    }
+    return result;
+}
+
+UdpPeerSocket::StatusResult UdpPeerSocket::connect_peer(const UdpEndpoint& peer) noexcept {
+    sockaddr_in address{};
+    if (!make_address(peer, address, false)) {
+        return UdpError{UdpErrorCode::invalid_endpoint};
+    }
+    if (::connect(impl_->socket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
+        return UdpError{UdpErrorCode::connect_failed, last_socket_error()};
+    }
+    return std::monostate{};
+}
+
+UdpPeerSocket::SizeResult UdpPeerSocket::send(std::span<const std::byte> datagram) noexcept {
+    if (datagram.empty()) {
+        return std::size_t{0};
+    }
+#if defined(_WIN32)
+    const auto size = static_cast<int>(std::min<std::size_t>(datagram.size(), static_cast<std::size_t>(INT_MAX)));
+    const auto sent = ::send(impl_->socket, reinterpret_cast<const char*>(datagram.data()), size, 0);
+    if (sent == SOCKET_ERROR) {
+#else
+    const auto sent = ::send(impl_->socket, datagram.data(), datagram.size(), 0);
+    if (sent < 0) {
+#endif
+        const auto code = last_socket_error();
+        return UdpError{would_block(code) ? UdpErrorCode::would_block : UdpErrorCode::send_failed, code};
+    }
+    return static_cast<std::size_t>(sent);
+}
+
+UdpPeerSocket::WaitResult UdpPeerSocket::wait_readable(std::chrono::milliseconds timeout) noexcept {
+    const auto clamped = std::max(timeout, std::chrono::milliseconds::zero());
+
+    fd_set read_set;
+    FD_ZERO(&read_set);
+    FD_SET(impl_->socket, &read_set);
+
+    timeval wait{};
+    wait.tv_sec = static_cast<long>(clamped.count() / 1000);
+    wait.tv_usec = static_cast<long>((clamped.count() % 1000) * 1000);
+
+#if defined(_WIN32)
+    const auto result = select(0, &read_set, nullptr, nullptr, &wait);
+#else
+    const auto result = select(impl_->socket + 1, &read_set, nullptr, nullptr, &wait);
+#endif
+    if (result < 0) {
+#if !defined(_WIN32)
+        if (last_socket_error() == EINTR) {
+            return false;
+        }
+#endif
+        return UdpError{UdpErrorCode::wait_failed, last_socket_error()};
+    }
+    return result > 0;
+}
+
+UdpPeerSocket::SizeResult UdpPeerSocket::receive(std::span<std::byte> buffer) noexcept {
+    if (buffer.empty()) {
+        return std::size_t{0};
+    }
+#if defined(_WIN32)
+    const auto size = static_cast<int>(std::min<std::size_t>(buffer.size(), static_cast<std::size_t>(INT_MAX)));
+    const auto received = ::recv(impl_->socket, reinterpret_cast<char*>(buffer.data()), size, 0);
+    if (received == SOCKET_ERROR) {
+#else
+    const auto received = ::recv(impl_->socket, buffer.data(), buffer.size(), 0);
+    if (received < 0) {
+#endif
+        const auto code = last_socket_error();
+        if (would_block(code)) {
+            return std::size_t{0};
+        }
+        return UdpError{UdpErrorCode::receive_failed, code};
+    }
+    return static_cast<std::size_t>(received);
+}
+
+std::uint16_t UdpPeerSocket::local_port() const noexcept {
+    sockaddr_in address{};
+#if defined(_WIN32)
+    int size = sizeof(address);
+#else
+    socklen_t size = sizeof(address);
+#endif
+    if (getsockname(impl_->socket, reinterpret_cast<sockaddr*>(&address), &size) != 0) {
+        return 0;
+    }
+    return ntohs(address.sin_port);
+}
+
+} // namespace catro::tools
