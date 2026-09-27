@@ -38,6 +38,7 @@ if(WIN32 AND MSVC)
     add_subdirectory(tools/capability-probe)
 elseif(APPLE)
     add_subdirectory(tools/capability-probe)
+    add_subdirectory(apps/macos)
 endif()
 add_subdirectory(tools/capability-report)
 
