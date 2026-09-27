@@ -277,33 +277,34 @@ std::optional<VoicePeerOptions> parse_voice_peer_arguments(
     return options;
 }
 
-int run_voice_peer(std::span<const std::string_view> arguments,
+int run_voice_peer(const VoicePeerOptions& options,
                    audio::AudioPlatform& platform,
                    std::ostream& out,
                    std::ostream& error,
-                   const std::atomic_bool* stop_requested) {
-    const auto options = parse_voice_peer_arguments(arguments);
-    if (!options) {
+                   VoicePeerControl* control) {
+    if (options.bind.address.empty() || options.peer.address.empty() ||
+        options.bind.port == 0 || options.peer.port == 0 || options.stream_id == 0 ||
+        options.duration <= std::chrono::seconds::zero()) {
         error << kVoicePeerUsage;
         return voice_peer_invalid_arguments;
     }
 
-    auto socket_result = UdpPeerSocket::bind(options->bind);
+    auto socket_result = UdpPeerSocket::bind(options.bind);
     if (auto* failure = std::get_if<UdpError>(&socket_result)) {
         report_udp_error(error, *failure);
         return voice_peer_network_failed;
     }
     auto socket = std::move(std::get<std::unique_ptr<UdpPeerSocket>>(socket_result));
-    const auto connected = socket->connect_peer(options->peer);
+    const auto connected = socket->connect_peer(options.peer);
     if (const auto* failure = std::get_if<UdpError>(&connected)) {
         report_udp_error(error, *failure);
         return voice_peer_network_failed;
     }
 
     voice::VoicePipelineConfig media_config;
-    media_config.local_stream_id = options->stream_id;
-    media_config.jitter_target_packets = options->jitter_packets;
-    media_config.encoder.bitrate = options->bitrate;
+    media_config.local_stream_id = options.stream_id;
+    media_config.jitter_target_packets = options.jitter_packets;
+    media_config.encoder.bitrate = options.bitrate;
     auto pipeline_result = voice::VoicePipeline::create(media_config);
     if (auto* failure = std::get_if<voice::CodecError>(&pipeline_result)) {
         report_codec_error(error, *failure);
@@ -315,9 +316,9 @@ int run_voice_peer(std::span<const std::string_view> arguments,
     audio::ExternalAudioSession audio_session(
         platform, [&](audio::AudioError) { audio_failed.store(true, std::memory_order_release); });
     const audio::ExternalSessionConfig audio_config{
-        .mode = audio_mode(options->mode),
-        .input = options->input,
-        .output = options->output,
+        .mode = audio_mode(options.mode),
+        .input = options.input,
+        .output = options.output,
     };
     if (const auto failure =
             audio_session.start(audio_config, pipeline->capture(), pipeline->render())) {
@@ -326,11 +327,11 @@ int run_voice_peer(std::span<const std::string_view> arguments,
     }
 
     auto initial_audio = audio_session.statistics();
-    out << "mode: " << mode_name(options->mode) << '\n';
-    out << "bind: " << endpoint_text(options->bind)
-        << " -> peer: " << endpoint_text(options->peer) << '\n';
-    out << "voice: 48000 Hz mono, 20 ms, Opus " << options->bitrate
-        << " bit/s, jitter target " << options->jitter_packets * 20 << " ms\n";
+    out << "mode: " << mode_name(options.mode) << '\n';
+    out << "bind: " << endpoint_text(options.bind)
+        << " -> peer: " << endpoint_text(options.peer) << '\n';
+    out << "voice: 48000 Hz mono, 20 ms, Opus " << options.bitrate
+        << " bit/s, jitter target " << options.jitter_packets * 20 << " ms\n";
     if (initial_audio.input) {
         out << "input: " << audio_info(*initial_audio.input) << '\n';
         if (initial_audio.input->device_sample_rate < 32'000) {
@@ -353,7 +354,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
     voice::OutboundDatagram outbound;
 
     const auto started_at = Clock::now();
-    const auto deadline = started_at + options->duration;
+    const auto deadline = started_at + options.duration;
     auto next_report = started_at + 1s;
     auto next_playout = started_at;
     bool playout_started = false;
@@ -364,7 +365,12 @@ int run_voice_peer(std::span<const std::string_view> arguments,
     std::optional<audio::AudioError> audio_failure;
 
     while (Clock::now() < deadline &&
-           (stop_requested == nullptr || !stop_requested->load(std::memory_order_acquire))) {
+           (control == nullptr || !control->stop_requested.load(std::memory_order_acquire))) {
+        if (control != nullptr) {
+            const bool deafened = control->deafened.load(std::memory_order_acquire);
+            pipeline->set_deafened(deafened);
+            pipeline->set_muted(deafened || control->muted.load(std::memory_order_acquire));
+        }
         if (audio_failed.load(std::memory_order_acquire)) {
             const auto audio_stats = audio_session.statistics();
             audio_failure = audio_stats.error.value_or(audio::AudioError{audio::AudioErrorCode::os_failure});
@@ -376,7 +382,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         // feed seconds of queued UDP speech back into the jitter buffer. Reset codec/jitter state
         // and drain the kernel socket to its live edge first.
         const auto loop_now = Clock::now();
-        if (receives(options->mode) && playout_started &&
+        if (receives(options.mode) && playout_started &&
             loop_now - next_playout >= kFramePeriod * kMaxPlayoutCatchup) {
             if (const auto failure = pipeline->resynchronize_receiver()) {
                 codec_failure = *failure;
@@ -389,7 +395,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
             next_playout = loop_now;
         }
 
-        if (sends(options->mode)) {
+        if (sends(options.mode)) {
             for (int drained = 0; drained < kMaxEncodeDrain; ++drained) {
                 const auto before = Clock::now();
                 const auto encoded = pipeline->encode_next(outbound);
@@ -435,7 +441,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         auto now = Clock::now();
         auto wake_at = std::min(deadline, now + kWorkerPoll);
         wake_at = std::min(wake_at, next_report);
-        if (receives(options->mode) && playout_started) {
+        if (receives(options.mode) && playout_started) {
             wake_at = std::min(wake_at, next_playout);
         }
         const auto remaining = std::max(Clock::duration::zero(), wake_at - now);
@@ -444,7 +450,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
             timeout = 1us;
         }
 
-        if (receives(options->mode)) {
+        if (receives(options.mode)) {
             const auto ready = socket->wait_readable(timeout);
             if (const auto* failure = std::get_if<UdpError>(&ready)) {
                 network_failure = *failure;
@@ -495,7 +501,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         }
 
         now = Clock::now();
-        if (receives(options->mode)) {
+        if (receives(options.mode)) {
             if (!playout_started) {
                 const auto before = Clock::now();
                 const auto decoded = pipeline->decode_next();
@@ -641,6 +647,19 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         report_audio_error(error, *audio_failure);
     }
     return exit_code;
+}
+
+int run_voice_peer(std::span<const std::string_view> arguments,
+                   audio::AudioPlatform& platform,
+                   std::ostream& out,
+                   std::ostream& error,
+                   VoicePeerControl* control) {
+    const auto options = parse_voice_peer_arguments(arguments);
+    if (!options) {
+        error << kVoicePeerUsage;
+        return voice_peer_invalid_arguments;
+    }
+    return run_voice_peer(*options, platform, out, error, control);
 }
 
 } // namespace catro::tools
