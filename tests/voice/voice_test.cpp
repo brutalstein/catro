@@ -64,6 +64,26 @@ TEST_CASE("voice packet header can be written in place without copying encoded p
     CHECK(packet.payload[3] == std::byte{0xdd});
 }
 
+TEST_CASE("voice packet format rejects the reserved zero stream id") {
+    std::array<std::byte, kVoiceHeaderBytes + 1> bytes{};
+    const std::array payload{std::byte{0x11}};
+    const auto serialized = serialize_packet(
+        VoicePacketView{.stream_id = 0, .sequence = 1, .timestamp = 2, .payload = payload}, bytes);
+    REQUIRE(std::holds_alternative<PacketError>(serialized));
+    CHECK(std::get<PacketError>(serialized) == PacketError::invalid_stream_id);
+
+    const auto valid = serialize_packet(
+        VoicePacketView{.stream_id = 7, .sequence = 1, .timestamp = 2, .payload = payload}, bytes);
+    REQUIRE(std::holds_alternative<std::size_t>(valid));
+    bytes[4] = std::byte{0};
+    bytes[5] = std::byte{0};
+    bytes[6] = std::byte{0};
+    bytes[7] = std::byte{0};
+    const auto parsed = parse_packet(bytes);
+    REQUIRE(std::holds_alternative<PacketError>(parsed));
+    CHECK(std::get<PacketError>(parsed) == PacketError::invalid_stream_id);
+}
+
 TEST_CASE("voice packet parser rejects malformed datagrams") {
     std::array<std::byte, kVoiceHeaderBytes + 1> bytes{};
     const std::array payload{std::byte{1}};
