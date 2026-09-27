@@ -79,7 +79,7 @@ std::optional<catro::reporting::CapabilityReport> collect_report() {
     if (!snapshot) {
         return std::nullopt;
     }
-    return catro::reporting::make_report(std::move(*snapshot), catro::tools::representative_request());
+    return catro::reporting::make_report(std::move(*snapshot), catro::reporting::representative_request());
 }
 
 } // namespace

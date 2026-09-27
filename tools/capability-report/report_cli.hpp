@@ -39,18 +39,6 @@ enum ReportExit : int {
     report_write_failed = 4,
 };
 
-// The explicit request every report plans for: interactive capture of the primary display at
-// 1080p60 SDR with automatic operating preference.
-[[nodiscard]] inline capabilities::MediaDecisionRequest representative_request() {
-    return {
-        .source = capabilities::SourceKind::display,
-        .display = std::nullopt,
-        .latency = capabilities::LatencyClass::interactive,
-        .preference = capabilities::OperatingPreference::automatic,
-        .quality = {.resolution = {1920, 1080}, .frame_rate = {60, 1}, .hdr = false},
-    };
-}
-
 // UTF-8 arguments without the program name. Absent on unknown, repeated, or incomplete options.
 [[nodiscard]] std::optional<ReportOptions> parse_report_arguments(std::span<const std::string_view> arguments);
 

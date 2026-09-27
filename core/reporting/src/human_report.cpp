@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace catro::reporting {
@@ -201,6 +202,30 @@ std::string text(const caps::Observed<T>& observed) {
     return text(*observed.value()) + (provenance.confidence == caps::Confidence::degraded ? " (degraded)" : "");
 }
 
+template <class T>
+FactState state_of(const T&) {
+    return FactState::plain;
+}
+
+FactState state_of(const caps::Provenance& provenance, bool known) {
+    if (!known) {
+        return FactState::unknown;
+    }
+    return provenance.confidence == caps::Confidence::degraded ? FactState::degraded : FactState::known;
+}
+
+template <class T>
+FactState state_of(const caps::Observed<T>& observed) {
+    if (observed.knowledge() == caps::Knowledge::unavailable) {
+        return FactState::unavailable;
+    }
+    return state_of(observed.provenance(), observed.knowledge() == caps::Knowledge::known);
+}
+
+FactState state_of(const caps::SupportFact& fact) {
+    return state_of(fact.provenance, fact.status != caps::Support::unknown);
+}
+
 // --- layout ------------------------------------------------------------------------------------
 
 // Records print as indented blocks unless they read naturally on one line.
@@ -248,50 +273,43 @@ class Writer {
 public:
     explicit Writer(RedactionMode redaction) : redact_(redaction == RedactionMode::device_names) {}
 
-    void line(int depth, std::string_view content) {
-        std::string indent(static_cast<std::size_t>(depth) * 2, ' ');
-        if (list_item_ && indent.size() >= 2) {
-            indent.replace(indent.size() - 2, 2, "- ");
-            list_item_ = false;
-        }
-        out_ += indent;
-        out_ += content;
-        out_ += '\n';
+    void emit(std::uint32_t depth, std::string_view label, std::optional<std::string> value,
+              FactState state = FactState::plain) {
+        rows_.push_back({depth, std::string(label), std::move(value), state, std::exchange(list_item_, false)});
     }
 
     template <class T>
-    void field(int depth, std::string_view name, const T& value) {
-        const std::string label(name);
+    void field(std::uint32_t depth, std::string_view name, const T& value) {
         if constexpr (OneLine<T>::value) {
-            line(depth, label + ": " + field_text(name, value));
+            emit(depth, name, field_text(name, value), state_of(value));
         } else if constexpr (IsOptional<T>::value) {
             if (value) {
                 field(depth, name, *value);
             } else {
-                line(depth, label + ": none");
+                emit(depth, name, "none");
             }
         } else if constexpr (IsVector<T>::value) {
             if (value.empty()) {
-                line(depth, label + ": none");
+                emit(depth, name, "none");
                 return;
             }
-            line(depth, label + ":");
+            emit(depth, name, std::nullopt);
             for (const auto& item : value) {
                 list_item_ = true;
                 record(depth + 2, item);
             }
         } else {
-            line(depth, label + ":");
+            emit(depth, name, std::nullopt);
             record(depth + 1, value);
         }
     }
 
     template <Record T>
-    void record(int depth, const T& value) {
+    void record(std::uint32_t depth, const T& value) {
         for_each_field(value, [this, depth](std::string_view name, const auto& member) { this->field(depth, name, member); });
     }
 
-    std::string take() { return std::move(out_); }
+    std::vector<PresentedRow> take() { return std::move(rows_); }
 
 private:
     template <class T>
@@ -312,8 +330,21 @@ private:
 
     bool redact_;
     bool list_item_ = false;
-    std::string out_;
+    std::vector<PresentedRow> rows_;
 };
+
+void render(std::string& out, const std::vector<PresentedRow>& rows) {
+    for (const auto& row : rows) {
+        std::string indent(static_cast<std::size_t>(row.depth) * 2, ' ');
+        if (row.list_item && indent.size() >= 2) {
+            indent.replace(indent.size() - 2, 2, "- ");
+        }
+        out += indent;
+        out += row.label;
+        out += row.value ? ": " + *row.value : ":";
+        out += '\n';
+    }
+}
 
 std::string describe(const caps::MediaCandidate& candidate) {
     return text(candidate.encoder) + " via " + text(candidate.capture) + " (" + text(candidate.transfer) + "), " +
@@ -328,47 +359,90 @@ void summary(Writer& writer, const CapabilityReport& report) {
         probe_time += probe.duration;
     }
 
-    writer.line(0, "Summary");
-    writer.line(1, "Schema: " + snapshot.header.schema_id + " " + text(snapshot.header.schema_version));
-    writer.line(1, "Policy: " + text(plan.policy_version));
-    writer.line(1, "Captured at: " + text(snapshot.header.captured_at));
-    writer.line(1, "Generation: " + text(snapshot.header.generation));
-    writer.line(1, "Probes: " + std::to_string(snapshot.probes.size()) + " in " + text(probe_time) + ", " +
-                       std::to_string(snapshot.issues.size()) + " issues");
-    writer.line(1, "Status: " + text(plan.status) + (plan.reasons.empty() ? "" : " (" + text(plan.reasons) + ")"));
+    writer.emit(0, "Schema", snapshot.header.schema_id + " " + text(snapshot.header.schema_version));
+    writer.emit(0, "Policy", text(plan.policy_version));
+    writer.emit(0, "Captured at", text(snapshot.header.captured_at));
+    writer.emit(0, "Generation", text(snapshot.header.generation));
+    writer.emit(0, "Probes", std::to_string(snapshot.probes.size()) + " in " + text(probe_time) + ", " +
+                                 std::to_string(snapshot.issues.size()) + " issues");
+    writer.emit(0, "Status", text(plan.status) + (plan.reasons.empty() ? "" : " (" + text(plan.reasons) + ")"));
     if (plan.status == caps::PlanStatus::invalid_input) {
         return;
     }
-    writer.line(1, "Profile: " + text(plan.profile.profile) + " (" + text(plan.profile.rule) + ")");
+    writer.emit(0, "Profile", text(plan.profile.profile) + " (" + text(plan.profile.rule) + ")");
     if (!plan.selected) {
         return;
     }
-    writer.line(1, "Selected: " + describe(*plan.selected));
-    writer.line(1, "Start: " + text(plan.start.resolution) + " @ " + text(plan.start.frame_rate) + " Hz, " +
-                       text(plan.start.bit_depth) + "-bit " + (plan.start.hdr ? "HDR" : "SDR"));
+    writer.emit(0, "Selected", describe(*plan.selected));
+    writer.emit(0, "Start", text(plan.start.resolution) + " @ " + text(plan.start.frame_rate) + " Hz, " +
+                                text(plan.start.bit_depth) + "-bit " + (plan.start.hdr ? "HDR" : "SDR"));
     for (std::size_t index = 0; index < plan.fallbacks.size(); ++index) {
-        writer.line(1, "Fallback " + std::to_string(index + 1) + ": " + describe(plan.fallbacks[index]));
+        writer.emit(0, "Fallback " + std::to_string(index + 1), describe(plan.fallbacks[index]));
     }
+}
+
+std::vector<PresentedRow> summary(const CapabilityReport& report) {
+    Writer writer(RedactionMode::none);
+    summary(writer, report);
+    return writer.take();
+}
+
+template <Record T>
+std::vector<PresentedRow> rows(std::uint32_t depth, const T& value, RedactionMode redaction) {
+    Writer writer(redaction);
+    writer.record(depth, value);
+    return writer.take();
+}
+
+std::vector<PresentedRow> indented(std::vector<PresentedRow> rows) {
+    for (auto& row : rows) {
+        ++row.depth;
+    }
+    return rows;
+}
+
+// One section per top-level field; a heading row names its section, so nested rows move up.
+template <Record T>
+void split(std::vector<PresentedSection>& sections, std::string_view prefix, const T& value,
+           RedactionMode redaction) {
+    for_each_field(value, [&](std::string_view name, const auto& member) {
+        Writer writer(redaction);
+        writer.field(0, name, member);
+        auto section_rows = writer.take();
+        if (section_rows.size() > 1 && !section_rows.front().value) {
+            section_rows.erase(section_rows.begin());
+            for (auto& row : section_rows) {
+                --row.depth;
+            }
+        }
+        sections.push_back({std::string(prefix) + "." + std::string(name), std::move(section_rows)});
+    });
 }
 
 } // namespace
 
 std::string to_human_report(const CapabilityReport& report, RedactionMode redaction) {
     const CapabilityReport ordered{canonical_order(report.snapshot), report.plan};
-    Writer writer(redaction);
-    writer.line(0, "Catro capability report");
-    writer.line(0, redaction == RedactionMode::none
-                       ? "Redaction: none"
-                       : "Redaction: device names replaced; identifiers remain, so this report is not anonymous");
-    writer.line(0, "");
-    summary(writer, ordered);
-    writer.line(0, "");
-    writer.line(0, "Snapshot");
-    writer.record(1, ordered.snapshot);
-    writer.line(0, "");
-    writer.line(0, "Plan");
-    writer.record(1, ordered.plan);
-    return writer.take();
+    std::string out = "Catro capability report\n";
+    out += redaction == RedactionMode::none
+               ? "Redaction: none\n"
+               : "Redaction: device names replaced; identifiers remain, so this report is not anonymous\n";
+    out += "\nSummary\n";
+    render(out, indented(summary(ordered)));
+    out += "\nSnapshot\n";
+    render(out, rows(1, ordered.snapshot, redaction));
+    out += "\nPlan\n";
+    render(out, rows(1, ordered.plan, redaction));
+    return out;
+}
+
+std::vector<PresentedSection> present_report(const CapabilityReport& report, RedactionMode redaction) {
+    const CapabilityReport ordered{canonical_order(report.snapshot), report.plan};
+    std::vector<PresentedSection> sections;
+    sections.push_back({"summary", summary(ordered)});
+    split(sections, "snapshot", ordered.snapshot, redaction);
+    split(sections, "plan", ordered.plan, redaction);
+    return sections;
 }
 
 } // namespace catro::reporting
