@@ -6,261 +6,128 @@
     Title="Catro">
     <Grid Background="{ThemeResource CatroBackgroundBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="44" />
+            <RowDefinition Height="38" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <Grid x:Name="AppTitleBar"
-              Padding="14,0,148,0"
+              Padding="12,0,148,0"
               Background="{ThemeResource CatroRailBrush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-
-            <StackPanel Orientation="Horizontal"
-                        Spacing="9"
-                        VerticalAlignment="Center">
-                <Border Width="26"
-                        Height="26"
-                        CornerRadius="9"
-                        Background="{ThemeResource CatroAccentSoftBrush}">
-                    <TextBlock Text="C"
-                               FontSize="13"
-                               FontWeight="Bold"
-                               Foreground="{ThemeResource CatroAccentBrush}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center" />
-                </Border>
-                <TextBlock Text="CATRO"
-                           FontSize="12"
-                           FontWeight="SemiBold"
-                           CharacterSpacing="120"
-                           Foreground="{ThemeResource CatroTextBrush}"
-                           VerticalAlignment="Center" />
-            </StackPanel>
-
-            <TextBlock Grid.Column="1"
-                       x:Name="TitleSection"
-                       Text="Home"
-                       Margin="14,0,0,0"
-                       VerticalAlignment="Center"
+            <TextBlock Text="CATRO"
+                       FontSize="11"
+                       FontWeight="SemiBold"
+                       CharacterSpacing="120"
+                       Foreground="{ThemeResource CatroTextSecondaryBrush}"
+                       VerticalAlignment="Center" />
+            <TextBlock x:Name="TitleContext"
+                       Grid.Column="1"
+                       Text="My Server"
+                       Margin="16,0,0,0"
+                       FontSize="11"
                        Foreground="{ThemeResource CatroTextTertiaryBrush}"
-                       FontSize="12" />
-
-            <Border Grid.Column="2"
-                    Padding="9,4"
-                    CornerRadius="9"
-                    Background="{ThemeResource CatroSurfaceAltBrush}"
-                    VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <Ellipse Width="6"
-                             Height="6"
-                             Fill="{ThemeResource CatroSageBrush}"
-                             VerticalAlignment="Center" />
-                    <TextBlock Text="NATIVE"
-                               FontSize="9"
-                               FontWeight="SemiBold"
-                               CharacterSpacing="80"
-                               Foreground="{ThemeResource CatroTextSecondaryBrush}" />
-                </StackPanel>
-            </Border>
+                       VerticalAlignment="Center" />
         </Grid>
 
-        <Grid x:Name="ShellGrid" Grid.Row="1" SizeChanged="OnShellSizeChanged">
+        <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="72" />
-                <ColumnDefinition x:Name="ContextColumn" Width="248" />
+                <ColumnDefinition Width="64" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-
+            <!-- Server rail. One personal server exists from first run; joined servers slot into
+                 this same fixed-width rail later. -->
             <Border Background="{ThemeResource CatroRailBrush}"
                     BorderBrush="{ThemeResource CatroStrokeBrush}"
                     BorderThickness="0,1,1,0">
-                <Grid Padding="0,12,0,12">
+                <Grid Padding="0,10">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <StackPanel Spacing="8" HorizontalAlignment="Center">
-                        <Grid Width="48" Height="48">
-                            <Border x:Name="HomeSelection"
-                                    CornerRadius="14"
-                                    Background="{ThemeResource CatroAccentSoftBrush}"
-                                    Visibility="Collapsed" />
-                            <Button x:Name="HomeButton"
-                                    Tag="home"
-                                    Style="{StaticResource CatroNavButtonStyle}"
-                                    Click="OnNavigationClick"
-                                    ToolTipService.ToolTip="Home"
-                                    AutomationProperties.Name="Home">
-                                <FontIcon Glyph="&#xE80F;" FontSize="18" />
-                            </Button>
-                        </Grid>
-                        <Grid Width="48" Height="48">
-                            <Border x:Name="VoiceSelection"
-                                    CornerRadius="14"
-                                    Background="{ThemeResource CatroAccentSoftBrush}"
-                                    Visibility="Collapsed" />
-                            <Button x:Name="VoiceButton"
-                                    Tag="voice"
-                                    Style="{StaticResource CatroNavButtonStyle}"
-                                    Click="OnNavigationClick"
-                                    ToolTipService.ToolTip="Voice"
-                                    AutomationProperties.Name="Voice">
-                                <FontIcon Glyph="&#xE720;" FontSize="18" />
-                            </Button>
-                        </Grid>
-                        <Grid Width="48" Height="48">
-                            <Border x:Name="ShareSelection"
-                                    CornerRadius="14"
-                                    Background="{ThemeResource CatroAccentSoftBrush}"
-                                    Visibility="Collapsed" />
-                            <Button x:Name="ShareButton"
-                                    Tag="share"
-                                    Style="{StaticResource CatroNavButtonStyle}"
-                                    Click="OnNavigationClick"
-                                    ToolTipService.ToolTip="Screen share"
-                                    AutomationProperties.Name="Screen share">
-                                <FontIcon Glyph="&#xE7F4;" FontSize="18" />
+                    <StackPanel HorizontalAlignment="Center" Spacing="8">
+                        <Grid Width="44" Height="44">
+                            <Border x:Name="ServerSelection"
+                                    CornerRadius="15"
+                                    Background="{ThemeResource CatroAccentSoftBrush}" />
+                            <Button x:Name="ServerButton"
+                                    Click="OnServer"
+                                    Width="44"
+                                    Height="44"
+                                    Padding="0"
+                                    CornerRadius="15"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    ToolTipService.ToolTip="My Server"
+                                    AutomationProperties.Name="My Server">
+                                <TextBlock Text="Y"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="{ThemeResource CatroAccentBrush}" />
                             </Button>
                         </Grid>
 
-                        <Border Height="1"
-                                Width="28"
-                                Margin="0,4"
-                                Background="{ThemeResource CatroStrokeBrush}" />
-
-                        <Grid Width="48" Height="48">
-                            <Border x:Name="DiagnosticsSelection"
-                                    CornerRadius="14"
-                                    Background="{ThemeResource CatroAccentSoftBrush}"
-                                    Visibility="Collapsed" />
-                            <Button x:Name="DiagnosticsButton"
-                                    Tag="diagnostics"
-                                    Style="{StaticResource CatroNavButtonStyle}"
-                                    Click="OnNavigationClick"
-                                    ToolTipService.ToolTip="System diagnostics"
-                                    AutomationProperties.Name="System diagnostics">
-                                <FontIcon Glyph="&#xE9D9;" FontSize="18" />
-                            </Button>
-                        </Grid>
+                        <Button Width="40"
+                                Height="40"
+                                Padding="0"
+                                CornerRadius="14"
+                                Background="{ThemeResource CatroSurfaceAltBrush}"
+                                BorderThickness="0"
+                                IsEnabled="False"
+                                ToolTipService.ToolTip="Join with invite code"
+                                AutomationProperties.Name="Join server">
+                            <FontIcon Glyph="&#xE710;" FontSize="15" />
+                        </Button>
                     </StackPanel>
 
                     <StackPanel Grid.Row="1"
-                                Spacing="8"
-                                HorizontalAlignment="Center">
-                        <Grid Width="48" Height="48">
-                            <Border x:Name="SettingsSelection"
-                                    CornerRadius="14"
+                                HorizontalAlignment="Center"
+                                Spacing="7">
+                        <Grid Width="40" Height="40">
+                            <Border x:Name="DiagnosticsSelection"
+                                    CornerRadius="13"
                                     Background="{ThemeResource CatroAccentSoftBrush}"
                                     Visibility="Collapsed" />
-                            <Button x:Name="SettingsButton"
-                                    Tag="settings"
-                                    Style="{StaticResource CatroNavButtonStyle}"
-                                    Click="OnNavigationClick"
+                            <Button Click="OnDiagnostics"
+                                    Width="40"
+                                    Height="40"
+                                    Padding="0"
+                                    CornerRadius="13"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    ToolTipService.ToolTip="System"
+                                    AutomationProperties.Name="System">
+                                <FontIcon Glyph="&#xE9D9;" FontSize="15" />
+                            </Button>
+                        </Grid>
+
+                        <Grid Width="40" Height="40">
+                            <Border x:Name="SettingsSelection"
+                                    CornerRadius="13"
+                                    Background="{ThemeResource CatroAccentSoftBrush}"
+                                    Visibility="Collapsed" />
+                            <Button Click="OnSettings"
+                                    Width="40"
+                                    Height="40"
+                                    Padding="0"
+                                    CornerRadius="13"
+                                    Background="Transparent"
+                                    BorderThickness="0"
                                     ToolTipService.ToolTip="Settings"
                                     AutomationProperties.Name="Settings">
-                                <FontIcon Glyph="&#xE713;" FontSize="18" />
+                                <FontIcon Glyph="&#xE713;" FontSize="15" />
                             </Button>
                         </Grid>
-
-                        <Border Width="38"
-                                Height="38"
-                                CornerRadius="19"
-                                Background="{ThemeResource CatroSurfaceAltBrush}"
-                                ToolTipService.ToolTip="Local profile">
-                            <TextBlock Text="L"
-                                       FontSize="12"
-                                       FontWeight="SemiBold"
-                                       Foreground="{ThemeResource CatroTextSecondaryBrush}"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center" />
-                        </Border>
                     </StackPanel>
-                </Grid>
-            </Border>
-
-            <Border x:Name="ContextPane"
-                    Grid.Column="1"
-                    Background="{ThemeResource CatroSurfaceBrush}"
-                    BorderBrush="{ThemeResource CatroStrokeBrush}"
-                    BorderThickness="0,1,1,0"
-                    Padding="18,22">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <StackPanel Spacing="6">
-                        <TextBlock x:Name="ContextEyebrow"
-                                   Text="LOCAL WORKSPACE"
-                                   Style="{StaticResource CatroEyebrowTextStyle}" />
-                        <TextBlock x:Name="ContextTitle"
-                                   Text="Home"
-                                   FontSize="22"
-                                   FontWeight="SemiBold"
-                                   Foreground="{ThemeResource CatroTextBrush}" />
-                        <TextBlock x:Name="ContextSummary"
-                                   Text="A quiet launch surface for rooms, voice, and sharing."
-                                   Margin="0,2,0,0"
-                                   Style="{StaticResource CatroSecondaryTextStyle}" />
-                    </StackPanel>
-
-                    <StackPanel Grid.Row="1"
-                                Margin="0,28,0,0"
-                                Spacing="12">
-                        <Grid>
-                            <TextBlock Text="WORKSPACE"
-                                       Style="{StaticResource CatroEyebrowTextStyle}" />
-                            <TextBlock Text="0"
-                                       HorizontalAlignment="Right"
-                                       Style="{StaticResource CatroSecondaryTextStyle}" />
-                        </Grid>
-                        <Border Style="{StaticResource CatroSoftCardStyle}"
-                                Padding="14">
-                            <StackPanel Spacing="5">
-                                <TextBlock x:Name="ContextEmptyTitle"
-                                           Text="Nothing pinned yet"
-                                           FontWeight="SemiBold"
-                                           Foreground="{ThemeResource CatroTextBrush}" />
-                                <TextBlock x:Name="ContextEmptyDetail"
-                                           Text="Recent rooms and people will appear here without changing the shell layout."
-                                           FontSize="12"
-                                           Style="{StaticResource CatroSecondaryTextStyle}" />
-                            </StackPanel>
-                        </Border>
-                        <Button Content="New"
-                                IsEnabled="False"
-                                HorizontalAlignment="Stretch"
-                                Style="{StaticResource CatroSecondaryButtonStyle}" />
-                    </StackPanel>
-
-                    <Border Grid.Row="2"
-                            Padding="12"
-                            CornerRadius="12"
-                            Background="{ThemeResource CatroSageSoftBrush}">
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="MEDIA CORE"
-                                       FontSize="9"
-                                       FontWeight="SemiBold"
-                                       CharacterSpacing="80"
-                                       Foreground="{ThemeResource CatroSageBrush}" />
-                            <TextBlock Text="Native realtime path ready"
-                                       FontSize="12"
-                                       Foreground="{ThemeResource CatroTextSecondaryBrush}" />
-                        </StackPanel>
-                    </Border>
                 </Grid>
             </Border>
 
             <ContentControl x:Name="WorkspaceHost"
-                            Grid.Column="2"
+                            Grid.Column="1"
                             HorizontalContentAlignment="Stretch"
                             VerticalContentAlignment="Stretch" />
         </Grid>
