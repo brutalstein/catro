@@ -1,0 +1,38 @@
+# Two-Client Low-Latency Voice — Implementation Plan
+
+Spec: `docs/superpowers/specs/2026-09-27-two-client-voice-design.md`.
+Branch: `feature/two-client-voice`.
+
+Every slice must remain independently buildable/testable. Do not proceed past a red local gate.
+
+| # | Slice | Observable result | Verification |
+|---|---|---|---|
+| 1 | Pin libopus; add transport-agnostic codec wrappers and voice packet v1 | PCM can round-trip through Opus and packet bytes are deterministic/strict | `ctest -R catro_voice` |
+| 2 | Bounded reorder/jitter buffer, sequence wrap logic, PLC/FEC decisions | deterministic simulated loss/reorder survives without unbounded memory | voice tests |
+| 3 | Real-time capture/render bridges and worker-owned frame queues | no codec/socket work is reachable from audio callbacks | stress/unit tests + code review |
+| 4 | Portable UDP development transport and one-way `catro-voice-peer` | one local process captures/encodes/sends; another decodes/plays | localhost manual test |
+| 5 | Full-duplex peer, shutdown/restart, rich once-per-second counters | two processes on one PC/LAN can talk and diagnose loss/latency | local + LAN manual test |
+| 6 | macOS compile/interoperability gate, docs and final regression | Windows remains green; macOS build green; real Mac remains explicit manual gate | CI + real hardware when available |
+
+### Slice 1 exact scope
+
+Files:
+- `cmake/Dependencies.cmake`
+- `core/voice/CMakeLists.txt`
+- `core/voice/include/catro/voice/codec.hpp`
+- `core/voice/include/catro/voice/packet.hpp`
+- `core/voice/src/codec.cpp`
+- `core/voice/src/packet.cpp`
+- `tests/voice/voice_test.cpp`
+- root/test CMake integration
+
+Acceptance:
+- no platform headers in `core/voice`;
+- Opus dependency is pinned by archive hash;
+- 20 ms / 48 kHz mono round trip succeeds;
+- malformed packet, bad magic/version/flags/reserved, empty payload, oversized payload are rejected;
+- sequence and timestamp serialize in network byte order;
+- no exceptions cross the public voice codec API;
+- Catro-owned warnings remain errors.
+
+Commit boundary: one green commit after local MSVC tests.
