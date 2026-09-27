@@ -2,6 +2,7 @@
 
 #include <catro/platform/windows/screen_capture.hpp>
 #include <catro/platform/windows/video_encoder.hpp>
+#include <catro/video/geometry.hpp>
 #include <catro/video/rtp_h264.hpp>
 
 #include <algorithm>
@@ -12,7 +13,6 @@
 #include <cstdint>
 #include <memory>
 #include <new>
-#include <numeric>
 #include <optional>
 #include <string>
 #include <thread>
@@ -58,53 +58,12 @@ std::optional<UdpEndpoint> parse_endpoint(std::string_view value) {
         static_cast<std::uint16_t>(port)};
 }
 
-struct EncodeSize {
-    std::uint32_t width = 0;
-    std::uint32_t height = 0;
-};
-
-std::optional<EncodeSize> choose_encode_size(
-    std::uint32_t source_width,
-    std::uint32_t source_height,
-    std::uint32_t max_width,
-    std::uint32_t max_height) noexcept {
-    if (source_width == 0 || source_height == 0 ||
-        max_width == 0 || max_height == 0) {
-        return std::nullopt;
-    }
-
-    const auto divisor = std::gcd(source_width, source_height);
-    const auto ratio_width = source_width / divisor;
-    const auto ratio_height = source_height / divisor;
-
-    auto scale = std::min({
-        divisor,
-        max_width / ratio_width,
-        max_height / ratio_height});
-    if (scale == 0) {
-        return std::nullopt;
-    }
-
-    // H.264 NV12 dimensions must be even. In reduced-ratio form, decrementing an odd scale once
-    // is sufficient whenever either ratio term is odd; if both terms are even the ratio was not
-    // reduced, which std::gcd prevents.
-    if (((ratio_width * scale) & 1U) != 0 ||
-        ((ratio_height * scale) & 1U) != 0) {
-        --scale;
-    }
-    if (scale == 0) {
-        return std::nullopt;
-    }
-
-    return EncodeSize{ratio_width * scale, ratio_height * scale};
-}
-
 HardwareEncoderConfig make_encoder_config(
     const VideoPeerOptions& options,
     const GpuCaptureFrame& first,
     std::uint64_t adapter_luid) {
     HardwareEncoderConfig config;
-    const auto size = choose_encode_size(
+    const auto size = video::fit_even_video_extent(
         first.width, first.height, options.max_width, options.max_height);
     if (size) {
         config.width = size->width;

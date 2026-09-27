@@ -53,6 +53,9 @@ target_link_libraries(catro_voice_transport_test PRIVATE Catro::Voice catro_voic
 catro_add_test(video_rtp video/rtp_h264_test.cpp)
 target_link_libraries(catro_video_rtp_test PRIVATE Catro::Video)
 
+catro_add_test(video_geometry video/geometry_test.cpp)
+target_link_libraries(catro_video_geometry_test PRIVATE Catro::Video)
+
 catro_add_test(voice_peer_cli tools/voice_peer_test.cpp)
 target_link_libraries(catro_voice_peer_cli_test PRIVATE catro_voice_peer_cli)
 
