@@ -121,6 +121,12 @@ public:
         return result.get();
     }
 
+    void request_stop() noexcept override {
+        if (stop_event_) {
+            SetEvent(stop_event_.get());
+        }
+    }
+
     std::uint64_t glitches() const noexcept override { return glitches_.load(std::memory_order_relaxed); }
 
 private:
