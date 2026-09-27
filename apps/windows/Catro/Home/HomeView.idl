@@ -1,0 +1,8 @@
+namespace Catro
+{
+    [default_interface]
+    runtimeclass HomeView : Microsoft.UI.Xaml.Controls.UserControl
+    {
+        HomeView();
+    }
+}
