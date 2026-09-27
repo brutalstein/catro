@@ -70,6 +70,14 @@ public:
         options.stream_id = config.stream_id;
         options.jitter_packets = config.jitter_packets;
         options.bitrate = config.bitrate;
+        if (config.input_endpoint != nullptr && config.input_endpoint[0] != '\0') {
+            options.input = catro::capabilities::AudioEndpointId{
+                std::string(config.input_endpoint), catro::capabilities::IdentityScope::persistent};
+        }
+        if (config.output_endpoint != nullptr && config.output_endpoint[0] != '\0') {
+            options.output = catro::capabilities::AudioEndpointId{
+                std::string(config.output_endpoint), catro::capabilities::IdentityScope::persistent};
+        }
 
         reset_control();
         exit_code_.store(-1, std::memory_order_relaxed);
