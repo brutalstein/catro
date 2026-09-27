@@ -89,7 +89,7 @@ TEST_CASE("render bridge emits queued PCM then silence instead of blocking on un
     CHECK(stats.silence_samples_rendered == 480);
     CHECK(stats.underrun_callbacks == 1);
     CHECK(stats.frames_enqueued == 1);
-    CHECK(stats.frames_dropped == 0);
+    CHECK(stats.push_rejections == 0);
 }
 
 TEST_CASE("render queue is bounded and drops complete decoded frames when full") {
@@ -107,7 +107,7 @@ TEST_CASE("render queue is bounded and drops complete decoded frames when full")
 
     const auto before = bridge.statistics();
     CHECK(before.frames_enqueued == 2);
-    CHECK(before.frames_dropped == 1);
+    CHECK(before.push_rejections == 1);
     CHECK(before.buffered_samples == 2U * kFrameSamples);
 
     PcmFrame out{};
@@ -195,7 +195,10 @@ TEST_CASE("render bridge preserves decoded frame order under sustained two-threa
 
     const auto stats = bridge.statistics();
     CHECK(ordered.load(std::memory_order_relaxed));
-    CHECK(stats.frames_dropped == 0);
+    // The producer intentionally retries when the bounded queue is full. Rejections are
+    // expected under scheduler pressure, but no unique frame is lost because the same frame is
+    // retried until accepted.
+    CHECK(stats.push_rejections > 0);
     CHECK(stats.underrun_callbacks == 0);
     CHECK(stats.frames_enqueued == kFrames);
     CHECK(stats.pcm_samples_rendered == kFrames * kFrameSamples);
