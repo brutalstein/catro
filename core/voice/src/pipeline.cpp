@@ -37,9 +37,21 @@ VoicePipeline::CreateResult VoicePipeline::create(const VoicePipelineConfig& con
 
 std::variant<EncodeStep, CodecError> VoicePipeline::encode_next(OutboundDatagram& datagram) noexcept {
     datagram.size = 0;
-    // Keep at most 40 ms of complete microphone frames after scheduler/network stalls. Encoding
-    // stale speech is worse than dropping it for an interactive voice product.
-    (void)capture_.trim_backlog(2);
+    // Keep at most 40 ms of complete microphone frames after scheduler/network stalls. When
+    // media is intentionally discarded, advance both packet clocks so the remote peer performs
+    // FEC/PLC for the real elapsed gap instead of hearing time-compressed speech.
+    const auto skipped_frames = capture_.trim_backlog(2);
+    if (skipped_frames > 0) {
+        if (const auto error = encoder_->reset()) {
+            encode_errors_.fetch_add(1, std::memory_order_relaxed);
+            return *error;
+        }
+        next_sequence_ = static_cast<std::uint16_t>(
+            static_cast<std::uint64_t>(next_sequence_) + skipped_frames);
+        next_timestamp_ = static_cast<std::uint32_t>(
+            static_cast<std::uint64_t>(next_timestamp_) +
+            skipped_frames * static_cast<std::uint64_t>(kFrameSamples));
+    }
     if (!capture_.try_pop(capture_frame_)) {
         return EncodeStep::no_frame;
     }
