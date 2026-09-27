@@ -4,7 +4,7 @@ Catro is a native desktop application for Windows and macOS. This repository cur
 foundation: a portable C++20 capability core, isolated passive hardware probes for each platform,
 a low-latency audio engine (microphone meter, test tone, live monitor), the transport-agnostic
 Opus voice core (packet format, bounded jitter/loss handling, and real-time PCM bridges), and a
-native diagnostics shell on each platform (WinUI 3 on Windows, SwiftUI on macOS).
+native desktop shells (WinUI 3 on Windows, SwiftUI on macOS). Windows now opens into the personal-server product shell; diagnostics remain an advanced workspace.
 
 There is no Electron, Qt, or browser runtime. The repository still contains no production media
 transport, server, account, screen capture, streaming, or WebRTC code. A deliberately unencrypted,
@@ -44,7 +44,7 @@ Windows (PowerShell):
 ./scripts/bootstrap.ps1
 ./scripts/build.ps1
 ./scripts/test.ps1
-./scripts/run.ps1                     # diagnostics shell
+./scripts/run.ps1                     # native Windows app
 ./scripts/run.ps1 -Report --format json --output out/capability-report.json
 ```
 
@@ -54,7 +54,7 @@ macOS:
 scripts/bootstrap.sh
 scripts/build.sh
 scripts/test.sh
-scripts/run.sh                        # diagnostics shell
+scripts/run.sh                        # native macOS app
 scripts/run.sh --report --format json --output out/capability-report.json
 ```
 
