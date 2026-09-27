@@ -104,6 +104,8 @@ public:
     explicit JitterBuffer(std::uint16_t target_packets = kDefaultJitterTargetPackets) noexcept;
 
     [[nodiscard]] JitterPushResult push(const VoicePacketView& packet) noexcept;
+    // Worker-side non-mutating preview used to avoid performing PLC before its playout deadline.
+    [[nodiscard]] PlayoutKind peek() const noexcept;
     [[nodiscard]] PlayoutKind pull(PlayoutFrame& frame) noexcept;
     void reset() noexcept;
 
