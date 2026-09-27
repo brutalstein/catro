@@ -85,7 +85,7 @@ public:
     [[nodiscard]] StatusResult connect_peer(const UdpEndpoint& peer) noexcept;
     [[nodiscard]] SizeResult send(std::span<const std::byte> datagram) noexcept;
     // true = readable, false = timeout.
-    [[nodiscard]] WaitResult wait_readable(std::chrono::milliseconds timeout) noexcept;
+    [[nodiscard]] WaitResult wait_readable(std::chrono::microseconds timeout) noexcept;
     // 0 means the non-blocking socket had no datagram available.
     [[nodiscard]] SizeResult receive(std::span<std::byte> buffer) noexcept;
 
