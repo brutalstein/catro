@@ -91,6 +91,8 @@ struct JitterStatistics {
     std::uint64_t played = 0;
     std::uint64_t fec = 0;
     std::uint64_t plc = 0;
+    std::uint64_t resyncs = 0;
+    std::uint64_t resync_discarded_packets = 0;
     std::size_t buffered = 0;
     std::size_t peak_buffered = 0;
 
@@ -107,6 +109,9 @@ public:
     // Worker-side non-mutating preview used to avoid performing PLC before its playout deadline.
     [[nodiscard]] PlayoutKind peek() const noexcept;
     [[nodiscard]] PlayoutKind pull(PlayoutFrame& frame) noexcept;
+    // Drops buffered receive state but preserves lifetime counters. Used after a worker scheduling
+    // stall so the peer re-buffers at the live edge instead of replaying stale speech.
+    void resynchronize() noexcept;
     void reset() noexcept;
 
     [[nodiscard]] JitterStatistics statistics() const noexcept;
@@ -152,6 +157,8 @@ private:
     std::atomic<std::uint64_t> played_{0};
     std::atomic<std::uint64_t> fec_{0};
     std::atomic<std::uint64_t> plc_{0};
+    std::atomic<std::uint64_t> resyncs_{0};
+    std::atomic<std::uint64_t> resync_discarded_packets_{0};
     std::atomic<std::size_t> peak_buffered_{0};
 };
 
