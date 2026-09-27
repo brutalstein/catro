@@ -215,8 +215,10 @@ struct WindowsScreenShareRuntime::Impl {
         }
 
         WindowsGraphicsCapture capture;
+        platform::windows::ScreenCaptureConfig capture_config;
+        capture_config.borderless = config.borderless;
         if (const auto error =
-                capture.start_source(config.source)) {
+                capture.start_source(config.source, capture_config)) {
             fail(
                 ScreenShareErrorCode::capture_failed,
                 platform::windows::name(error->code),
