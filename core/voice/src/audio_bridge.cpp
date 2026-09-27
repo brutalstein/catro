@@ -73,6 +73,7 @@ bool RenderBridge::try_push(const PcmFrame& frame) noexcept {
         return false;
     }
     frames_enqueued_.fetch_add(1, std::memory_order_relaxed);
+    primed_.store(true, std::memory_order_release);
     update_peak(ring_.size());
     return true;
 }
@@ -86,9 +87,14 @@ void RenderBridge::on_render(std::span<float> frames) noexcept {
     const auto read = ring_.read(frames);
     pcm_samples_rendered_.fetch_add(read, std::memory_order_relaxed);
     if (read < frames.size()) {
+        const auto silence = frames.size() - read;
         std::fill(frames.begin() + static_cast<std::ptrdiff_t>(read), frames.end(), 0.0F);
-        underrun_callbacks_.fetch_add(1, std::memory_order_relaxed);
-        silence_samples_rendered_.fetch_add(frames.size() - read, std::memory_order_relaxed);
+        silence_samples_rendered_.fetch_add(silence, std::memory_order_relaxed);
+        if (primed_.load(std::memory_order_acquire)) {
+            underrun_callbacks_.fetch_add(1, std::memory_order_relaxed);
+        } else {
+            startup_silence_samples_.fetch_add(silence, std::memory_order_relaxed);
+        }
     }
 }
 
@@ -98,6 +104,7 @@ RenderBridgeStatistics RenderBridge::statistics() const noexcept {
         .requested_samples = requested_samples_.load(std::memory_order_relaxed),
         .pcm_samples_rendered = pcm_samples_rendered_.load(std::memory_order_relaxed),
         .silence_samples_rendered = silence_samples_rendered_.load(std::memory_order_relaxed),
+        .startup_silence_samples = startup_silence_samples_.load(std::memory_order_relaxed),
         .underrun_callbacks = underrun_callbacks_.load(std::memory_order_relaxed),
         .frames_enqueued = frames_enqueued_.load(std::memory_order_relaxed),
         .push_rejections = push_rejections_.load(std::memory_order_relaxed),
