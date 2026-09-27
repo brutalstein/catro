@@ -15,6 +15,7 @@ namespace catro::voice {
 using PcmFrame = std::array<float, kFrameSamples>;
 
 inline constexpr std::size_t kDefaultRealtimeQueueFrames = 8;
+inline constexpr std::size_t kMaxRealtimeQueueFrames = 64;
 
 struct CaptureBridgeStatistics {
     std::uint64_t callbacks = 0;
