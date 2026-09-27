@@ -41,7 +41,7 @@ TEST_CASE("device choices start with the default and follow the snapshot") {
     REQUIRE(inputs.size() == 2);
     CHECK_FALSE(inputs[0].id);
     CHECK(inputs[0].label == "System default (communications)");
-    CHECK(inputs[1] == AudioDeviceChoice{fx::microphone(), "Microphone — 16 kHz (narrowband) (default communications)"});
+    CHECK(inputs[1] == AudioDeviceChoice{fx::microphone(), "Microphone — 48 kHz (default communications)"});
     const auto outputs = audio_choices(snapshot, AudioDirection::output);
     REQUIRE(outputs.size() == 2);
     CHECK(outputs[1].id == fx::speakers());
@@ -61,7 +61,20 @@ TEST_CASE("inactive endpoints are left out and unnamed ones show their id") {
     CHECK(audio_choices(snapshot, AudioDirection::output).size() == 1);
     const auto inputs = audio_choices(snapshot, AudioDirection::input);
     REQUIRE(inputs.size() == 2);
-    CHECK(inputs[1].label == fx::microphone().value);
+    CHECK(inputs[1].label == fx::microphone().value + " — 48 kHz");
+}
+
+
+TEST_CASE("narrowband input devices are labelled explicitly") {
+    auto snapshot = fx::valid_snapshot();
+    for (auto& endpoint : snapshot.devices.audio_endpoints) {
+        if (endpoint.id == fx::microphone()) {
+            endpoint.sample_rate_hz = fx::known<std::uint32_t>(16'000U, fx::advertised(fx::kAudioProbe));
+        }
+    }
+    const auto inputs = audio_choices(snapshot, AudioDirection::input);
+    REQUIRE(inputs.size() == 2);
+    CHECK(inputs[1].label.find("16 kHz (narrowband)") != std::string::npos);
 }
 
 TEST_CASE("levels map -60 dBFS to empty and full scale to full") {
