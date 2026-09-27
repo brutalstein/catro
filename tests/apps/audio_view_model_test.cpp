@@ -41,7 +41,7 @@ TEST_CASE("device choices start with the default and follow the snapshot") {
     REQUIRE(inputs.size() == 2);
     CHECK_FALSE(inputs[0].id);
     CHECK(inputs[0].label == "System default (communications)");
-    CHECK(inputs[1] == AudioDeviceChoice{fx::microphone(), "Microphone (default)"});
+    CHECK(inputs[1] == AudioDeviceChoice{fx::microphone(), "Microphone — 16 kHz (narrowband) (default communications)"});
     const auto outputs = audio_choices(snapshot, AudioDirection::output);
     REQUIRE(outputs.size() == 2);
     CHECK(outputs[1].id == fx::speakers());
@@ -85,6 +85,9 @@ TEST_CASE("a running monitor session shows streams and an estimated latency") {
 
     statistics.glitches = 1;
     CHECK(describe_audio(statistics).tone == Tone::positive);
+    statistics.glitches = 4;
+    CHECK(describe_audio(statistics).tone == Tone::caution);
+    statistics.glitches = 0;
     statistics.underruns = 1;
     CHECK(describe_audio(statistics).tone == Tone::caution);
 }
