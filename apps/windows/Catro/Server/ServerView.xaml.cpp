@@ -250,7 +250,10 @@ void ServerView::UpdateVoiceUi() {
     const bool joined = snapshot.state == CATRO_VOICE_JOINED;
 
     JoinVoiceButton().IsEnabled(true);
-    JoinVoiceButton().Content(box_value(active ? L"Leave" : (snapshot.state == CATRO_VOICE_FAILED ? L"Retry" : L"Join")));
+    const hstring join_label =
+        active ? hstring{L"Leave"}
+               : (snapshot.state == CATRO_VOICE_FAILED ? hstring{L"Retry"} : hstring{L"Join"});
+    JoinVoiceButton().Content(box_value(join_label));
 
     MuteVoiceButton().IsEnabled(joined && !deafened_);
     ProfileMuteButton().IsEnabled(joined && !deafened_);
@@ -258,10 +261,12 @@ void ServerView::UpdateVoiceUi() {
     ProfileDeafenButton().IsEnabled(joined);
 
     const bool effective_muted = muted_ || deafened_;
-    controls::ToolTipService::SetToolTip(MuteVoiceButton(), box_value(effective_muted ? L"Unmute" : L"Mute"));
-    controls::ToolTipService::SetToolTip(ProfileMuteButton(), box_value(effective_muted ? L"Unmute" : L"Mute"));
-    controls::ToolTipService::SetToolTip(DeafenVoiceButton(), box_value(deafened_ ? L"Undeafen" : L"Deafen"));
-    controls::ToolTipService::SetToolTip(ProfileDeafenButton(), box_value(deafened_ ? L"Undeafen" : L"Deafen"));
+    const auto mute_tip = box_value(effective_muted ? hstring{L"Unmute"} : hstring{L"Mute"});
+    const auto deafen_tip = box_value(deafened_ ? hstring{L"Undeafen"} : hstring{L"Deafen"});
+    controls::ToolTipService::SetToolTip(MuteVoiceButton(), mute_tip);
+    controls::ToolTipService::SetToolTip(ProfileMuteButton(), mute_tip);
+    controls::ToolTipService::SetToolTip(DeafenVoiceButton(), deafen_tip);
+    controls::ToolTipService::SetToolTip(ProfileDeafenButton(), deafen_tip);
 
     MuteVoiceButton().Opacity(effective_muted ? 1.0 : 0.72);
     ProfileMuteButton().Opacity(effective_muted ? 1.0 : 0.72);
