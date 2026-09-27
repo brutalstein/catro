@@ -1,4 +1,5 @@
 #include "voice_peer.hpp"
+#include "worker_priority.hpp"
 
 #include <catro/audio/external_session.hpp>
 #include <catro/voice/pipeline.hpp>
@@ -321,6 +322,9 @@ int run_voice_peer(std::span<const std::string_view> arguments,
     if (initial_audio.output) {
         out << "output: " << audio_info(*initial_audio.output) << '\n';
     }
+
+    VoiceWorkerPriority worker_priority;
+    out << "worker priority: " << (worker_priority.elevated() ? "elevated" : "normal") << '\n';
 
     NetworkStatistics network;
     TimingAccumulator encode_timing;
