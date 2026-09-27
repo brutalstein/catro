@@ -146,6 +146,34 @@ TEST_CASE("two pipelines restore reordered datagrams and queue decoded audio") {
     CHECK(stats.render.underrun_callbacks == 0);
 }
 
+TEST_CASE("receiver resynchronization drops stale jitter state and accepts a restarted remote stream") {
+    auto first_sender = make_pipeline(0x10101010U, 1);
+    auto receiver = make_pipeline(0x20202020U, 2);
+    double phase = 0.0;
+
+    const auto first = encode(*first_sender, tone_frame(phase, 0.12F));
+    const auto second = encode(*first_sender, tone_frame(phase, 0.13F));
+    REQUIRE(std::get<JitterPushResult>(receiver->receive(first.view())) == JitterPushResult::accepted);
+    REQUIRE(std::get<JitterPushResult>(receiver->receive(second.view())) == JitterPushResult::accepted);
+    REQUIRE(std::get<DecodeStep>(receiver->decode_next()) == DecodeStep::queued_packet);
+    CHECK(receiver->statistics().jitter.buffered == 1);
+
+    REQUIRE_FALSE(receiver->resynchronize_receiver());
+    auto stats = receiver->statistics();
+    CHECK(stats.jitter.resyncs == 1);
+    CHECK(stats.jitter.resync_discarded_packets == 1);
+    CHECK(stats.jitter.buffered == 0);
+    CHECK(receiver->next_playout_kind() == PlayoutKind::waiting);
+
+    auto restarted_sender = make_pipeline(0x30303030U, 1);
+    const auto restarted_first = encode(*restarted_sender, tone_frame(phase, 0.14F));
+    const auto restarted_second = encode(*restarted_sender, tone_frame(phase, 0.15F));
+    REQUIRE(std::get<JitterPushResult>(receiver->receive(restarted_first.view())) == JitterPushResult::accepted);
+    REQUIRE(std::get<JitterPushResult>(receiver->receive(restarted_second.view())) == JitterPushResult::accepted);
+    CHECK(std::get<DecodeStep>(receiver->decode_next()) == DecodeStep::queued_packet);
+    CHECK(receiver->statistics().jitter.wrong_stream == 0);
+}
+
 TEST_CASE("pipeline uses FEC for one missing packet and keeps the following packet") {
     auto sender = make_pipeline(0x33333333U, 1);
     auto receiver = make_pipeline(0x44444444U, 1);
