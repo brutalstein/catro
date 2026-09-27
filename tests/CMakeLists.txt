@@ -58,6 +58,8 @@ if(WIN32 AND MSVC)
 
     catro_add_test(windows_audio windows/audio_platform_test.cpp)
     target_link_libraries(catro_windows_audio_test PRIVATE Catro::Windows)
+    # Catch2 exits with 4 when every case skipped, as on runners without audio endpoints.
+    set_tests_properties(catro_windows_audio PROPERTIES SKIP_RETURN_CODE 4)
 
     catro_add_test(windows_system_runtime windows/system_runtime_probe_test.cpp)
     target_link_libraries(catro_windows_system_runtime_test PRIVATE Catro::Windows Catro::Reporting)

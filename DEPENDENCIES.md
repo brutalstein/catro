@@ -46,9 +46,11 @@ no WebView2 control or browser runtime.
 
 ## Platform frameworks
 
-- **Windows:** DXGI, D3D11, D3D12, DXCore, Media Foundation (enumeration only), WASAPI/MMDevice
-  (endpoint properties only), power and WTS session APIs.
+- **Windows:** DXGI, D3D11, D3D12, DXCore, Media Foundation (enumeration only), WASAPI/MMDevice,
+  AVRT (MMCSS "Pro Audio" thread priority), power and WTS session APIs.
 - **macOS:** Foundation, AppKit, CoreGraphics, Metal (device enumeration), VideoToolbox (encoder
-  list only), CoreMedia, CoreAudio (HAL properties only), IOKit, SwiftUI.
+  list only), CoreMedia, CoreAudio, AudioToolbox (AUHAL and AudioConverter), AVFoundation
+  (microphone authorization status only), IOKit, SwiftUI.
 
-The probes never start capture, open an audio stream, or create an encoder session.
+The probes never start capture, open an audio stream, or create an encoder session. Audio
+streams open only in a session the user starts (the audio page or `catro-audio-check`).

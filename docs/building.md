@@ -26,6 +26,7 @@ What `build.ps1` runs:
 | --- | --- |
 | Shell | `out/apps/windows/x64/<Configuration>/Catro.exe` |
 | Report tool | `out/build/windows-msvc/<Configuration>/catro-capability-report.exe` |
+| Audio check | `out/build/windows-msvc/<Configuration>/catro-audio-check.exe` |
 | Probe helper | `out/build/windows-msvc/<Configuration>/catro-capability-probe.exe` |
 
 ## macOS
@@ -47,6 +48,7 @@ file is checked in. The post-build step copies the probe helper into
 | --- | --- |
 | Shell | `out/build/<preset>/<Configuration>/Catro.app` |
 | Report tool | `out/build/<preset>/<Configuration>/catro-capability-report` |
+| Audio check | `out/build/<preset>/<Configuration>/catro-audio-check` |
 
 The Swift shell needs the Xcode or Ninja generator. With another generator, CMake builds
 everything except the shell.
@@ -60,6 +62,24 @@ catro-capability-report [--format human|json] [--output <file>]
 `human` (the default) is the engineering report with device names redacted. `json` is the complete canonical report.
 Its schema is `catro.capabilities` 1.0 and its policy is 1.0.0. `--output` writes a new file
 atomically and refuses to replace an existing one.
+
+## Audio check
+
+```
+catro-audio-check [--mode meter|tone|monitor] [--seconds 0-60] [--input <id>] [--output <id>]
+```
+
+`meter` (the default) captures and prints input levels, `tone` plays a 440 Hz tone at -14 dBFS,
+and `monitor` plays the microphone back live, so use headphones. Device ids are the capability
+report's endpoint ids (`mmdevice:...`, `coreaudio:<uid>:input|output`). Without one, the tool
+uses the system default: the communications endpoint on Windows, the default device on macOS.
+The engine runs at 48 kHz float mono and the OS converts to the device format. The printed
+latency is an estimate from device and buffer sizes, not a measurement. Exit codes: 0 ok,
+2 invalid arguments, 5 audio failure.
+
+The Windows integration test (`catro_windows_audio`) opens the default endpoints for about a
+second and reports skipped on a machine without them. On macOS, `catro-audio-check` runs from a
+terminal, so the terminal app receives the microphone permission.
 
 ## Probe budgets
 

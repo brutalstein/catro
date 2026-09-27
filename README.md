@@ -2,10 +2,11 @@
 
 Catro is a native desktop application for Windows and macOS. This repository currently holds its
 foundation: a portable C++20 capability core, isolated passive hardware probes for each platform,
-and a native diagnostics shell on each platform (WinUI 3 on Windows, SwiftUI on macOS).
+a low-latency audio engine (microphone meter, test tone, live monitor), and a native diagnostics
+shell on each platform (WinUI 3 on Windows, SwiftUI on macOS).
 
 There is no Electron, Qt, or browser runtime. The milestone also contains no server, account,
-capture, streaming, or WebRTC code.
+screen capture, streaming, or WebRTC code.
 
 ## Layout
 
@@ -13,11 +14,13 @@ capture, streaming, or WebRTC code.
 | --- | --- |
 | `core/capabilities` | Capability model, validation, snapshot diffing, deterministic media policy. Standard library only. |
 | `core/reporting` | Canonical JSON and human reports, strict parsing, redaction. |
-| `platform/windows`, `platform/macos` | Passive probes, the out-of-process probe executor, and the capability service. |
+| `core/audio` | Real-time audio primitives and the session engine. Standard library only. |
+| `platform/windows`, `platform/macos` | Passive probes, the out-of-process probe executor, the capability service, and the audio backends (WASAPI, CoreAudio AUHAL). |
 | `apps/diagnostics` | Shared plain C++ view model for both shells. |
 | `apps/windows`, `apps/macos` | Native diagnostics shells. |
 | `tools/capability-probe` | Helper process that runs one passive probe and prints one fragment. |
 | `tools/capability-report` | Command-line capability report. |
+| `tools/audio-check` | Command-line audio session check (meter, tone, monitor). |
 | `tests` | Core, reporting, policy, and platform tests. |
 
 ## Quick start
@@ -49,7 +52,7 @@ The scripts check prerequisites and never install tools or change system setting
 
 | Platform | Status |
 | --- | --- |
-| Windows 11 x64 | Core, probes, report tool, and WinUI shell built and tested locally. |
+| Windows 11 x64 | Core, probes, report tool, audio engine, and WinUI shell built and tested locally. The shell crashes under UI Automation (see troubleshooting). |
 | macOS 13+ Apple Silicon | Code written; waiting for its first build on the `macos-15` CI runner. |
 | macOS 13+ Intel | Code written; waiting for its first build on the `macos-15-intel` CI runner. |
 
