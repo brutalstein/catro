@@ -64,6 +64,7 @@ struct CaptureSource {
     // typedefs to portable callers. Handles are validated again immediately before capture starts.
     std::uintptr_t native_handle = 0;
     std::string title;
+    std::string process_name;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     bool primary = false;
@@ -76,6 +77,10 @@ struct CaptureSource {
 [[nodiscard]] std::vector<CaptureSource> enumerate_capture_sources() noexcept;
 
 struct ScreenCaptureConfig {
+    // Border suppression is fail-soft. The product layer must obtain Borderless graphics-capture
+    // consent before setting this; Windows may still keep its system capture border.
+    bool borderless = false;
+
     // Packed DXGI LUID (high 32 bits followed by low 32 bits). When present, capture must use
     // exactly this adapter; production policy can therefore keep WGC and the hardware encoder on
     // the same GPU. Diagnostics may omit it and use the OS high-performance preference.
