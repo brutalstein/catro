@@ -46,6 +46,7 @@ struct RenderBridgeStatistics {
     std::uint64_t resync_requests = 0;
     std::uint64_t resync_events = 0;
     std::uint64_t stale_samples_discarded = 0;
+    std::uint64_t deafened_samples_rendered = 0;
     std::size_t buffered_samples = 0;
     std::size_t peak_buffered_samples = 0;
 
@@ -103,6 +104,8 @@ public:
     // Voice worker only. Asks the render callback (the sole SPSC consumer) to discard queued stale
     // PCM at its next callback. The worker never mutates the consumer-owned tail index.
     void request_resync() noexcept;
+    void set_deafened(bool value) noexcept { deafened_.store(value, std::memory_order_release); }
+    [[nodiscard]] bool deafened() const noexcept { return deafened_.load(std::memory_order_acquire); }
     void on_render(std::span<float> frames) noexcept override;
 
     [[nodiscard]] RenderBridgeStatistics statistics() const noexcept;
@@ -124,7 +127,9 @@ private:
     std::atomic<std::uint64_t> resync_requests_{0};
     std::atomic<std::uint64_t> resync_events_{0};
     std::atomic<std::uint64_t> stale_samples_discarded_{0};
+    std::atomic<std::uint64_t> deafened_samples_rendered_{0};
     std::atomic_bool resync_requested_{false};
+    std::atomic_bool deafened_{false};
     std::atomic<std::size_t> peak_buffered_samples_{0};
 };
 
