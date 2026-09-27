@@ -7,14 +7,12 @@
 
 using namespace catro::app;
 
-TEST_CASE("personal server contract stays one-owner and invite-code based") {
-    CHECK(kPersonalServerContract.identity_owns_server);
-    CHECK(kPersonalServerContract.owner_is_only_elevated_role);
-    CHECK(kPersonalServerContract.invite_code_required_to_join);
-    CHECK(kPersonalServerContract.default_text_channels == 1);
-    CHECK(kPersonalServerContract.default_voice_channels == 1);
-    CHECK(can_manage_server(ServerRole::owner));
-    CHECK_FALSE(can_manage_server(ServerRole::member));
+TEST_CASE("shell defaults come from the community personal-server contract") {
+    CHECK(catro::community::can_manage_server(catro::community::ServerRole::owner));
+    CHECK_FALSE(catro::community::can_manage_server(catro::community::ServerRole::member));
+    REQUIRE(kDefaultChannels.size() == catro::community::kDefaultChannels.size());
+    CHECK(kDefaultChannels[0].name == catro::community::kDefaultChannels[0].name);
+    CHECK(kDefaultChannels[1].name == catro::community::kDefaultChannels[1].name);
 }
 
 TEST_CASE("first-run server has exactly one text and one voice channel") {
@@ -29,8 +27,8 @@ TEST_CASE("first-run server has exactly one text and one voice channel") {
         CHECK(ids.insert(std::string(channel.id)).second);
         REQUIRE(channel_kind(channel.id));
         CHECK(*channel_kind(channel.id) == channel.kind);
-        text += channel.kind == ChannelKind::text ? 1U : 0U;
-        voice += channel.kind == ChannelKind::voice ? 1U : 0U;
+        text += channel.kind == catro::community::ChannelKind::text ? 1U : 0U;
+        voice += channel.kind == catro::community::ChannelKind::voice ? 1U : 0U;
     }
     CHECK(text == 1);
     CHECK(voice == 1);
@@ -41,11 +39,11 @@ TEST_CASE("shell opens personal server and switches channels without invalid sta
     ShellState state;
     CHECK(state.destination() == AppDestination::server);
     CHECK(state.channel_id() == "general");
-    CHECK(state.active_channel_kind() == ChannelKind::text);
+    CHECK(state.active_channel_kind() == catro::community::ChannelKind::text);
 
     CHECK(state.select_channel("voice"));
     CHECK(state.channel_id() == "voice");
-    CHECK(state.active_channel_kind() == ChannelKind::voice);
+    CHECK(state.active_channel_kind() == catro::community::ChannelKind::voice);
     CHECK_FALSE(state.select_channel("voice"));
 
     CHECK(state.open_settings());
