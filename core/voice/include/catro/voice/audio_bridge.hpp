@@ -73,6 +73,7 @@ public:
 private:
     void update_peak(std::size_t depth) noexcept;
     bool resynchronize_if_needed() noexcept;
+    bool finish_alignment_discard() noexcept;
 
     audio::SpscRing<float> ring_;
     std::atomic<std::uint64_t> callbacks_{0};
@@ -86,6 +87,7 @@ private:
     std::atomic<std::uint64_t> timeline_frames_skipped_{0};
     std::atomic<std::uint64_t> pending_gap_samples_{0};
     std::atomic_bool resync_requested_{false};
+    std::size_t alignment_samples_pending_ = 0; // voice worker only
     std::uint64_t unreported_timeline_frames_ = 0; // voice worker only
     std::atomic<std::size_t> peak_buffered_samples_{0};
 };
