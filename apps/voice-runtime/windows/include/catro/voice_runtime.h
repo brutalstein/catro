@@ -31,6 +31,8 @@ struct CatroVoiceRuntimeConfig {
     std::uint32_t stream_id;
     std::uint16_t jitter_packets;
     std::int32_t bitrate;
+    const char* input_endpoint;
+    const char* output_endpoint;
 };
 
 struct CatroVoiceRuntimeSnapshot {
