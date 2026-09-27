@@ -1,7 +1,7 @@
 # Voice peer validation
 
 catro-voice-peer is the development transport for the two-client voice milestone. It is
-intentionally limited to numeric IPv4 and connected UDP so localhost/LAN behavior is observable
+intentionally limited to numeric loopback/private/link-local IPv4 and connected UDP so localhost/LAN behavior is observable
 without mixing production signaling, NAT traversal, authentication, or encryption into the media
 core.
 
@@ -59,7 +59,7 @@ Pass the same validated 48 kHz input and desired output endpoint to both.
 
 ## LAN test
 
-Replace 127.0.0.1 with each machine's private LAN IPv4 address. Each process binds its own
+Replace 127.0.0.1 with each machine's private or link-local LAN IPv4 address. Public IPv4 and 0.0.0.0 are rejected by the transport. Each process binds its own
 machine address/port and sets --peer to the other machine. Keep the two stream ids distinct.
 A host firewall may need to allow the executable on the selected private network.
 
