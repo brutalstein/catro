@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <limits>
 #include <variant>
 #include <vector>
 
@@ -167,6 +168,26 @@ TEST_CASE("reordering across sequence wrap plays 65535 then zero then one") {
     CHECK(frame.sequence == 0);
     REQUIRE(buffer.pull(frame) == PlayoutKind::packet);
     CHECK(frame.sequence == 1);
+}
+
+TEST_CASE("jitter playout accepts timestamp wrap at the 32-bit boundary") {
+    constexpr auto before_wrap = std::numeric_limits<std::uint32_t>::max() - kFrameSamples + 1U;
+    JitterBuffer buffer(3);
+    REQUIRE(push(buffer, 65535, before_wrap, std::byte{1}) == JitterPushResult::accepted);
+    REQUIRE(push(buffer, 0, 0U, std::byte{2}) == JitterPushResult::accepted);
+    REQUIRE(push(buffer, 1, kFrameSamples, std::byte{3}) == JitterPushResult::accepted);
+
+    PlayoutFrame frame;
+    REQUIRE(buffer.pull(frame) == PlayoutKind::packet);
+    CHECK(frame.sequence == 65535);
+    CHECK(frame.timestamp == before_wrap);
+    REQUIRE(buffer.pull(frame) == PlayoutKind::packet);
+    CHECK(frame.sequence == 0);
+    CHECK(frame.timestamp == 0U);
+    REQUIRE(buffer.pull(frame) == PlayoutKind::packet);
+    CHECK(frame.sequence == 1);
+    CHECK(frame.timestamp == kFrameSamples);
+    CHECK(buffer.statistics().timestamp_mismatches == 0);
 }
 
 TEST_CASE("reset clears stream identity playout state and counters") {
