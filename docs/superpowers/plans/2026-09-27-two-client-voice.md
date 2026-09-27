@@ -63,3 +63,26 @@ Commit boundary: one green commit after local MSVC tests.
 - Socket buffers are finite, packet buffers are fixed, and a voice datagram remains below 1400 bytes.
 - Live diagnostics read audio state once per second or on failure; the 2 ms worker loop does not take the audio-session mutex.
 - Real UDP loopback tests send encoded Opus packets through the OS socket stack before jitter and decode, while the CLI parser has explicit range/repetition tests.
+
+
+### Final performance and recovery hardening
+
+- SPSC producer/consumer indices are isolated on 128-byte boundaries so x86 and Apple Silicon
+  audio/worker threads do not bounce the same cache line.
+- Third-thread queue diagnostics clamp non-coherent head/tail snapshots to the bounded ring size.
+- Capture queue overflow is treated as a media discontinuity. The worker flushes stale pre-gap PCM
+  and never combines samples from opposite sides of the gap in one Opus frame.
+- Intentional microphone backlog drops advance RTP-like sequence/timestamp media clocks and reset
+  Opus encoder state. The remote side therefore conceals elapsed time instead of hearing
+  time-compressed speech.
+- Malformed Opus media is counted and concealed with PLC when possible instead of terminating the
+  entire peer session.
+- Receiver stalls beyond the bounded catch-up window reset jitter/decoder state, drain stale kernel
+  UDP backlog, and rebuffer at the live edge.
+- UDP waits retain microsecond deadlines and never busy-spin below one millisecond.
+- The development peer rejects public/wildcard IPv4 endpoints in code and accepts only loopback,
+  RFC1918 private, or IPv4 link-local addresses.
+- The codec/network worker receives a best-effort native scheduling boost below the native audio
+  callback class; failure to elevate is non-fatal and visible in the CLI.
+- Ctrl-C/termination uses cooperative shutdown so audio streams and UDP sockets are destructed
+  before process exit. Runtime tests immediately reuse the same UDP port after shutdown.
