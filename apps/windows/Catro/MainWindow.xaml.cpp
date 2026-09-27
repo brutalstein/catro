@@ -92,6 +92,7 @@ xaml::UIElement MainWindow::PageFor(catro::app::ShellSection section) {
 }
 
 void MainWindow::Activate(catro::app::ShellSection section) {
+    const auto previous = shell_state_.active();
     (void)shell_state_.activate(section);
     const auto& spec = shell_state_.active_spec();
 
@@ -105,6 +106,15 @@ void MainWindow::Activate(catro::app::ShellSection section) {
     // ContentControl holds exactly one live subtree. Pages are allocated on first visit and reused,
     // so startup avoids constructing diagnostics/probe controls or future heavy media surfaces.
     WorkspaceHost().Content(PageFor(section));
+
+    // Diagnostics can materialize hundreds of evidence rows. Keep ordinary product pages warm,
+    // but release the developer-heavy subtree as soon as the user leaves it so the game gets that
+    // memory back. Its Unloaded handler also stops passive probing and any audio test session.
+    if (previous == catro::app::ShellSection::diagnostics &&
+        section != catro::app::ShellSection::diagnostics) {
+        diagnostics_page_ = nullptr;
+    }
+
     UpdateNavigationVisuals(section);
     UpdateResponsiveLayout(ShellGrid().ActualWidth());
 }
