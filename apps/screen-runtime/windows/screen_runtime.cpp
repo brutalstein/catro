@@ -880,10 +880,61 @@ struct WindowsScreenShareRuntime::Impl {
                 remote_wire_bytes_.fetch_add(
                     size, std::memory_order_relaxed);
 
-                const auto reassembled =
+                auto reassembled =
                     reassembler.push(
                         std::span<const std::byte>(
                             datagram.data(), size));
+
+                if (reassembled.status ==
+                        video::H264ReassemblyStatus::packet_rejected &&
+                    reassembled.error ==
+                        video::H264ReassemblyError::ssrc_mismatch) {
+                    const auto last =
+                        remote_last_frame_ns_.load(
+                            std::memory_order_acquire);
+                    const auto now = steady_now_ns();
+                    const auto timeout =
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            kRemoteInactiveTimeout)
+                            .count();
+                    if (last != 0 &&
+                        now >= last &&
+                        now - last >= timeout) {
+                        // A quiet peer may have restarted and chosen a new SSRC. Flush decoder
+                        // history only after the old stream is definitively inactive; an alien
+                        // packet cannot steal an active session.
+                        reassembler.reset();
+                        decoder.stop();
+                        if (const auto restart =
+                                decoder.start(decoder_config)) {
+                            remote_decode_failures_.fetch_add(
+                                1, std::memory_order_relaxed);
+                            fail_session(
+                                ScreenShareErrorCode::decoder_failed,
+                                platform::windows::name(
+                                    restart->code),
+                                restart->native_code);
+                            fatal = true;
+                            break;
+                        }
+                        have_timestamp = false;
+                        extended_timestamp = 0;
+                        last_timestamp = 0;
+                        remote_width_.store(
+                            0, std::memory_order_relaxed);
+                        remote_height_.store(
+                            0, std::memory_order_relaxed);
+                        remote_last_frame_ns_.store(
+                            0, std::memory_order_release);
+                        remote_stream_resets_.fetch_add(
+                            1, std::memory_order_relaxed);
+                        reassembled =
+                            reassembler.push(
+                                std::span<const std::byte>(
+                                    datagram.data(), size));
+                    }
+                }
+
                 if (reassembled.status ==
                     video::H264ReassemblyStatus::packet_rejected) {
                     remote_packet_rejects_.fetch_add(
@@ -1065,6 +1116,7 @@ struct WindowsScreenShareRuntime::Impl {
         remote_packet_rejects_.store(0, std::memory_order_relaxed);
         remote_decode_failures_.store(0, std::memory_order_relaxed);
         remote_present_drops_.store(0, std::memory_order_relaxed);
+        remote_stream_resets_.store(0, std::memory_order_relaxed);
         remote_last_frame_ns_.store(0, std::memory_order_relaxed);
     }
 
@@ -1146,6 +1198,8 @@ struct WindowsScreenShareRuntime::Impl {
             remote_decode_failures_.load(std::memory_order_relaxed);
         result.remote_present_drops =
             remote_present_drops_.load(std::memory_order_relaxed);
+        result.remote_stream_resets =
+            remote_stream_resets_.load(std::memory_order_relaxed);
 
         const auto last =
             remote_last_frame_ns_.load(
@@ -1225,6 +1279,7 @@ struct WindowsScreenShareRuntime::Impl {
     std::atomic<std::uint64_t> remote_packet_rejects_{0};
     std::atomic<std::uint64_t> remote_decode_failures_{0};
     std::atomic<std::uint64_t> remote_present_drops_{0};
+    std::atomic<std::uint64_t> remote_stream_resets_{0};
     std::atomic<std::int64_t> remote_last_frame_ns_{0};
 };
 
