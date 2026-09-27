@@ -50,6 +50,9 @@ target_link_libraries(catro_voice_pipeline_test PRIVATE Catro::Voice)
 catro_add_test(voice_transport voice/udp_transport_test.cpp)
 target_link_libraries(catro_voice_transport_test PRIVATE Catro::Voice catro_voice_peer_transport)
 
+catro_add_test(video_rtp video/rtp_h264_test.cpp)
+target_link_libraries(catro_video_rtp_test PRIVATE Catro::Video)
+
 catro_add_test(voice_peer_cli tools/voice_peer_test.cpp)
 target_link_libraries(catro_voice_peer_cli_test PRIVATE catro_voice_peer_cli)
 
