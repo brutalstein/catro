@@ -19,6 +19,7 @@ Internet transport or security boundary.
 | `core/reporting` | Canonical JSON and human reports, strict parsing, redaction. |
 | `core/audio` | Real-time audio primitives and the session engine. Standard library only. |
 | `core/voice` | Opus codec wrapper, packet v1, bounded jitter/loss handling, real-time PCM bridges, transport-agnostic media pipeline. |
+| `core/community` | Typed identity/server/channel roles, personal-server bootstrap, invite token format, versioned local-state codec. |
 | `platform/windows`, `platform/macos` | Passive probes, the out-of-process probe executor, the capability service, and the audio backends (WASAPI, CoreAudio AUHAL). |
 | `apps/diagnostics` | Shared plain C++ diagnostics/audio presentation. |
 | `apps/shell` | Portable personal-server/channel navigation contract. |
@@ -74,6 +75,7 @@ not hardware evidence.
 
 ## More
 
+- [Personal identity and server state](docs/architecture/personal-state.md)
 - [Capability system architecture](docs/architecture/capability-system.md)
 - [Decision records](docs/architecture/decisions)
 - [Dependencies](DEPENDENCIES.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
