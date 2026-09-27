@@ -51,6 +51,13 @@ struct ScreenCaptureError {
     return "screen capture failure";
 }
 
+struct ScreenCaptureConfig {
+    // Packed DXGI LUID (high 32 bits followed by low 32 bits). When present, capture must use
+    // exactly this adapter; production policy can therefore keep WGC and the hardware encoder on
+    // the same GPU. Diagnostics may omit it and use the OS high-performance preference.
+    std::optional<std::uint64_t> adapter_luid;
+};
+
 struct GpuCaptureFrame {
     // WGC owns a small reusable surface pool. Keeping the projected frame alive is the lease that
     // prevents the texture from being recycled while the consumer/encoder still reads it.
@@ -95,7 +102,8 @@ public:
     WindowsGraphicsCapture(const WindowsGraphicsCapture&) = delete;
     WindowsGraphicsCapture& operator=(const WindowsGraphicsCapture&) = delete;
 
-    [[nodiscard]] std::optional<ScreenCaptureError> start_primary_display();
+    [[nodiscard]] std::optional<ScreenCaptureError> start_primary_display(
+        const ScreenCaptureConfig& config = {});
     void stop() noexcept;
 
     [[nodiscard]] bool wait_for_latest(
