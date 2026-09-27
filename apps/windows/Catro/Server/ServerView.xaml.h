@@ -33,7 +33,7 @@ private:
     void StopVoice();
     void UpdateVoiceUi();
     winrt::fire_and_forget BeginScreenShare();
-    void StopScreenShare() noexcept;
+    void StopScreenShare();
     void UpdateScreenShareUi();
     void DetachPreviewSwapChain() noexcept;
     [[nodiscard]] std::uint32_t LocalStreamId() const noexcept;
