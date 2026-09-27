@@ -19,27 +19,24 @@ Use headphones. Build first:
 Terminal A captures and sends:
 
 ~~~powershell
-./out/build/windows-msvc/Debug/catro-voice-peer.exe ^
-  --bind 127.0.0.1:50000 ^
-  --peer 127.0.0.1:50001 ^
-  --mode send ^
-  --seconds 20 ^
-  --input "<48-kHz-input-endpoint-id>" ^
+./out/build/windows-msvc/Debug/catro-voice-peer.exe `
+  --bind 127.0.0.1:50000 `
+  --peer 127.0.0.1:50001 `
+  --mode send `
+  --seconds 20 `
+  --input "<48-kHz-input-endpoint-id>" `
   --stream-id 1001
 ~~~
-
-In PowerShell, enter the command on one line or replace the caret continuations above with PowerShell
-backticks.
 
 Terminal B receives and renders:
 
 ~~~powershell
-./out/build/windows-msvc/Debug/catro-voice-peer.exe ^
-  --bind 127.0.0.1:50001 ^
-  --peer 127.0.0.1:50000 ^
-  --mode receive ^
-  --seconds 20 ^
-  --output "<output-endpoint-id>" ^
+./out/build/windows-msvc/Debug/catro-voice-peer.exe `
+  --bind 127.0.0.1:50001 `
+  --peer 127.0.0.1:50000 `
+  --mode receive `
+  --seconds 20 `
+  --output "<output-endpoint-id>" `
   --stream-id 2001
 ~~~
 
@@ -71,6 +68,11 @@ A host firewall may need to allow the executable on the selected private network
 - fec/plc: missing frames recovered from Opus in-band FEC or synthesized with PLC.
 - jitter current/peak: packets held in the fixed 32-slot jitter store.
 - cap-drop: capture callback blocks rejected because the bounded worker queue was full.
+- cap-stale/cap-skip/cap-resync: stale microphone media discarded to recover low latency, media-clock
+  frames skipped, and overflow discontinuity resynchronizations.
+- net-stale/worker-resync: kernel UDP packets discarded after a long scheduler stall and receiver
+  live-edge resets.
+- enc-err/dec-err: codec failures; malformed received Opus is concealed when possible.
 - render-full: decoded frames that could not enter the bounded render queue.
 - underrun: render callbacks that needed silence after playback had already been primed.
 - startup-silence: silence emitted before the first decoded frame; expected during startup.
@@ -78,8 +80,8 @@ A host firewall may need to allow the executable on the selected private network
 - enc/dec avg/max us: worker-side codec/pipeline timing, not audio-callback time.
 - worker-resync: the worker missed more than three 20 ms playout ticks and resynchronized.
 
-For a healthy localhost run, sustained values for net-drop, cap-drop, render-full, underrun, and
-worker-resync should remain zero. reorder, late, fec, and plc should normally remain zero on
+For a healthy localhost run, sustained values for net-drop, cap-drop, cap-skip, capture resync,
+render-full, underrun, codec errors, and worker-resync should remain zero. reorder, late, fec, and plc should normally remain zero on
 loopback. Native audio may report one startup discontinuity on some WASAPI devices; a counter that
 keeps increasing is not considered healthy.
 
@@ -92,3 +94,8 @@ keeps increasing is not considered healthy.
 
 Hosted CI proves compilation, deterministic media behavior, UDP loopback, and sanitizers. It does
 not prove real microphone, Bluetooth, LAN, or macOS hardware behavior.
+
+
+Ctrl-C and Ctrl-Break on Windows, and SIGINT/SIGTERM on macOS, request a cooperative stop. The peer
+normally exits within the worker poll interval and then destroys the native audio streams and UDP
+socket before returning.
