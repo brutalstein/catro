@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -23,7 +24,7 @@ namespace {
 
 class NullBuffer final : public std::streambuf {
 protected:
-    int overflow(int value) override {
+    int_type overflow(int_type value) override {
         return traits_type::not_eof(value);
     }
 };
