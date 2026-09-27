@@ -38,6 +38,11 @@ bool would_block(int code) noexcept {
     return code == WSAEWOULDBLOCK;
 }
 
+bool peer_unreachable(int code) noexcept {
+    return code == WSAECONNRESET || code == WSAECONNREFUSED ||
+           code == WSAEHOSTUNREACH || code == WSAENETUNREACH;
+}
+
 void close_socket(NativeSocket socket) noexcept {
     if (socket != kInvalidSocket) {
         closesocket(socket);
@@ -58,6 +63,10 @@ int last_socket_error() noexcept {
 
 bool would_block(int code) noexcept {
     return code == EAGAIN || code == EWOULDBLOCK;
+}
+
+bool peer_unreachable(int code) noexcept {
+    return code == ECONNREFUSED || code == EHOSTUNREACH || code == ENETUNREACH;
 }
 
 void close_socket(NativeSocket socket) noexcept {
@@ -190,7 +199,13 @@ UdpPeerSocket::SizeResult UdpPeerSocket::send(std::span<const std::byte> datagra
     if (sent < 0) {
 #endif
         const auto code = last_socket_error();
-        return UdpError{would_block(code) ? UdpErrorCode::would_block : UdpErrorCode::send_failed, code};
+        if (would_block(code)) {
+            return UdpError{UdpErrorCode::would_block, code};
+        }
+        if (peer_unreachable(code)) {
+            return UdpError{UdpErrorCode::peer_unreachable, code};
+        }
+        return UdpError{UdpErrorCode::send_failed, code};
     }
     return static_cast<std::size_t>(sent);
 }
@@ -237,6 +252,9 @@ UdpPeerSocket::SizeResult UdpPeerSocket::receive(std::span<std::byte> buffer) no
         if (code == WSAEMSGSIZE) {
             return UdpError{UdpErrorCode::datagram_too_large, code};
         }
+        if (peer_unreachable(code)) {
+            return UdpError{UdpErrorCode::peer_unreachable, code};
+        }
         return UdpError{UdpErrorCode::receive_failed, code};
     }
     return static_cast<std::size_t>(received);
@@ -252,6 +270,9 @@ UdpPeerSocket::SizeResult UdpPeerSocket::receive(std::span<std::byte> buffer) no
         const auto code = last_socket_error();
         if (would_block(code)) {
             return std::size_t{0};
+        }
+        if (peer_unreachable(code)) {
+            return UdpError{UdpErrorCode::peer_unreachable, code};
         }
         return UdpError{UdpErrorCode::receive_failed, code};
     }
