@@ -32,8 +32,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Prerequisite check failed.' }
 
         Write-Host '\n=== BUILD ==='
-        $buildArgs = @('-Configuration', $Configuration)
-        if ($SkipShell) { $buildArgs += '-SkipShell' }
+        $buildArgs = @{ Configuration = $Configuration }
+        if ($SkipShell) { $buildArgs.SkipShell = $true }
         & (Join-Path $PSScriptRoot 'build.ps1') @buildArgs
         if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 
