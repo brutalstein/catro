@@ -39,6 +39,9 @@ std::variant<std::size_t, PacketError> write_packet_header(std::uint32_t stream_
                                                                std::uint32_t timestamp,
                                                                std::size_t payload_size,
                                                                std::span<std::byte> output) noexcept {
+    if (stream_id == 0) {
+        return PacketError::invalid_stream_id;
+    }
     if (payload_size == 0) {
         return PacketError::empty_payload;
     }
@@ -87,6 +90,9 @@ std::variant<VoicePacketView, PacketError> parse_packet(std::span<const std::byt
     }
     if (get_u16(datagram, 10) != 0) {
         return PacketError::nonzero_reserved;
+    }
+    if (get_u32(datagram, 4) == 0) {
+        return PacketError::invalid_stream_id;
     }
     const auto payload = datagram.subspan(kVoiceHeaderBytes);
     if (payload.empty()) {
