@@ -40,9 +40,9 @@
                      Message="Live monitor plays the microphone back; speakers can cause loud feedback." />
 
             <StackPanel Orientation="Horizontal" Spacing="12">
-                <Button x:Name="StartButton" Content="Start" Style="{StaticResource AccentButtonStyle}"
+                <Button x:Name="StartButton" Content="Start" Style="{StaticResource CatroPrimaryButtonStyle}"
                         Click="OnStart" />
-                <Button x:Name="StopButton" Content="Stop" IsEnabled="False" Click="OnStop" />
+                <Button x:Name="StopButton" Content="Stop" IsEnabled="False" Click="OnStop" Style="{StaticResource CatroSecondaryButtonStyle}" />
                 <TextBlock x:Name="SessionStatus" Text="Stopped" VerticalAlignment="Center"
                            Style="{StaticResource BodyStrongTextBlockStyle}"
                            AutomationProperties.LiveSetting="Polite" />
@@ -60,12 +60,12 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <TextBlock Text="Input" Style="{StaticResource LabelText}" VerticalAlignment="Center" />
-                <ProgressBar x:Name="InputMeter" Grid.Column="1" Maximum="1" VerticalAlignment="Center"
+                <ProgressBar x:Name="InputMeter" Grid.Column="1" Maximum="1" VerticalAlignment="Center" Foreground="{ThemeResource CatroAccentBrush}"
                              AutomationProperties.Name="Input level" />
                 <TextBlock x:Name="InputLevel" Grid.Column="2" Text="—" Style="{StaticResource ValueText}" />
                 <TextBlock Grid.Row="1" Text="Output" Style="{StaticResource LabelText}"
                            VerticalAlignment="Center" />
-                <ProgressBar x:Name="OutputMeter" Grid.Row="1" Grid.Column="1" Maximum="1"
+                <ProgressBar x:Name="OutputMeter" Grid.Row="1" Grid.Column="1" Maximum="1" Foreground="{ThemeResource CatroAccentBrush}"
                              VerticalAlignment="Center" AutomationProperties.Name="Output level" />
                 <TextBlock x:Name="OutputLevel" Grid.Row="1" Grid.Column="2" Text="—"
                            Style="{StaticResource ValueText}" />
