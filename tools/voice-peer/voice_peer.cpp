@@ -478,7 +478,9 @@ int run_voice_peer(std::span<const std::string_view> arguments,
                     // roughly 20 ms of decoded PCM ahead of the 10 ms render callback without
                     // manufacturing early PLC or increasing first-audio latency.
                     for (int primed = 1; primed < kStartupRenderPrimeFrames; ++primed) {
-                        if (pipeline->statistics().jitter.buffered == 0) {
+                        const auto next_kind = pipeline->next_playout_kind();
+                        if (next_kind == voice::PlayoutKind::waiting ||
+                            next_kind == voice::PlayoutKind::plc) {
                             break;
                         }
                         const auto extra_before = Clock::now();
