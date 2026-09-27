@@ -5,6 +5,7 @@
 #include <catro/voice/sequence.hpp>
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -107,7 +108,7 @@ public:
     void reset() noexcept;
 
     [[nodiscard]] JitterStatistics statistics() const noexcept;
-    [[nodiscard]] bool started() const noexcept { return started_; }
+    [[nodiscard]] bool started() const noexcept { return started_.load(std::memory_order_relaxed); }
     [[nodiscard]] std::uint16_t target_packets() const noexcept { return target_packets_; }
 
 private:
@@ -135,11 +136,21 @@ private:
     std::uint32_t stream_id_ = 0;
     bool have_reference_ = false;
     std::int64_t highest_seen_ = 0;
-    bool started_ = false;
+    std::atomic_bool started_{false};
     std::int64_t next_sequence_ = 0;
     std::uint32_t next_timestamp_ = 0;
-    std::size_t buffered_ = 0;
-    JitterStatistics statistics_{};
+    std::atomic<std::size_t> buffered_{0};
+    std::atomic<std::uint64_t> accepted_{0};
+    std::atomic<std::uint64_t> duplicates_{0};
+    std::atomic<std::uint64_t> late_{0};
+    std::atomic<std::uint64_t> reordered_{0};
+    std::atomic<std::uint64_t> outside_window_{0};
+    std::atomic<std::uint64_t> wrong_stream_{0};
+    std::atomic<std::uint64_t> timestamp_mismatches_{0};
+    std::atomic<std::uint64_t> played_{0};
+    std::atomic<std::uint64_t> fec_{0};
+    std::atomic<std::uint64_t> plc_{0};
+    std::atomic<std::size_t> peak_buffered_{0};
 };
 
 } // namespace catro::voice
