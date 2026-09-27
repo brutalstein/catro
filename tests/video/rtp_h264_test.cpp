@@ -135,6 +135,79 @@ TEST_CASE("H264 RTP reassembler drops a frame with a sequence gap") {
     CHECK(result.frame.annex_b.empty());
 }
 
+TEST_CASE("H264 RTP sequence continuity spans frame boundaries and detects a fully lost frame") {
+    const auto access_unit = make_access_unit();
+    const H264RtpConfig config{0x11223344U, 98, 1200};
+
+    PacketCollector first;
+    const auto first_result = packetize_h264_annex_b(
+        access_unit, 1'000, 100, config, &first, &PacketCollector::collect);
+    REQUIRE(first_result);
+
+    std::array<std::byte, 4096> storage{};
+    H264RtpReassembler reassembler(storage, config);
+    H264ReassemblyResult result;
+    for (const auto& datagram : first.datagrams) {
+        result = reassembler.push(datagram);
+    }
+    REQUIRE(result.status == H264ReassemblyStatus::frame_ready);
+
+    // Pretend every packet with the next five RTP sequence numbers was lost.
+    PacketCollector after_loss;
+    const auto after_loss_result = packetize_h264_annex_b(
+        access_unit, 2'000,
+        static_cast<std::uint16_t>(first_result.next_sequence + 5U),
+        config, &after_loss, &PacketCollector::collect);
+    REQUIRE(after_loss_result);
+
+    for (const auto& datagram : after_loss.datagrams) {
+        result = reassembler.push(datagram);
+    }
+    CHECK(result.status == H264ReassemblyStatus::frame_dropped);
+    CHECK(result.error == H264ReassemblyError::sequence_gap);
+}
+
+TEST_CASE("H264 RTP sequence tracking handles uint16 wrap across frames") {
+    const auto access_unit = make_access_unit();
+    const H264RtpConfig config{0x99aabbccU, 99, 1200};
+
+    PacketCollector first;
+    const auto first_result = packetize_h264_annex_b(
+        access_unit, 10'000, 65'534, config, &first, &PacketCollector::collect);
+    REQUIRE(first_result);
+
+    std::array<std::byte, 4096> storage{};
+    H264RtpReassembler reassembler(storage, config);
+    H264ReassemblyResult result;
+    for (const auto& datagram : first.datagrams) {
+        result = reassembler.push(datagram);
+    }
+    REQUIRE(result.status == H264ReassemblyStatus::frame_ready);
+
+    PacketCollector second;
+    REQUIRE(packetize_h264_annex_b(
+        access_unit, 13'000, first_result.next_sequence,
+        config, &second, &PacketCollector::collect));
+    for (const auto& datagram : second.datagrams) {
+        result = reassembler.push(datagram);
+    }
+    CHECK(result.status == H264ReassemblyStatus::frame_ready);
+    CHECK(result.error == H264ReassemblyError::none);
+}
+
+TEST_CASE("H264 RTP reassembler rejects datagrams above its configured MTU") {
+    const H264RtpConfig config{0x01020304U, 100, 576};
+    std::array<std::byte, 4096> storage{};
+    H264RtpReassembler reassembler(storage, config);
+    std::array<std::byte, 577> oversized{};
+    oversized[0] = std::byte{0x80};
+    oversized[1] = std::byte{100};
+
+    const auto result = reassembler.push(oversized);
+    CHECK(result.status == H264ReassemblyStatus::packet_rejected);
+    CHECK(result.error == H264ReassemblyError::malformed_rtp);
+}
+
 TEST_CASE("H264 packetizer rejects bytes that are not Annex-B") {
     const std::array<std::byte, 4> bytes{
         std::byte{0x65}, std::byte{0x01}, std::byte{0x02}, std::byte{0x03}};
