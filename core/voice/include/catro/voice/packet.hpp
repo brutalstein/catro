@@ -19,6 +19,7 @@ enum class PacketError {
     unsupported_version,
     unsupported_flags,
     nonzero_reserved,
+    invalid_stream_id,
     empty_payload,
     payload_too_large,
 };
@@ -37,6 +38,8 @@ enum class PacketError {
         return "unsupported flags";
     case PacketError::nonzero_reserved:
         return "reserved field is nonzero";
+    case PacketError::invalid_stream_id:
+        return "stream id is zero";
     case PacketError::empty_payload:
         return "empty payload";
     case PacketError::payload_too_large:
