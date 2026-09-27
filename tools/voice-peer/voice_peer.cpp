@@ -282,6 +282,14 @@ int run_voice_peer(const VoicePeerOptions& options,
                    std::ostream& out,
                    std::ostream& error,
                    VoicePeerControl* control) {
+    if (control != nullptr) {
+        control->media_started.store(false, std::memory_order_relaxed);
+        control->sent_packets.store(0, std::memory_order_relaxed);
+        control->received_packets.store(0, std::memory_order_relaxed);
+        control->peer_unreachable_events.store(0, std::memory_order_relaxed);
+        control->last_exit_code.store(-1, std::memory_order_relaxed);
+    }
+
     if (options.bind.address.empty() || options.peer.address.empty() ||
         options.bind.port == 0 || options.peer.port == 0 || options.stream_id == 0 ||
         options.duration <= std::chrono::seconds::zero()) {
@@ -323,7 +331,13 @@ int run_voice_peer(const VoicePeerOptions& options,
     if (const auto failure =
             audio_session.start(audio_config, pipeline->capture(), pipeline->render())) {
         report_audio_error(error, *failure);
+        if (control != nullptr) {
+            control->last_exit_code.store(voice_peer_audio_failed, std::memory_order_release);
+        }
         return voice_peer_audio_failed;
+    }
+    if (control != nullptr) {
+        control->media_started.store(true, std::memory_order_release);
     }
 
     auto initial_audio = audio_session.statistics();
@@ -418,6 +432,9 @@ int run_voice_peer(const VoicePeerOptions& options,
                     }
                     if (failure->code == UdpErrorCode::peer_unreachable) {
                         ++network.peer_unreachable_events;
+                        if (control != nullptr) {
+                            control->peer_unreachable_events.fetch_add(1, std::memory_order_relaxed);
+                        }
                         continue;
                     }
                     network_failure = *failure;
@@ -432,6 +449,9 @@ int run_voice_peer(const VoicePeerOptions& options,
                 }
                 ++network.sent_packets;
                 network.sent_bytes += bytes;
+                if (control != nullptr) {
+                    control->sent_packets.fetch_add(1, std::memory_order_relaxed);
+                }
             }
             if (exit_code != voice_peer_ok) {
                 break;
@@ -471,6 +491,9 @@ int run_voice_peer(const VoicePeerOptions& options,
                         }
                         if (failure->code == UdpErrorCode::peer_unreachable) {
                             ++network.peer_unreachable_events;
+                            if (control != nullptr) {
+                                control->peer_unreachable_events.fetch_add(1, std::memory_order_relaxed);
+                            }
                             break;
                         }
                         network_failure = *failure;
@@ -484,6 +507,9 @@ int run_voice_peer(const VoicePeerOptions& options,
                     }
                     ++network.received_packets;
                     network.received_bytes += bytes;
+                    if (control != nullptr) {
+                        control->received_packets.fetch_add(1, std::memory_order_relaxed);
+                    }
                     if (discard_network_backlog) {
                         ++network.stale_network_packets_discarded;
                         continue;
@@ -645,6 +671,10 @@ int run_voice_peer(const VoicePeerOptions& options,
     }
     if (audio_failure) {
         report_audio_error(error, *audio_failure);
+    }
+    if (control != nullptr) {
+        control->media_started.store(false, std::memory_order_release);
+        control->last_exit_code.store(exit_code, std::memory_order_release);
     }
     return exit_code;
 }
