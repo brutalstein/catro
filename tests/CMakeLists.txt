@@ -65,6 +65,9 @@ if(WIN32 AND MSVC)
 
     catro_add_test(encode_check tools/encode_check_test.cpp)
     target_link_libraries(catro_encode_check_test PRIVATE catro_encode_check_cli)
+
+    catro_add_test(video_peer_cli tools/video_peer_test.cpp)
+    target_link_libraries(catro_video_peer_cli_test PRIVATE catro_video_peer_cli)
 endif()
 
 catro_add_test(audio_check tools/audio_check_test.cpp)
