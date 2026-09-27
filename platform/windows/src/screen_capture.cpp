@@ -13,6 +13,7 @@
 #include <winrt/Windows.Graphics.DirectX.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -21,6 +22,7 @@
 #include <mutex>
 #include <optional>
 #include <utility>
+#include <variant>
 
 namespace catro::platform::windows {
 namespace {
@@ -164,7 +166,8 @@ std::variant<capture::GraphicsCaptureItem, ScreenCaptureError> primary_display_i
         auto interop =
             winrt::get_activation_factory<capture::GraphicsCaptureItem, IGraphicsCaptureItemInterop>();
         const auto result = interop->CreateForMonitor(
-            monitor, winrt::guid_of<capture::GraphicsCaptureItem>(), winrt::put_abi(item));
+            monitor, __uuidof(ABI::Windows::Graphics::Capture::IGraphicsCaptureItem),
+            reinterpret_cast<void**>(winrt::put_abi(item)));
         if (FAILED(result) || !item) {
             return ScreenCaptureError{ScreenCaptureErrorCode::source_unavailable, result};
         }
