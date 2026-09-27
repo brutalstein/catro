@@ -43,6 +43,9 @@ struct RenderBridgeStatistics {
     std::uint64_t frames_enqueued = 0;
     // Queue-full attempts. A caller may retry the same frame; actual media drops are owned by the pipeline.
     std::uint64_t push_rejections = 0;
+    std::uint64_t resync_requests = 0;
+    std::uint64_t resync_events = 0;
+    std::uint64_t stale_samples_discarded = 0;
     std::size_t buffered_samples = 0;
     std::size_t peak_buffered_samples = 0;
 
@@ -95,6 +98,9 @@ public:
 
     // Voice worker only. Commits one whole 20 ms frame or rejects it if the bounded queue is full.
     [[nodiscard]] bool try_push(const PcmFrame& frame) noexcept;
+    // Voice worker only. Asks the render callback (the sole SPSC consumer) to discard queued stale
+    // PCM at its next callback. The worker never mutates the consumer-owned tail index.
+    void request_resync() noexcept;
     void on_render(std::span<float> frames) noexcept override;
 
     [[nodiscard]] RenderBridgeStatistics statistics() const noexcept;
@@ -113,6 +119,10 @@ private:
     std::atomic_bool primed_{false};
     std::atomic<std::uint64_t> frames_enqueued_{0};
     std::atomic<std::uint64_t> push_rejections_{0};
+    std::atomic<std::uint64_t> resync_requests_{0};
+    std::atomic<std::uint64_t> resync_events_{0};
+    std::atomic<std::uint64_t> stale_samples_discarded_{0};
+    std::atomic_bool resync_requested_{false};
     std::atomic<std::size_t> peak_buffered_samples_{0};
 };
 
