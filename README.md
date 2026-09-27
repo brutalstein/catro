@@ -6,9 +6,10 @@ a low-latency audio engine (microphone meter, test tone, live monitor), the tran
 Opus voice core (packet format, bounded jitter/loss handling, and real-time PCM bridges), and a
 native diagnostics shell on each platform (WinUI 3 on Windows, SwiftUI on macOS).
 
-There is no Electron, Qt, or browser runtime. The repository still contains no production voice
-transport, server, account, screen capture, streaming, or WebRTC code; the current voice work stops
-at the transport boundary until the development peer is validated.
+There is no Electron, Qt, or browser runtime. The repository still contains no production media
+transport, server, account, screen capture, streaming, or WebRTC code. A deliberately unencrypted,
+connected-UDP engineering peer exists for localhost/LAN voice validation only; it is not a public
+Internet transport or security boundary.
 
 ## Layout
 
@@ -24,6 +25,7 @@ at the transport boundary until the development peer is validated.
 | `tools/capability-probe` | Helper process that runs one passive probe and prints one fragment. |
 | `tools/capability-report` | Command-line capability report. |
 | `tools/audio-check` | Command-line audio session check (meter, tone, monitor). |
+| `tools/voice-peer` | Localhost/LAN engineering harness for Opus voice, bounded UDP, jitter/FEC/PLC, and live timing counters. |
 | `tests` | Core, reporting, policy, and platform tests. |
 
 ## Quick start
