@@ -407,8 +407,11 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         if (receives(options->mode) && playout_started) {
             wake_at = std::min(wake_at, next_playout);
         }
-        auto timeout = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::max(Clock::duration::zero(), wake_at - now));
+        const auto remaining = std::max(Clock::duration::zero(), wake_at - now);
+        auto timeout = std::chrono::duration_cast<std::chrono::milliseconds>(remaining);
+        if (remaining > Clock::duration::zero() && timeout == std::chrono::milliseconds::zero()) {
+            timeout = 1ms;
+        }
 
         if (receives(options->mode)) {
             const auto ready = socket->wait_readable(timeout);
