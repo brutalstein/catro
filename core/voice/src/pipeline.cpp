@@ -77,6 +77,11 @@ ReceiveResult VoicePipeline::receive(std::span<const std::byte> datagram) noexce
     return jitter_.push(std::get<VoicePacketView>(parsed));
 }
 
+std::optional<CodecError> VoicePipeline::resynchronize_receiver() noexcept {
+    jitter_.resynchronize();
+    return decoder_->reset();
+}
+
 std::variant<DecodeStep, CodecError> VoicePipeline::decode_next() noexcept {
     PlayoutFrame frame;
     const auto kind = jitter_.pull(frame);
