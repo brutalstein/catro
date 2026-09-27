@@ -33,6 +33,7 @@ using namespace std::chrono_literals;
 
 constexpr auto kEventPollSleep = 1ms;
 constexpr auto kOutputTimeout = 250ms;
+constexpr auto kWarmupOutputTimeout = 1000ms;
 constexpr std::uint32_t kFallbackOutputBytes = 2U * 1024U * 1024U;
 
 std::uint64_t pack_luid(LUID luid) noexcept {
@@ -450,7 +451,9 @@ struct WindowsH264HardwareEncoder::Impl {
         }
         ++stats_.frames_submitted;
 
-        if (const auto error = collect_output(output, kOutputTimeout)) {
+        const auto output_timeout =
+            stats_.frames_submitted == 1 ? kWarmupOutputTimeout : kOutputTimeout;
+        if (const auto error = collect_output(output, output_timeout)) {
             if (error->code == HardwareEncoderErrorCode::output_timeout) {
                 ++stats_.output_timeouts;
             } else {
@@ -575,7 +578,7 @@ struct WindowsH264HardwareEncoder::Impl {
         target.Format = DXGI_FORMAT_NV12;
         target.SampleDesc.Count = 1;
         target.Usage = D3D11_USAGE_DEFAULT;
-        target.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+        target.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_VIDEO_ENCODER;
 
         result = device_->CreateTexture2D(&target, nullptr, &nv12_);
         if (FAILED(result) || !nv12_) {
