@@ -119,7 +119,7 @@ TEST_CASE("capture overload resynchronizes instead of splicing stale and fresh P
     CHECK(out == four);
 }
 
-TEST_CASE("capture overflow flushes a partial pre-gap frame before fresh callbacks arrive") {
+TEST_CASE("capture overflow aligns the post-gap PCM to the 20 ms packet clock") {
     CaptureBridge bridge(2);
     std::array<float, 480> first{};
     std::array<float, 480> second{};
@@ -133,17 +133,25 @@ TEST_CASE("capture overflow flushes a partial pre-gap frame before fresh callbac
     bridge.on_captured(first);
     bridge.on_captured(second);
     bridge.on_captured(third);
-    bridge.on_captured(oversized); // only 608 samples remain, so this callback is rejected
+    bridge.on_captured(oversized); // 30 ms queued + 20 ms rejected = a 50 ms discontinuity
 
     PcmFrame out{};
     CHECK_FALSE(bridge.try_pop(out));
-    CHECK(bridge.statistics().resync_samples == 1440);
+    auto stats = bridge.statistics();
+    CHECK(stats.resync_samples == 1440);
+    CHECK(stats.timeline_frames_skipped == 3); // recovery aligns 50 ms loss to a 60 ms media-clock gap
 
-    bridge.on_captured(first);
+    bridge.on_captured(first);  // first 10 ms is discarded to complete the 60 ms aligned gap
+    CHECK_FALSE(bridge.try_pop(out));
     bridge.on_captured(second);
+    bridge.on_captured(third);
     REQUIRE(bridge.try_pop(out));
-    CHECK(std::ranges::all_of(std::span(out).first(480), [](float sample) { return sample == 1.0F; }));
-    CHECK(std::ranges::all_of(std::span(out).last(480), [](float sample) { return sample == 2.0F; }));
+    CHECK(std::ranges::all_of(std::span(out).first(480), [](float sample) { return sample == 2.0F; }));
+    CHECK(std::ranges::all_of(std::span(out).last(480), [](float sample) { return sample == 3.0F; }));
+
+    stats = bridge.statistics();
+    CHECK(stats.resync_samples == 1920);
+    CHECK(stats.timeline_frames_skipped == 3);
 }
 
 TEST_CASE("render bridge startup silence is not reported as an underrun") {
