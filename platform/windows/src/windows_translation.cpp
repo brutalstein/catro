@@ -43,8 +43,10 @@ public:
         std::set<NativeLuid> adapters;
         if (native.adapters) {
             for (const auto& adapter : *native.adapters) {
-                facts.gpus.push_back(gpu(adapter));
-                adapters.insert(adapter.luid);
+                // One entry per LUID; a repeated adapter would make the snapshot invalid.
+                if (adapters.insert(adapter.luid).second) {
+                    facts.gpus.push_back(gpu(adapter));
+                }
             }
         }
         if (native.displays) {
@@ -90,6 +92,10 @@ public:
         std::set<std::string> seen;
         for (const auto& encoder : native) {
             auto id = encoder_id(encoder);
+            if (!identifier(encoder.clsid) || !identifier(id.value)) {
+                absent(caps::IssueCode::not_reported);
+                continue;
+            }
             // A transform registered for several matching types is listed more than once.
             if (!seen.insert(id.value).second) {
                 continue;
@@ -114,7 +120,11 @@ public:
         std::set<std::string> seen;
         for (const auto& endpoint : native) {
             caps::AudioEndpointId id{"mmdevice:" + endpoint.id, caps::IdentityScope::persistent};
-            if (!identifier(id.value) || !seen.insert(id.value).second) {
+            if (!identifier(endpoint.id) || !identifier(id.value)) {
+                absent(caps::IssueCode::not_reported);
+                continue;
+            }
+            if (!seen.insert(id.value).second) {
                 continue;
             }
             auto name = bounded_text(endpoint.name);

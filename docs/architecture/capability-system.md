@@ -32,9 +32,9 @@ immutable CapabilitySnapshot (generation N) + ChangeSet against generation N-1
 
 - `core/capabilities` and `core/reporting` are portable C++20. They use only the standard library
   and never include a platform header.
-- A platform layer turns native results into core values at its edge. The macOS translation
-  (`platform/macos/src/macos_translation.*`) is plain C++ and builds on every platform, so its
-  rules are testable anywhere.
+- A platform layer turns native results into core values at its edge. Both translations
+  (`platform/windows/src/windows_translation.*`, `platform/macos/src/macos_translation.*`) are
+  plain C++ records and rules. They build on every platform, so their tests run anywhere.
 - The shells only arrange the view model. They never interpret evidence.
 
 ## Evidence

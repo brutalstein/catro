@@ -31,9 +31,11 @@ target_link_libraries(catro_diagnostics_test PRIVATE catro_diagnostics)
 catro_add_test(report_cli tools/report_cli_test.cpp)
 target_link_libraries(catro_report_cli_test PRIVATE catro_report_cli)
 
-# The macOS translation is plain C++, so its rules are tested on every platform.
+# The platform translations are plain C++, so their rules are tested on every platform.
 catro_add_test(macos_translation macos/translation_test.cpp)
 target_link_libraries(catro_macos_translation_test PRIVATE catro_macos_translation)
+catro_add_test(windows_translation windows/translation_test.cpp)
+target_link_libraries(catro_windows_translation_test PRIVATE catro_windows_translation)
 
 # Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.
 if(WIN32 AND MSVC)

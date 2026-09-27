@@ -78,7 +78,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>$(CatroCoreRoot)\apps\diagnostics\$(Configuration)\catro_diagnostics.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_platform_windows.lib;$(CatroCoreRoot)\core\reporting\$(Configuration)\catro_reporting.lib;$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib;powrprof.lib;user32.lib;wtsapi32.lib;dxgi.lib;d3d11.lib;d3d12.lib;dxcore.lib;shcore.lib;mfplat.lib;mfuuid.lib;ole32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(CatroCoreRoot)\apps\diagnostics\$(Configuration)\catro_diagnostics.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_platform_windows.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_windows_translation.lib;$(CatroCoreRoot)\core\reporting\$(Configuration)\catro_reporting.lib;$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib;powrprof.lib;user32.lib;wtsapi32.lib;dxgi.lib;d3d11.lib;d3d12.lib;dxcore.lib;shcore.lib;mfplat.lib;mfuuid.lib;ole32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)' == 'Debug'">
