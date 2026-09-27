@@ -29,7 +29,7 @@ struct CodecError {
     friend bool operator==(const CodecError&, const CodecError&) = default;
 };
 
-[[nodiscard]] std::string encode_local_state(const LocalState& state);
+[[nodiscard]] std::variant<std::string, CodecError> encode_local_state(const LocalState& state);
 [[nodiscard]] std::variant<LocalState, CodecError> decode_local_state(std::string_view payload);
 
 } // namespace catro::community
