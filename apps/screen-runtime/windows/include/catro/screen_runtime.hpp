@@ -39,6 +39,7 @@ struct ScreenShareError {
 
 struct ScreenShareConfig {
     platform::windows::CaptureSource source;
+    bool borderless = false;
     transport::UdpEndpoint bind;
     transport::UdpEndpoint peer;
 
