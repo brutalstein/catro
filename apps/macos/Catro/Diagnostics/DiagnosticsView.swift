@@ -5,6 +5,7 @@ import SwiftUI
 struct DiagnosticsView: View {
     @ObservedObject var model: DiagnosticsViewModel
     @State private var selection: String? = "overview"
+    @StateObject private var audio = AudioViewModel()
 
     private static let symbols: [String: String] = [
         "overview": "square.grid.2x2", "plan": "list.bullet.rectangle", "fallbacks": "arrow.triangle.branch",
@@ -19,6 +20,9 @@ struct DiagnosticsView: View {
                 ForEach(model.diagnostics?.sections ?? [], id: \.identifier) { section in
                     Label(section.title, systemImage: Self.symbols[section.identifier] ?? "doc.text")
                         .tag(section.identifier)
+                }
+                Section("Tools") {
+                    Label("Audio test", systemImage: "mic").tag("audio")
                 }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 210)
@@ -57,7 +61,9 @@ struct DiagnosticsView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if let diagnostics = model.diagnostics {
+        if selection == "audio" {
+            AudioView(audio: audio, inputs: model.audioDevices(input: true), outputs: model.audioDevices(input: false))
+        } else if let diagnostics = model.diagnostics {
             if selection == nil || selection == "overview" {
                 OverviewView(diagnostics: diagnostics)
             } else if let section = diagnostics.sections.first(where: { $0.identifier == selection }) {

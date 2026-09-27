@@ -75,6 +75,11 @@ final class DiagnosticsViewModel: ObservableObject {
         }
     }
 
+    // The system default first, then the active endpoints of the latest snapshot.
+    func audioDevices(input: Bool) -> [CatroAudioDevice] {
+        bridge.audioDevices(input: input)
+    }
+
     private func apply(_ diagnostics: CatroDiagnostics) {
         self.diagnostics = diagnostics
         let attention = diagnostics.probes.filter { $0.tone != .positive }.count

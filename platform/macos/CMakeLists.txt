@@ -10,6 +10,7 @@ if(NOT APPLE)
 endif()
 
 add_library(catro_platform_macos STATIC
+    src/audio_platform.mm
     src/capability_service.mm
     src/process_probe_executor.mm
     src/probe_dispatch.mm
@@ -24,10 +25,11 @@ add_library(Catro::Macos ALIAS catro_platform_macos)
 
 target_include_directories(catro_platform_macos PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(catro_platform_macos
-    PUBLIC Catro::Capabilities
+    PUBLIC Catro::Capabilities Catro::Audio
     PRIVATE catro_macos_translation Catro::Reporting
             "-framework Foundation" "-framework AppKit" "-framework CoreGraphics" "-framework CoreAudio"
             "-framework IOKit" "-framework Metal" "-framework VideoToolbox" "-framework CoreMedia"
+            "-framework AudioToolbox" "-framework AVFoundation"
 )
 target_compile_options(catro_platform_macos PRIVATE -fobjc-arc)
 catro_enable_warnings(catro_platform_macos)

@@ -8,11 +8,16 @@ add_executable(catro_macos_app MACOSX_BUNDLE
     Catro/CatroApp.swift
     Catro/Diagnostics/DiagnosticsView.swift
     Catro/Diagnostics/DiagnosticsViewModel.swift
+    Catro/Audio/AudioView.swift
+    Catro/Audio/AudioViewModel.swift
     Catro/Bridge/CatroCapabilitiesBridge.mm
+    Catro/Bridge/CatroAudioBridge.mm
     ${bridge_header})
 set_target_properties(catro_macos_app PROPERTIES
     OUTPUT_NAME "Catro"
     Swift_LANGUAGE_VERSION 5
+    # Adds NSMicrophoneUsageDescription; macOS refuses microphone access without it.
+    MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in
     MACOSX_BUNDLE_BUNDLE_NAME "Catro"
     MACOSX_BUNDLE_GUI_IDENTIFIER "dev.catro.Catro"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"

@@ -1,5 +1,6 @@
 #import "CatroCapabilitiesBridge.h"
 
+#include <AudioViewModel.hpp>
 #include <DiagnosticsViewModel.hpp>
 #include <catro/platform/macos/capability_service.hpp>
 
@@ -48,6 +49,11 @@ CatroFactState fact_state(catro::reporting::FactState value) {
 }
 
 } // namespace
+
+// Implemented in CatroAudioBridge.mm.
+@interface CatroAudioDevice ()
+- (instancetype)initWithChoice:(const app::AudioDeviceChoice&)choice;
+@end
 
 @implementation CatroDiagnosticsRow
 - (instancetype)initWithRow:(const app::DiagnosticsRow&)row {
@@ -184,6 +190,16 @@ CatroFactState fact_state(catro::reporting::FactState value) {
     }
     const auto kind = format == CatroExportFormatJSON ? app::ExportFormat::json : app::ExportFormat::human;
     return copy_string(app::export_report(*_report, kind));
+}
+
+- (NSArray<CatroAudioDevice*>*)audioDevicesForInput:(BOOL)input {
+    const auto direction = input ? catro::capabilities::AudioDirection::input : catro::capabilities::AudioDirection::output;
+    const auto choices = app::audio_choices(_report ? _report->snapshot : catro::capabilities::CapabilitySnapshot{}, direction);
+    NSMutableArray<CatroAudioDevice*>* devices = [NSMutableArray arrayWithCapacity:choices.size()];
+    for (const auto& choice : choices) {
+        [devices addObject:[[CatroAudioDevice alloc] initWithChoice:choice]];
+    }
+    return [devices copy];
 }
 
 @end

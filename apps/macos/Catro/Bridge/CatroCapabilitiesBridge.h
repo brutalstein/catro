@@ -74,6 +74,50 @@ __attribute__((objc_subclassing_restricted))
 - (instancetype)init NS_UNAVAILABLE;
 @end
 
+typedef NS_ENUM(NSInteger, CatroAudioMode) {
+    CatroAudioModeMeter,
+    CatroAudioModeTone,
+    CatroAudioModeMonitor,
+};
+
+__attribute__((objc_subclassing_restricted))
+@interface CatroAudioDevice : NSObject
+// Nil selects the system default device.
+@property(nonatomic, readonly, copy, nullable) NSString* identifier;
+@property(nonatomic, readonly, copy) NSString* label;
+- (instancetype)init NS_UNAVAILABLE;
+@end
+
+// One reading of the running session, copied from the shared audio view model.
+__attribute__((objc_subclassing_restricted))
+@interface CatroAudioSession : NSObject
+@property(nonatomic, readonly, copy) NSString* status;
+@property(nonatomic, readonly) CatroTone tone;
+@property(nonatomic, readonly) BOOL running;
+@property(nonatomic, readonly) BOOL hasInput;
+@property(nonatomic, readonly) double inputFraction;
+@property(nonatomic, readonly, copy) NSString* inputLevel;
+@property(nonatomic, readonly) BOOL hasOutput;
+@property(nonatomic, readonly) double outputFraction;
+@property(nonatomic, readonly, copy) NSString* outputLevel;
+@property(nonatomic, readonly, copy) NSArray<CatroDiagnosticsRow*>* rows;
+// The failure that stopped the session, e.g. "microphone access denied"; nil otherwise.
+@property(nonatomic, readonly, copy, nullable) NSString* failure;
+- (instancetype)init NS_UNAVAILABLE;
+@end
+
+// Owns the CoreAudio platform and the audio engine. Devices open only while a session runs.
+// Called on the main thread; -session reads atomics and never waits for the audio thread.
+__attribute__((objc_subclassing_restricted))
+@interface CatroAudioBridge : NSObject
+// Nil on success, otherwise the failure name, e.g. "device not found".
+- (nullable NSString*)startWithMode:(CatroAudioMode)mode
+                              input:(nullable NSString*)input
+                             output:(nullable NSString*)output NS_SWIFT_NAME(start(mode:input:output:));
+- (void)stop;
+- (CatroAudioSession*)session NS_SWIFT_NAME(session());
+@end
+
 // Owns the macOS capability service. Updates are planned off the main thread and delivered on
 // the main queue; the handler is never called after -stop returns.
 __attribute__((objc_subclassing_restricted))
@@ -88,6 +132,9 @@ __attribute__((objc_subclassing_restricted))
 
 // Nil until the first publication.
 - (nullable NSString*)exportReportWithFormat:(CatroExportFormat)format;
+
+// The system default first, then the active endpoints of the latest snapshot.
+- (NSArray<CatroAudioDevice*>*)audioDevicesForInput:(BOOL)input NS_SWIFT_NAME(audioDevices(input:));
 @end
 
 NS_ASSUME_NONNULL_END
