@@ -22,6 +22,30 @@ enum class RefreshReason {
     session,
 };
 
+// Whether a refresh for `reason` must re-run `family`. Kept families cannot be revalidated
+// against replaced ones, so encoders always accompany gpu_display: encoder and transfer facts
+// reference its GPUs and capture paths. Session changes alter display presence (headless,
+// remote) as well as runtime state.
+constexpr bool refreshes(RefreshReason reason, ProbeFamily family) noexcept {
+    switch (reason) {
+    case RefreshReason::startup:
+    case RefreshReason::diagnostics:
+        return true;
+    case RefreshReason::audio:
+        return family == ProbeFamily::audio;
+    case RefreshReason::display:
+        return family == ProbeFamily::gpu_display || family == ProbeFamily::encoders;
+    case RefreshReason::power:
+    case RefreshReason::thermal:
+    case RefreshReason::memory_pressure:
+        return family == ProbeFamily::runtime;
+    case RefreshReason::session:
+        return family == ProbeFamily::runtime || family == ProbeFamily::gpu_display ||
+               family == ProbeFamily::encoders;
+    }
+    return true;
+}
+
 struct ProbeSchedule {
     OperatingSystem operating_system = OperatingSystem::windows;
     std::uint64_t generation = 1;

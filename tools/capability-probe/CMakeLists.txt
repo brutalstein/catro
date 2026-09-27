@@ -1,0 +1,5 @@
+add_executable(catro_capability_probe main.cpp)
+set_target_properties(catro_capability_probe PROPERTIES OUTPUT_NAME "catro-capability-probe")
+target_link_libraries(catro_capability_probe PRIVATE Catro::Windows Catro::Reporting)
+target_compile_definitions(catro_capability_probe PRIVATE NOMINMAX UNICODE _UNICODE _WIN32_WINNT=0x0A00)
+catro_enable_warnings(catro_capability_probe)

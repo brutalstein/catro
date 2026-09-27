@@ -25,3 +25,23 @@ target_link_libraries(catro_reporting_test PRIVATE Catro::Reporting)
 catro_add_test(canonical_determinism capabilities/canonical_determinism_test.cpp)
 target_link_libraries(catro_canonical_determinism_test PRIVATE Catro::Reporting)
 target_compile_definitions(catro_canonical_determinism_test PRIVATE CATRO_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+
+# Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.
+if(WIN32 AND MSVC)
+    add_executable(catro_hanging_probe_helper helpers/hanging_probe_helper.cpp)
+    catro_enable_warnings(catro_hanging_probe_helper)
+
+    catro_add_test(windows_process windows/process_probe_executor_test.cpp)
+    target_link_libraries(catro_windows_process_test PRIVATE Catro::Windows)
+    target_compile_definitions(catro_windows_process_test PRIVATE
+        CATRO_HANGING_PROBE_HELPER="$<TARGET_FILE:catro_hanging_probe_helper>"
+    )
+    add_dependencies(catro_windows_process_test catro_hanging_probe_helper)
+
+    catro_add_test(windows_system_runtime windows/system_runtime_probe_test.cpp)
+    target_link_libraries(catro_windows_system_runtime_test PRIVATE Catro::Windows Catro::Reporting)
+    target_compile_definitions(catro_windows_system_runtime_test PRIVATE
+        CATRO_CAPABILITY_PROBE_HELPER="$<TARGET_FILE:catro_capability_probe>"
+    )
+    add_dependencies(catro_windows_system_runtime_test catro_capability_probe)
+endif()

@@ -18,6 +18,12 @@ catro_enable_reporting_dependency()
 add_subdirectory(core/capabilities)
 add_subdirectory(core/reporting)
 
+# Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.
+if(WIN32 AND MSVC)
+    add_subdirectory(platform/windows)
+    add_subdirectory(tools/capability-probe)
+endif()
+
 if(CATRO_BUILD_TESTS)
     enable_testing()
     catro_enable_test_dependencies()
