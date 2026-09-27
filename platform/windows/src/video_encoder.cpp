@@ -397,11 +397,12 @@ struct WindowsH264HardwareEncoder::Impl {
             return HardwareEncoderError{HardwareEncoderErrorCode::input_failed};
         }
 
-        const auto frame_luid = texture_adapter_luid(*source.texture.Get());
-        if (const auto* error = std::get_if<HardwareEncoderError>(&frame_luid)) {
-            return *error;
-        }
-        if (std::get<std::uint64_t>(frame_luid) != adapter_luid_) {
+        // start() already resolved and pinned the exact capture D3D11 device. Per-frame adapter
+        // enumeration would walk DXGI and query the LUID on every encode; pointer identity is both
+        // stricter (same device, not merely same adapter) and substantially cheaper on the hot path.
+        ComPtr<ID3D11Device> frame_device;
+        source.texture->GetDevice(&frame_device);
+        if (!frame_device || frame_device.Get() != device_.Get()) {
             return HardwareEncoderError{HardwareEncoderErrorCode::adapter_mismatch};
         }
 
@@ -760,7 +761,8 @@ struct WindowsH264HardwareEncoder::Impl {
     }
 
     std::variant<ComPtr<IMFSample>, HardwareEncoderError> make_output_sample() {
-        if ((output_stream_info_.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES) != 0) {
+        if ((output_stream_info_.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES) != 0 ||
+            (output_stream_info_.dwFlags & MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES) != 0) {
             return ComPtr<IMFSample>{};
         }
 
