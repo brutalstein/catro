@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Catro.VoiceView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Background="{ThemeResource CatroBackgroundBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="260" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Padding="30,24,24,24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <StackPanel Spacing="4">
+                    <TextBlock Text="VOICE" Style="{StaticResource CatroEyebrowTextStyle}" />
+                    <TextBlock Text="No room selected"
+                               FontSize="23"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource CatroTextBrush}"
+                               AutomationProperties.HeadingLevel="Level1" />
+                </StackPanel>
+                <Border HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Padding="10,5"
+                        CornerRadius="10"
+                        Background="{ThemeResource CatroSageSoftBrush}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Ellipse Width="7" Height="7" Fill="{ThemeResource CatroSageBrush}" />
+                        <TextBlock Text="MEDIA READY"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="{ThemeResource CatroSageBrush}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Grid Grid.Row="1">
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Width="420"
+                            Spacing="15">
+                    <Border Width="82"
+                            Height="82"
+                            CornerRadius="41"
+                            Background="{ThemeResource CatroAccentSoftBrush}"
+                            HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE720;"
+                                  FontSize="28"
+                                  Foreground="{ThemeResource CatroAccentBrush}"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="Pick a room to start talking."
+                               TextAlignment="Center"
+                               FontSize="22"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource CatroTextBrush}" />
+                    <TextBlock Text="Channel state, speaking indicators, mute, deafen, and the native voice session will connect to this surface."
+                               TextAlignment="Center"
+                               Style="{StaticResource CatroSecondaryTextStyle}" />
+                </StackPanel>
+            </Grid>
+
+            <Border Grid.Row="2"
+                    Style="{StaticResource CatroCardStyle}"
+                    Padding="12"
+                    HorizontalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Style="{StaticResource CatroSecondaryButtonStyle}"
+                            IsEnabled="False"
+                            AutomationProperties.Name="Mute microphone">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE720;" FontSize="14" />
+                            <TextBlock Text="Mute" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource CatroSecondaryButtonStyle}"
+                            IsEnabled="False"
+                            AutomationProperties.Name="Deafen">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE7F6;" FontSize="14" />
+                            <TextBlock Text="Deafen" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource CatroSecondaryButtonStyle}"
+                            IsEnabled="False"
+                            AutomationProperties.Name="Share screen">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE7F4;" FontSize="14" />
+                            <TextBlock Text="Share" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Border Grid.Column="1"
+                BorderBrush="{ThemeResource CatroStrokeBrush}"
+                BorderThickness="1,0,0,0"
+                Background="{ThemeResource CatroSurfaceBrush}"
+                Padding="18,24">
+            <StackPanel Spacing="16">
+                <Grid>
+                    <TextBlock Text="People"
+                               Style="{StaticResource CatroSectionTitleTextStyle}" />
+                    <TextBlock Text="0"
+                               HorizontalAlignment="Right"
+                               Style="{StaticResource CatroSecondaryTextStyle}" />
+                </Grid>
+                <Border Height="1" Background="{ThemeResource CatroStrokeBrush}" />
+                <StackPanel Spacing="8"
+                            Margin="0,24,0,0"
+                            HorizontalAlignment="Center">
+                    <Border Width="44" Height="44"
+                            CornerRadius="22"
+                            Background="{ThemeResource CatroSurfaceAltBrush}"
+                            HorizontalAlignment="Center">
+                        <FontIcon Glyph="&#xE716;"
+                                  FontSize="17"
+                                  Foreground="{ThemeResource CatroTextTertiaryBrush}"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="Room members"
+                               HorizontalAlignment="Center"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource CatroTextBrush}" />
+                    <TextBlock Text="Participants will appear here."
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               Style="{StaticResource CatroSecondaryTextStyle}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>
