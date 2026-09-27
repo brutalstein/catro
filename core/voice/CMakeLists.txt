@@ -2,6 +2,7 @@ catro_enable_voice_dependency()
 
 add_library(catro_voice STATIC
     src/codec.cpp
+    src/jitter.cpp
     src/packet.cpp
 )
 add_library(Catro::Voice ALIAS catro_voice)
