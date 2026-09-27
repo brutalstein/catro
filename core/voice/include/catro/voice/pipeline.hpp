@@ -6,6 +6,7 @@
 #include <catro/voice/packet.hpp>
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -99,14 +100,14 @@ private:
     std::uint16_t next_sequence_ = 0;
     std::uint32_t next_timestamp_ = 0;
 
-    std::uint64_t encoded_frames_ = 0;
-    std::uint64_t encode_errors_ = 0;
-    std::uint64_t outbound_bytes_ = 0;
-    std::uint64_t received_datagrams_ = 0;
-    std::uint64_t malformed_datagrams_ = 0;
-    std::uint64_t decoded_frames_ = 0;
-    std::uint64_t decode_errors_ = 0;
-    std::uint64_t render_queue_full_ = 0;
+    std::atomic<std::uint64_t> encoded_frames_{0};
+    std::atomic<std::uint64_t> encode_errors_{0};
+    std::atomic<std::uint64_t> outbound_bytes_{0};
+    std::atomic<std::uint64_t> received_datagrams_{0};
+    std::atomic<std::uint64_t> malformed_datagrams_{0};
+    std::atomic<std::uint64_t> decoded_frames_{0};
+    std::atomic<std::uint64_t> decode_errors_{0};
+    std::atomic<std::uint64_t> render_queue_full_{0};
 };
 
 } // namespace catro::voice
