@@ -6,7 +6,9 @@
 #include <utility>
 
 #if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <mstcpip.h>
@@ -152,7 +154,7 @@ UdpPeerSocket::OpenResult UdpPeerSocket::bind(const UdpEndpoint& local) noexcept
         return UdpError{UdpErrorCode::socket_create_failed, last_socket_error()};
     }
 
-    if (::bind(impl->socket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
+    if (::bind(impl->socket, reinterpret_cast<const sockaddr*>(&address), static_cast<int>(sizeof(address))) != 0) {
         return UdpError{UdpErrorCode::bind_failed, last_socket_error()};
     }
 
@@ -160,7 +162,7 @@ UdpPeerSocket::OpenResult UdpPeerSocket::bind(const UdpEndpoint& local) noexcept
     if (!result) {
         return UdpError{UdpErrorCode::socket_create_failed};
     }
-    return result;
+    return std::move(result);
 }
 
 UdpPeerSocket::StatusResult UdpPeerSocket::connect_peer(const UdpEndpoint& peer) noexcept {
