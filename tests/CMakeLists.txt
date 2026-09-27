@@ -128,6 +128,9 @@ if(WIN32 AND MSVC)
     catro_add_test(windows_video_decoder windows/video_decoder_test.cpp)
     target_link_libraries(catro_windows_video_decoder_test PRIVATE Catro::Windows)
 
+    catro_add_test(windows_video_presenter windows/video_presenter_test.cpp)
+    target_link_libraries(catro_windows_video_presenter_test PRIVATE Catro::Windows)
+
     catro_add_test(windows_audio windows/audio_platform_test.cpp)
     target_link_libraries(catro_windows_audio_test PRIVATE Catro::Windows)
     # Catch2 exits with 4 when every case skipped, as on runners without audio endpoints.
