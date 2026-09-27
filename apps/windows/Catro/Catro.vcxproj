@@ -74,7 +74,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/bigobj /permissive- /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>NOMINMAX;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(IntDir);$(IntDir)Diagnostics;$(IntDir)Audio;$(IntDir)Home;$(IntDir)Voice;$(IntDir)Share;$(IntDir)Settings;$(CatroRepoRoot)core\capabilities\include;$(CatroRepoRoot)core\audio\include;$(CatroRepoRoot)core\reporting\include;$(CatroRepoRoot)apps\diagnostics;$(CatroRepoRoot)apps\shell;$(CatroRepoRoot)platform\windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(IntDir);$(IntDir)Diagnostics;$(IntDir)Audio;$(IntDir)Server;$(IntDir)Settings;$(CatroRepoRoot)core\capabilities\include;$(CatroRepoRoot)core\audio\include;$(CatroRepoRoot)core\reporting\include;$(CatroRepoRoot)apps\diagnostics;$(CatroRepoRoot)apps\shell;$(CatroRepoRoot)platform\windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -108,14 +108,8 @@
     <ClInclude Include="Audio\AudioView.xaml.h">
       <DependentUpon>Audio\AudioView.xaml</DependentUpon>
     </ClInclude>
-    <ClInclude Include="Home\HomeView.xaml.h">
-      <DependentUpon>Home\HomeView.xaml</DependentUpon>
-    </ClInclude>
-    <ClInclude Include="Voice\VoiceView.xaml.h">
-      <DependentUpon>Voice\VoiceView.xaml</DependentUpon>
-    </ClInclude>
-    <ClInclude Include="Share\ShareView.xaml.h">
-      <DependentUpon>Share\ShareView.xaml</DependentUpon>
+    <ClInclude Include="Server\ServerView.xaml.h">
+      <DependentUpon>Server\ServerView.xaml</DependentUpon>
     </ClInclude>
     <ClInclude Include="Settings\SettingsView.xaml.h">
       <DependentUpon>Settings\SettingsView.xaml</DependentUpon>
@@ -126,9 +120,7 @@
     <Page Include="MainWindow.xaml" />
     <Page Include="Diagnostics\DiagnosticsView.xaml" />
     <Page Include="Audio\AudioView.xaml" />
-    <Page Include="Home\HomeView.xaml" />
-    <Page Include="Voice\VoiceView.xaml" />
-    <Page Include="Share\ShareView.xaml" />
+    <Page Include="Server\ServerView.xaml" />
     <Page Include="Settings\SettingsView.xaml" />
   </ItemGroup>
   <ItemGroup>
@@ -147,14 +139,8 @@
     <ClCompile Include="Audio\AudioView.xaml.cpp">
       <DependentUpon>Audio\AudioView.xaml</DependentUpon>
     </ClCompile>
-    <ClCompile Include="Home\HomeView.xaml.cpp">
-      <DependentUpon>Home\HomeView.xaml</DependentUpon>
-    </ClCompile>
-    <ClCompile Include="Voice\VoiceView.xaml.cpp">
-      <DependentUpon>Voice\VoiceView.xaml</DependentUpon>
-    </ClCompile>
-    <ClCompile Include="Share\ShareView.xaml.cpp">
-      <DependentUpon>Share\ShareView.xaml</DependentUpon>
+    <ClCompile Include="Server\ServerView.xaml.cpp">
+      <DependentUpon>Server\ServerView.xaml</DependentUpon>
     </ClCompile>
     <ClCompile Include="Settings\SettingsView.xaml.cpp">
       <DependentUpon>Settings\SettingsView.xaml</DependentUpon>
@@ -174,17 +160,9 @@
       <SubType>Code</SubType>
       <DependentUpon>Audio\AudioView.xaml</DependentUpon>
     </Midl>
-    <Midl Include="Home\HomeView.idl">
+    <Midl Include="Server\ServerView.idl">
       <SubType>Code</SubType>
-      <DependentUpon>Home\HomeView.xaml</DependentUpon>
-    </Midl>
-    <Midl Include="Voice\VoiceView.idl">
-      <SubType>Code</SubType>
-      <DependentUpon>Voice\VoiceView.xaml</DependentUpon>
-    </Midl>
-    <Midl Include="Share\ShareView.idl">
-      <SubType>Code</SubType>
-      <DependentUpon>Share\ShareView.xaml</DependentUpon>
+      <DependentUpon>Server\ServerView.xaml</DependentUpon>
     </Midl>
     <Midl Include="Settings\SettingsView.idl">
       <SubType>Code</SubType>
