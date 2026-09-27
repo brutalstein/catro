@@ -1,5 +1,6 @@
 #include <catro/screen_runtime.hpp>
 
+#include <catro/platform/windows/video_decoder.hpp>
 #include <catro/platform/windows/video_encoder.hpp>
 #include <catro/platform/windows/video_presenter.hpp>
 #include <catro/video/geometry.hpp>
@@ -12,6 +13,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <new>
 #include <optional>
@@ -28,23 +30,55 @@ using Microsoft::WRL::ComPtr;
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 using platform::windows::D3D11CompositionVideoPresenter;
+using platform::windows::DecodedGpuFrame;
 using platform::windows::EncodedAccessUnit;
 using platform::windows::GpuCaptureFrame;
+using platform::windows::H264DecoderConfig;
 using platform::windows::HardwareEncoderConfig;
 using platform::windows::VideoPresenterConfig;
 using platform::windows::WindowsGraphicsCapture;
+using platform::windows::WindowsH264D3D11Decoder;
 using platform::windows::WindowsH264HardwareEncoder;
 using transport::UdpError;
 using transport::UdpErrorCode;
 using transport::UdpPeerSocket;
 
 constexpr auto kFirstFrameTimeout = 3s;
+constexpr auto kRemoteInactiveTimeout = 2s;
+constexpr auto kReceiveWait = 20ms;
 constexpr std::uint32_t kPreviewMaxFps = 30;
+constexpr std::size_t kReceiveDatagramBytes = 1500;
+constexpr std::size_t kReceiveDrainLimit = 512;
 
-[[nodiscard]] bool valid_config(const ScreenShareConfig& config) noexcept {
-    return config.source.native_handle != 0 &&
-           !config.bind.address.empty() &&
+[[nodiscard]] bool valid_transport(
+    const ScreenTransportConfig& config) noexcept {
+    return !config.bind.address.empty() &&
            !config.peer.address.empty() &&
+           config.bind.port != 0 &&
+           config.peer.port != 0 &&
+           config.payload_type >= 96 &&
+           config.payload_type <= 127 &&
+           config.mtu_bytes >= 576 &&
+           config.mtu_bytes <= 1400 &&
+           config.max_access_unit_bytes >= 262'144 &&
+           config.max_access_unit_bytes <= 16U * 1024U * 1024U;
+}
+
+[[nodiscard]] ScreenTransportConfig transport_from_share(
+    const ScreenShareConfig& config) {
+    return ScreenTransportConfig{
+        .bind = config.bind,
+        .peer = config.peer,
+        .payload_type = config.payload_type,
+        .mtu_bytes = config.mtu_bytes,
+        .max_access_unit_bytes = config.max_access_unit_bytes,
+    };
+}
+
+[[nodiscard]] bool valid_share(
+    const ScreenShareConfig& config) noexcept {
+    return config.source.native_handle != 0 &&
+           valid_transport(transport_from_share(config)) &&
            config.max_width >= 320 &&
            config.max_width <= 7680 &&
            config.max_height >= 180 &&
@@ -53,13 +87,7 @@ constexpr std::uint32_t kPreviewMaxFps = 30;
            config.fps <= 120 &&
            config.bitrate >= 128'000 &&
            config.bitrate <= 50'000'000 &&
-           config.ssrc != 0 &&
-           config.payload_type >= 96 &&
-           config.payload_type <= 127 &&
-           config.mtu_bytes >= 576 &&
-           config.mtu_bytes <= 1400 &&
-           config.max_access_unit_bytes >= 262'144 &&
-           config.max_access_unit_bytes <= 16U * 1024U * 1024U;
+           config.ssrc != 0;
 }
 
 [[nodiscard]] std::chrono::nanoseconds frame_period(
@@ -80,6 +108,20 @@ constexpr std::uint32_t kPreviewMaxFps = 30;
             now - started)
             .count();
     return video::rtp_timestamp_90khz(elapsed_100ns);
+}
+
+[[nodiscard]] std::int64_t extended_rtp_to_100ns(
+    std::uint64_t timestamp_90khz) noexcept {
+    // 10,000,000 / 90,000 = 1000 / 9. The receiver extends the 32-bit RTP clock before this
+    // conversion, so a long-lived room can cross the ~13-hour RTP wrap without PTS moving back.
+    return static_cast<std::int64_t>(
+        (timestamp_90khz * 1000ULL + 4ULL) / 9ULL);
+}
+
+[[nodiscard]] std::int64_t steady_now_ns() noexcept {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               Clock::now().time_since_epoch())
+        .count();
 }
 
 [[nodiscard]] std::string udp_error_text(const UdpError& error) {
@@ -132,8 +174,7 @@ struct WindowsScreenShareRuntime::Impl {
                 context.soft_drop = true;
                 return false;
             }
-            if (failure.code ==
-                UdpErrorCode::peer_unreachable) {
+            if (failure.code == UdpErrorCode::peer_unreachable) {
                 context.owner->peer_unreachable_events_.fetch_add(
                     1, std::memory_order_relaxed);
                 context.soft_drop = true;
@@ -145,31 +186,76 @@ struct WindowsScreenShareRuntime::Impl {
         }
     };
 
+    [[nodiscard]] std::optional<ScreenShareError> start_listening(
+        const ScreenTransportConfig& config) {
+        std::scoped_lock lifecycle_lock(lifecycle_mutex_);
+
+        if (!valid_transport(config)) {
+            return ScreenShareError{
+                ScreenShareErrorCode::invalid_config,
+                "invalid screen transport configuration"};
+        }
+
+        if (socket_ &&
+            receiver_worker_.joinable() &&
+            !stop_requested_.load(std::memory_order_acquire) &&
+            transport_config_ &&
+            *transport_config_ == config) {
+            return std::nullopt;
+        }
+
+        stop_locked();
+        return start_transport_locked(config);
+    }
+
     [[nodiscard]] std::optional<ScreenShareError> start(
         const ScreenShareConfig& config) {
-        stop();
+        std::scoped_lock lifecycle_lock(lifecycle_mutex_);
 
-        if (!valid_config(config)) {
+        if (!valid_share(config)) {
             return ScreenShareError{
                 ScreenShareErrorCode::invalid_config,
                 "invalid screen-share configuration"};
         }
 
-        reset_statistics();
+        const auto transport = transport_from_share(config);
+        const bool reuse_transport =
+            socket_ &&
+            receiver_worker_.joinable() &&
+            !stop_requested_.load(std::memory_order_acquire) &&
+            transport_config_ &&
+            *transport_config_ == transport &&
+            state_.load(std::memory_order_acquire) ==
+                ScreenShareState::listening;
+
+        if (!reuse_transport) {
+            stop_locked();
+            if (const auto failure =
+                    start_transport_locked(transport)) {
+                return failure;
+            }
+        }
+
+        stop_sharing_locked();
+        reset_local_statistics();
         {
             std::scoped_lock lock(metadata_mutex_);
             source_title_ = config.source.title;
             error_.clear();
         }
+
+        share_stop_requested_.store(
+            false, std::memory_order_release);
         state_.store(
             ScreenShareState::starting,
             std::memory_order_release);
-        stop_requested_.store(false, std::memory_order_release);
 
         try {
-            worker_ = std::thread(
-                [this, config] { run(config); });
+            sender_worker_ = std::thread(
+                [this, config] { run_sender(config); });
         } catch (...) {
+            share_stop_requested_.store(
+                true, std::memory_order_release);
             state_.store(
                 ScreenShareState::failed,
                 std::memory_order_release);
@@ -180,37 +266,142 @@ struct WindowsScreenShareRuntime::Impl {
         return std::nullopt;
     }
 
-    void stop() noexcept {
-        stop_requested_.store(true, std::memory_order_release);
-        stop_cv_.notify_all();
-        if (worker_.joinable()) {
-            worker_.join();
+    [[nodiscard]] std::optional<ScreenShareError>
+    start_transport_locked(const ScreenTransportConfig& config) {
+        reset_all_statistics();
+        {
+            std::scoped_lock lock(metadata_mutex_);
+            source_title_.clear();
+            error_.clear();
         }
+
+        auto opened = UdpPeerSocket::bind(config.bind);
+        if (const auto* error = std::get_if<UdpError>(&opened)) {
+            state_.store(
+                ScreenShareState::failed,
+                std::memory_order_release);
+            return ScreenShareError{
+                ScreenShareErrorCode::network_failed,
+                udp_error_text(*error),
+                error->native_code};
+        }
+
+        socket_ = std::move(
+            std::get<std::unique_ptr<UdpPeerSocket>>(opened));
+        const auto connected = socket_->connect_peer(config.peer);
+        if (const auto* error =
+                std::get_if<UdpError>(&connected)) {
+            socket_.reset();
+            state_.store(
+                ScreenShareState::failed,
+                std::memory_order_release);
+            return ScreenShareError{
+                ScreenShareErrorCode::network_failed,
+                udp_error_text(*error),
+                error->native_code};
+        }
+
+        transport_config_ = config;
+        stop_requested_.store(false, std::memory_order_release);
+        share_stop_requested_.store(true, std::memory_order_release);
+        state_.store(
+            ScreenShareState::listening,
+            std::memory_order_release);
+
+        try {
+            receiver_worker_ = std::thread(
+                [this, config] { run_receiver(config); });
+        } catch (...) {
+            socket_.reset();
+            transport_config_.reset();
+            state_.store(
+                ScreenShareState::failed,
+                std::memory_order_release);
+            return ScreenShareError{
+                ScreenShareErrorCode::worker_start_failed,
+                "screen receive worker could not start"};
+        }
+        return std::nullopt;
+    }
+
+    void stop_sharing() noexcept {
+        std::scoped_lock lifecycle_lock(lifecycle_mutex_);
+        stop_sharing_locked();
+    }
+
+    void stop_sharing_locked() noexcept {
+        share_stop_requested_.store(
+            true, std::memory_order_release);
+        stop_cv_.notify_all();
+
+        if (sender_worker_.joinable()) {
+            sender_worker_.join();
+        }
+
         {
             std::scoped_lock lock(preview_mutex_);
             preview_swap_chain_.Reset();
         }
+
+        const auto state =
+            state_.load(std::memory_order_acquire);
+        if (socket_ &&
+            receiver_worker_.joinable() &&
+            state != ScreenShareState::failed) {
+            state_.store(
+                ScreenShareState::listening,
+                std::memory_order_release);
+        }
+    }
+
+    void stop() noexcept {
+        std::scoped_lock lifecycle_lock(lifecycle_mutex_);
+        stop_locked();
+    }
+
+    void stop_locked() noexcept {
+        share_stop_requested_.store(
+            true, std::memory_order_release);
+        stop_requested_.store(
+            true, std::memory_order_release);
+        stop_cv_.notify_all();
+
+        if (sender_worker_.joinable()) {
+            sender_worker_.join();
+        }
+        if (receiver_worker_.joinable()) {
+            receiver_worker_.join();
+        }
+
+        socket_.reset();
+        transport_config_.reset();
+
+        {
+            std::scoped_lock lock(preview_mutex_);
+            preview_swap_chain_.Reset();
+            remote_swap_chain_.Reset();
+        }
+
         state_.store(
             ScreenShareState::idle,
             std::memory_order_release);
-        stop_requested_.store(false, std::memory_order_release);
+        share_stop_requested_.store(
+            true, std::memory_order_release);
+        stop_requested_.store(
+            false, std::memory_order_release);
     }
 
-    void run(ScreenShareConfig config) noexcept {
-        auto opened = UdpPeerSocket::bind(config.bind);
-        if (const auto* error = std::get_if<UdpError>(&opened)) {
-            fail(ScreenShareErrorCode::network_failed,
-                 udp_error_text(*error));
-            return;
-        }
-        auto socket =
-            std::move(
-                std::get<std::unique_ptr<UdpPeerSocket>>(opened));
-        const auto connected = socket->connect_peer(config.peer);
-        if (const auto* error =
-                std::get_if<UdpError>(&connected)) {
-            fail(ScreenShareErrorCode::network_failed,
-                 udp_error_text(*error));
+    [[nodiscard]] bool should_stop_sender() const noexcept {
+        return stop_requested_.load(std::memory_order_acquire) ||
+               share_stop_requested_.load(std::memory_order_acquire);
+    }
+
+    void run_sender(ScreenShareConfig config) noexcept {
+        auto* const socket = socket_.get();
+        if (socket == nullptr) {
+            fail_share(
+                ScreenShareErrorCode::network_failed,
+                "video transport is not running");
             return;
         }
 
@@ -219,7 +410,7 @@ struct WindowsScreenShareRuntime::Impl {
         capture_config.borderless = config.borderless;
         if (const auto error =
                 capture.start_source(config.source, capture_config)) {
-            fail(
+            fail_share(
                 ScreenShareErrorCode::capture_failed,
                 platform::windows::name(error->code),
                 error->native_code);
@@ -229,13 +420,12 @@ struct WindowsScreenShareRuntime::Impl {
         GpuCaptureFrame first;
         const auto first_deadline =
             Clock::now() + kFirstFrameTimeout;
-        while (!stop_requested_.load(
-                   std::memory_order_acquire) &&
+        while (!should_stop_sender() &&
                Clock::now() < first_deadline &&
                !capture.wait_for_latest(first, 50ms)) {
             const auto stats = capture.statistics();
             if (stats.error) {
-                fail(
+                fail_share(
                     ScreenShareErrorCode::capture_failed,
                     platform::windows::name(
                         stats.error->code),
@@ -244,12 +434,13 @@ struct WindowsScreenShareRuntime::Impl {
                 return;
             }
         }
-        if (stop_requested_.load(std::memory_order_acquire)) {
+
+        if (should_stop_sender()) {
             capture.stop();
             return;
         }
         if (!first.texture) {
-            fail(
+            fail_share(
                 ScreenShareErrorCode::capture_failed,
                 "capture source did not produce a GPU frame");
             capture.stop();
@@ -270,8 +461,8 @@ struct WindowsScreenShareRuntime::Impl {
             access_unit.bytes.reserve(
                 config.max_access_unit_bytes);
         } catch (...) {
-            fail(
-                ScreenShareErrorCode::encoder_failed,
+            fail_share(
+                ScreenShareErrorCode::memory_failed,
                 "encoded access-unit reserve failed");
             capture.stop();
             return;
@@ -296,7 +487,7 @@ struct WindowsScreenShareRuntime::Impl {
                 config.max_width,
                 config.max_height);
             if (!extent) {
-                fail(
+                fail_share(
                     ScreenShareErrorCode::encoder_failed,
                     "source cannot be fitted to an even H.264 size");
                 return false;
@@ -322,7 +513,7 @@ struct WindowsScreenShareRuntime::Impl {
                     encoder.start(
                         encoder_config,
                         *frame.texture.Get())) {
-                fail(
+                fail_share(
                     ScreenShareErrorCode::encoder_failed,
                     platform::windows::name(error->code),
                     error->native_code);
@@ -374,13 +565,14 @@ struct WindowsScreenShareRuntime::Impl {
                 if (const auto error =
                         presenter.present(
                             *frame.texture.Get())) {
-                    fail(
+                    fail_share(
                         ScreenShareErrorCode::preview_failed,
                         platform::windows::name(error->code),
                         error->native_code);
                     return false;
                 }
-                const auto preview_stats = presenter.statistics();
+                const auto preview_stats =
+                    presenter.statistics();
                 preview_frames_.store(
                     preview_stats.frames_presented,
                     std::memory_order_relaxed);
@@ -392,7 +584,7 @@ struct WindowsScreenShareRuntime::Impl {
 
             if (const auto error =
                     encoder.encode(frame, access_unit)) {
-                fail(
+                fail_share(
                     ScreenShareErrorCode::encoder_failed,
                     platform::windows::name(error->code),
                     error->native_code);
@@ -402,7 +594,7 @@ struct WindowsScreenShareRuntime::Impl {
                 1, std::memory_order_relaxed);
 
             PacketContext context{
-                .socket = socket.get(),
+                .socket = socket,
                 .owner = this,
             };
             const auto packetized =
@@ -418,7 +610,7 @@ struct WindowsScreenShareRuntime::Impl {
 
             if (!packetized) {
                 if (context.fatal_error) {
-                    fail(
+                    fail_session(
                         ScreenShareErrorCode::network_failed,
                         udp_error_text(
                             *context.fatal_error));
@@ -429,7 +621,7 @@ struct WindowsScreenShareRuntime::Impl {
                         1, std::memory_order_relaxed);
                     return true;
                 }
-                fail(
+                fail_share(
                     ScreenShareErrorCode::packetization_failed,
                     "H.264 access unit is not RFC 6184 packetizable");
                 return false;
@@ -444,6 +636,7 @@ struct WindowsScreenShareRuntime::Impl {
             capture.stop();
             return;
         }
+
         state_.store(
             ScreenShareState::sharing,
             std::memory_order_release);
@@ -458,23 +651,21 @@ struct WindowsScreenShareRuntime::Impl {
         const auto period = frame_period(config.fps);
         auto next_frame = Clock::now() + period;
 
-        while (!stop_requested_.load(
-                   std::memory_order_acquire)) {
+        while (!should_stop_sender()) {
             {
                 std::unique_lock stop_lock(stop_mutex_);
                 stop_cv_.wait_until(
                     stop_lock,
                     next_frame,
                     [this] {
-                        return stop_requested_.load(
-                            std::memory_order_acquire);
+                        return should_stop_sender();
                     });
             }
-            if (stop_requested_.load(std::memory_order_acquire)) {
+            if (should_stop_sender()) {
                 break;
             }
 
-            auto now = Clock::now();
+            const auto now = Clock::now();
             do {
                 next_frame += period;
             } while (next_frame <= now);
@@ -488,7 +679,7 @@ struct WindowsScreenShareRuntime::Impl {
 
             const auto capture_stats = capture.statistics();
             if (capture_stats.error) {
-                fail(
+                fail_share(
                     ScreenShareErrorCode::capture_failed,
                     platform::windows::name(
                         capture_stats.error->code),
@@ -526,20 +717,284 @@ struct WindowsScreenShareRuntime::Impl {
         capture.stop();
         presenter.reset();
 
+        {
+            std::scoped_lock lock(preview_mutex_);
+            preview_swap_chain_.Reset();
+        }
+
         if (state_.load(std::memory_order_acquire) !=
                 ScreenShareState::failed &&
             !stop_requested_.load(
                 std::memory_order_acquire)) {
             state_.store(
-                ScreenShareState::idle,
+                ScreenShareState::listening,
                 std::memory_order_release);
         }
     }
 
-    void fail(
+    void run_receiver(ScreenTransportConfig config) noexcept {
+        auto* const socket = socket_.get();
+        if (socket == nullptr) {
+            fail_session(
+                ScreenShareErrorCode::network_failed,
+                "video transport is not running");
+            return;
+        }
+
+        std::unique_ptr<std::byte[]> frame_memory(
+            new (std::nothrow)
+                std::byte[config.max_access_unit_bytes]);
+        if (!frame_memory) {
+            fail_session(
+                ScreenShareErrorCode::memory_failed,
+                "remote H.264 frame buffer allocation failed");
+            return;
+        }
+
+        const video::H264RtpConfig receive_rtp{
+            0,
+            config.payload_type,
+            config.mtu_bytes,
+        };
+        video::H264RtpReassembler reassembler(
+            std::span<std::byte>(
+                frame_memory.get(),
+                config.max_access_unit_bytes),
+            receive_rtp);
+
+        WindowsH264D3D11Decoder decoder;
+        H264DecoderConfig decoder_config;
+        decoder_config.max_access_unit_bytes =
+            config.max_access_unit_bytes;
+        if (const auto failure =
+                decoder.start(decoder_config)) {
+            remote_decode_failures_.fetch_add(
+                1, std::memory_order_relaxed);
+            fail_session(
+                ScreenShareErrorCode::decoder_failed,
+                platform::windows::name(failure->code),
+                failure->native_code);
+            return;
+        }
+
+        D3D11CompositionVideoPresenter presenter(
+            VideoPresenterConfig{
+                .max_width = 1920,
+                .max_height = 1080,
+                .frame_rate = 60,
+            });
+
+        std::array<std::byte, kReceiveDatagramBytes>
+            datagram{};
+        bool have_timestamp = false;
+        std::uint32_t last_timestamp = 0;
+        std::uint64_t extended_timestamp = 0;
+
+        while (!stop_requested_.load(
+                   std::memory_order_acquire)) {
+            const auto ready =
+                socket->wait_readable(
+                    std::chrono::duration_cast<
+                        std::chrono::microseconds>(
+                        kReceiveWait));
+            if (const auto* failure =
+                    std::get_if<UdpError>(&ready)) {
+                if (failure->code ==
+                    UdpErrorCode::peer_unreachable) {
+                    peer_unreachable_events_.fetch_add(
+                        1, std::memory_order_relaxed);
+                    continue;
+                }
+                fail_session(
+                    ScreenShareErrorCode::network_failed,
+                    udp_error_text(*failure));
+                break;
+            }
+
+            if (!std::get<bool>(ready)) {
+                continue;
+            }
+
+            bool fatal = false;
+            for (std::size_t drained = 0;
+                 drained < kReceiveDrainLimit;
+                 ++drained) {
+                const auto received =
+                    socket->receive(datagram);
+                if (const auto* failure =
+                        std::get_if<UdpError>(&received)) {
+                    if (failure->code ==
+                        UdpErrorCode::peer_unreachable) {
+                        peer_unreachable_events_.fetch_add(
+                            1, std::memory_order_relaxed);
+                        break;
+                    }
+                    if (failure->code ==
+                        UdpErrorCode::datagram_too_large) {
+                        remote_packet_rejects_.fetch_add(
+                            1, std::memory_order_relaxed);
+                        continue;
+                    }
+                    fail_session(
+                        ScreenShareErrorCode::network_failed,
+                        udp_error_text(*failure));
+                    fatal = true;
+                    break;
+                }
+
+                const auto size =
+                    std::get<std::size_t>(received);
+                if (size == 0) {
+                    break;
+                }
+
+                remote_packets_.fetch_add(
+                    1, std::memory_order_relaxed);
+                remote_wire_bytes_.fetch_add(
+                    size, std::memory_order_relaxed);
+
+                const auto reassembled =
+                    reassembler.push(
+                        std::span<const std::byte>(
+                            datagram.data(), size));
+                if (reassembled.status ==
+                    video::H264ReassemblyStatus::packet_rejected) {
+                    remote_packet_rejects_.fetch_add(
+                        1, std::memory_order_relaxed);
+                    continue;
+                }
+                if (reassembled.status ==
+                    video::H264ReassemblyStatus::frame_dropped) {
+                    remote_frame_drops_.fetch_add(
+                        1, std::memory_order_relaxed);
+                    continue;
+                }
+                if (reassembled.status !=
+                    video::H264ReassemblyStatus::frame_ready) {
+                    continue;
+                }
+
+                remote_frames_.fetch_add(
+                    1, std::memory_order_relaxed);
+
+                const auto timestamp =
+                    reassembled.frame.timestamp_90khz;
+                if (!have_timestamp) {
+                    extended_timestamp = timestamp;
+                    last_timestamp = timestamp;
+                    have_timestamp = true;
+                } else {
+                    extended_timestamp +=
+                        static_cast<std::uint32_t>(
+                            timestamp - last_timestamp);
+                    last_timestamp = timestamp;
+                }
+
+                DecodedGpuFrame decoded;
+                if (const auto failure =
+                        decoder.decode(
+                            reassembled.frame.annex_b,
+                            extended_rtp_to_100ns(
+                                extended_timestamp),
+                            decoded)) {
+                    remote_decode_failures_.fetch_add(
+                        1, std::memory_order_relaxed);
+                    fail_session(
+                        ScreenShareErrorCode::decoder_failed,
+                        platform::windows::name(
+                            failure->code),
+                        failure->native_code);
+                    fatal = true;
+                    break;
+                }
+
+                if (!decoded.texture) {
+                    continue;
+                }
+
+                remote_decoded_.fetch_add(
+                    1, std::memory_order_relaxed);
+                remote_width_.store(
+                    decoded.width, std::memory_order_relaxed);
+                remote_height_.store(
+                    decoded.height, std::memory_order_relaxed);
+
+                if (const auto failure =
+                        presenter.present(
+                            *decoded.texture.Get(),
+                            decoded.subresource_index)) {
+                    fail_session(
+                        ScreenShareErrorCode::remote_present_failed,
+                        platform::windows::name(
+                            failure->code),
+                        failure->native_code);
+                    fatal = true;
+                    break;
+                }
+
+                const auto presentation =
+                    presenter.statistics();
+                remote_presented_.store(
+                    presentation.frames_presented,
+                    std::memory_order_relaxed);
+                remote_present_drops_.store(
+                    presentation.frames_dropped,
+                    std::memory_order_relaxed);
+                remote_last_frame_ns_.store(
+                    steady_now_ns(),
+                    std::memory_order_release);
+
+                const auto swap_chain =
+                    presenter.swap_chain();
+                if (swap_chain) {
+                    std::scoped_lock lock(preview_mutex_);
+                    if (remote_swap_chain_.Get() !=
+                        swap_chain.Get()) {
+                        remote_swap_chain_ = swap_chain;
+                    }
+                }
+            }
+
+            if (fatal) {
+                break;
+            }
+        }
+
+        decoder.stop();
+        presenter.reset();
+    }
+
+    void fail_share(
         ScreenShareErrorCode,
         std::string message,
         std::int64_t native_code = 0) noexcept {
+        set_error(std::move(message), native_code);
+        share_stop_requested_.store(
+            true, std::memory_order_release);
+        stop_cv_.notify_all();
+        state_.store(
+            ScreenShareState::failed,
+            std::memory_order_release);
+    }
+
+    void fail_session(
+        ScreenShareErrorCode,
+        std::string message,
+        std::int64_t native_code = 0) noexcept {
+        set_error(std::move(message), native_code);
+        share_stop_requested_.store(
+            true, std::memory_order_release);
+        stop_requested_.store(
+            true, std::memory_order_release);
+        stop_cv_.notify_all();
+        state_.store(
+            ScreenShareState::failed,
+            std::memory_order_release);
+    }
+
+    void set_error(
+        std::string message,
+        std::int64_t native_code) noexcept {
         try {
             if (native_code != 0) {
                 message += " (native ";
@@ -550,12 +1005,9 @@ struct WindowsScreenShareRuntime::Impl {
             error_ = std::move(message);
         } catch (...) {
         }
-        state_.store(
-            ScreenShareState::failed,
-            std::memory_order_release);
     }
 
-    void reset_statistics() noexcept {
+    void reset_local_statistics() noexcept {
         source_width_.store(0, std::memory_order_relaxed);
         source_height_.store(0, std::memory_order_relaxed);
         encoded_width_.store(0, std::memory_order_relaxed);
@@ -566,7 +1018,6 @@ struct WindowsScreenShareRuntime::Impl {
         packets_sent_.store(0, std::memory_order_relaxed);
         wire_bytes_.store(0, std::memory_order_relaxed);
         backpressure_events_.store(0, std::memory_order_relaxed);
-        peer_unreachable_events_.store(0, std::memory_order_relaxed);
         preview_frames_.store(0, std::memory_order_relaxed);
         preview_drops_.store(0, std::memory_order_relaxed);
         encoder_input_failures_.store(0, std::memory_order_relaxed);
@@ -575,14 +1026,38 @@ struct WindowsScreenShareRuntime::Impl {
         capture_contention_drops_.store(0, std::memory_order_relaxed);
     }
 
+    void reset_remote_statistics() noexcept {
+        remote_width_.store(0, std::memory_order_relaxed);
+        remote_height_.store(0, std::memory_order_relaxed);
+        remote_packets_.store(0, std::memory_order_relaxed);
+        remote_wire_bytes_.store(0, std::memory_order_relaxed);
+        remote_frames_.store(0, std::memory_order_relaxed);
+        remote_decoded_.store(0, std::memory_order_relaxed);
+        remote_presented_.store(0, std::memory_order_relaxed);
+        remote_frame_drops_.store(0, std::memory_order_relaxed);
+        remote_packet_rejects_.store(0, std::memory_order_relaxed);
+        remote_decode_failures_.store(0, std::memory_order_relaxed);
+        remote_present_drops_.store(0, std::memory_order_relaxed);
+        remote_last_frame_ns_.store(0, std::memory_order_relaxed);
+    }
+
+    void reset_all_statistics() noexcept {
+        reset_local_statistics();
+        reset_remote_statistics();
+        peer_unreachable_events_.store(
+            0, std::memory_order_relaxed);
+    }
+
     ScreenShareSnapshot snapshot() const {
         ScreenShareSnapshot result;
-        result.state = state_.load(std::memory_order_acquire);
+        result.state =
+            state_.load(std::memory_order_acquire);
         {
             std::scoped_lock lock(metadata_mutex_);
             result.source_title = source_title_;
             result.error = error_;
         }
+
         result.source_width =
             source_width_.load(std::memory_order_relaxed);
         result.source_height =
@@ -621,24 +1096,76 @@ struct WindowsScreenShareRuntime::Impl {
         result.capture_contention_drops =
             capture_contention_drops_.load(
                 std::memory_order_relaxed);
+
+        result.remote_width =
+            remote_width_.load(std::memory_order_relaxed);
+        result.remote_height =
+            remote_height_.load(std::memory_order_relaxed);
+        result.remote_packets =
+            remote_packets_.load(std::memory_order_relaxed);
+        result.remote_wire_bytes =
+            remote_wire_bytes_.load(std::memory_order_relaxed);
+        result.remote_frames =
+            remote_frames_.load(std::memory_order_relaxed);
+        result.remote_decoded =
+            remote_decoded_.load(std::memory_order_relaxed);
+        result.remote_presented =
+            remote_presented_.load(std::memory_order_relaxed);
+        result.remote_frame_drops =
+            remote_frame_drops_.load(std::memory_order_relaxed);
+        result.remote_packet_rejects =
+            remote_packet_rejects_.load(std::memory_order_relaxed);
+        result.remote_decode_failures =
+            remote_decode_failures_.load(std::memory_order_relaxed);
+        result.remote_present_drops =
+            remote_present_drops_.load(std::memory_order_relaxed);
+
+        const auto last =
+            remote_last_frame_ns_.load(
+                std::memory_order_acquire);
+        if (last != 0) {
+            const auto age =
+                steady_now_ns() - last;
+            result.remote_active =
+                age >= 0 &&
+                age < std::chrono::duration_cast<
+                          std::chrono::nanoseconds>(
+                          kRemoteInactiveTimeout)
+                          .count();
+        }
         return result;
     }
 
-    ComPtr<IDXGISwapChain1> preview_swap_chain() const {
+    ComPtr<IDXGISwapChain1>
+    preview_swap_chain() const {
         std::scoped_lock lock(preview_mutex_);
         return preview_swap_chain_;
     }
 
+    ComPtr<IDXGISwapChain1>
+    remote_swap_chain() const {
+        std::scoped_lock lock(preview_mutex_);
+        return remote_swap_chain_;
+    }
+
+    mutable std::mutex lifecycle_mutex_;
     mutable std::mutex metadata_mutex_;
     mutable std::mutex preview_mutex_;
-    std::string source_title_;
-    std::string error_;
-    ComPtr<IDXGISwapChain1> preview_swap_chain_;
-
-    std::thread worker_;
     std::mutex stop_mutex_;
     std::condition_variable stop_cv_;
+
+    std::string source_title_;
+    std::string error_;
+
+    std::unique_ptr<UdpPeerSocket> socket_;
+    std::optional<ScreenTransportConfig> transport_config_;
+    ComPtr<IDXGISwapChain1> preview_swap_chain_;
+    ComPtr<IDXGISwapChain1> remote_swap_chain_;
+
+    std::thread sender_worker_;
+    std::thread receiver_worker_;
     std::atomic_bool stop_requested_{false};
+    std::atomic_bool share_stop_requested_{true};
     std::atomic<ScreenShareState> state_{
         ScreenShareState::idle};
 
@@ -659,6 +1186,19 @@ struct WindowsScreenShareRuntime::Impl {
     std::atomic<std::uint64_t> encoder_output_failures_{0};
     std::atomic<std::uint64_t> encoder_timeouts_{0};
     std::atomic<std::uint64_t> capture_contention_drops_{0};
+
+    std::atomic<std::uint32_t> remote_width_{0};
+    std::atomic<std::uint32_t> remote_height_{0};
+    std::atomic<std::uint64_t> remote_packets_{0};
+    std::atomic<std::uint64_t> remote_wire_bytes_{0};
+    std::atomic<std::uint64_t> remote_frames_{0};
+    std::atomic<std::uint64_t> remote_decoded_{0};
+    std::atomic<std::uint64_t> remote_presented_{0};
+    std::atomic<std::uint64_t> remote_frame_drops_{0};
+    std::atomic<std::uint64_t> remote_packet_rejects_{0};
+    std::atomic<std::uint64_t> remote_decode_failures_{0};
+    std::atomic<std::uint64_t> remote_present_drops_{0};
+    std::atomic<std::int64_t> remote_last_frame_ns_{0};
 };
 
 WindowsScreenShareRuntime::WindowsScreenShareRuntime()
@@ -669,9 +1209,19 @@ WindowsScreenShareRuntime::~WindowsScreenShareRuntime() {
 }
 
 std::optional<ScreenShareError>
+WindowsScreenShareRuntime::start_listening(
+    const ScreenTransportConfig& config) {
+    return impl_->start_listening(config);
+}
+
+std::optional<ScreenShareError>
 WindowsScreenShareRuntime::start(
     const ScreenShareConfig& config) {
     return impl_->start(config);
+}
+
+void WindowsScreenShareRuntime::stop_sharing() noexcept {
+    impl_->stop_sharing();
 }
 
 void WindowsScreenShareRuntime::stop() noexcept {
@@ -683,9 +1233,14 @@ WindowsScreenShareRuntime::snapshot() const {
     return impl_->snapshot();
 }
 
-Microsoft::WRL::ComPtr<IDXGISwapChain1>
+ComPtr<IDXGISwapChain1>
 WindowsScreenShareRuntime::preview_swap_chain() const {
     return impl_->preview_swap_chain();
+}
+
+ComPtr<IDXGISwapChain1>
+WindowsScreenShareRuntime::remote_swap_chain() const {
+    return impl_->remote_swap_chain();
 }
 
 } // namespace catro::screen
