@@ -49,12 +49,12 @@ VoiceWorkerPriority::VoiceWorkerPriority() noexcept
     DWORD task_index = 0;
     impl_->task = AvSetMmThreadCharacteristicsW(L"Audio", &task_index);
     if (impl_->task != nullptr) {
-        (void)AvSetMmThreadPriority(impl_->task, AVRT_PRIORITY_HIGH);
+        (void)AvSetMmThreadPriority(impl_->task, AVRT_PRIORITY_NORMAL);
         impl_->active = true;
     }
 #elif defined(__APPLE__)
     impl_->previous = pthread_get_qos_class_np(pthread_self(), &impl_->previous_relative);
-    if (pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0) == 0) {
+    if (pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0) == 0) {
         impl_->active = true;
     }
 #endif
