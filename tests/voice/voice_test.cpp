@@ -23,8 +23,8 @@ TEST_CASE("voice packet v1 round trips in network byte order") {
     REQUIRE(std::holds_alternative<std::size_t>(written));
     CHECK(std::get<std::size_t>(written) == bytes.size());
 
-    CHECK(bytes[0] == std::byte{'C'});
-    CHECK(bytes[1] == std::byte{'V'});
+    CHECK(bytes[0] == std::byte{static_cast<unsigned char>('C')});
+    CHECK(bytes[1] == std::byte{static_cast<unsigned char>('V')});
     CHECK(bytes[2] == std::byte{1});
     CHECK(bytes[4] == std::byte{0x01});
     CHECK(bytes[5] == std::byte{0x02});
@@ -49,7 +49,7 @@ TEST_CASE("voice packet parser rejects malformed datagrams") {
         serialize_packet(VoicePacketView{.stream_id = 1, .sequence = 2, .timestamp = 3, .payload = payload}, bytes)));
 
     auto broken = bytes;
-    broken[0] = std::byte{'X'};
+    broken[0] = std::byte{static_cast<unsigned char>('X')};
     CHECK(std::get<PacketError>(parse_packet(broken)) == PacketError::bad_magic);
 
     broken = bytes;
