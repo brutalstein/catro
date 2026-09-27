@@ -5,8 +5,8 @@
 #include <catro/audio/engine.hpp>
 #include <catro/capabilities/ids.hpp>
 
-#include <chrono>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <ostream>
@@ -33,6 +33,12 @@ struct VoicePeerOptions {
     std::int32_t bitrate = 48'000;
 };
 
+struct VoicePeerControl {
+    std::atomic_bool stop_requested{false};
+    std::atomic_bool muted{false};
+    std::atomic_bool deafened{false};
+};
+
 enum VoicePeerExit : int {
     voice_peer_ok = 0,
     voice_peer_invalid_arguments = 2,
@@ -55,10 +61,16 @@ inline constexpr std::string_view kVoicePeerUsage =
 [[nodiscard]] std::optional<VoicePeerOptions> parse_voice_peer_arguments(
     std::span<const std::string_view> arguments);
 
+[[nodiscard]] int run_voice_peer(const VoicePeerOptions& options,
+                                 audio::AudioPlatform& platform,
+                                 std::ostream& out,
+                                 std::ostream& error,
+                                 VoicePeerControl* control = nullptr);
+
 [[nodiscard]] int run_voice_peer(std::span<const std::string_view> arguments,
                                  audio::AudioPlatform& platform,
                                  std::ostream& out,
                                  std::ostream& error,
-                                 const std::atomic_bool* stop_requested = nullptr);
+                                 VoicePeerControl* control = nullptr);
 
 } // namespace catro::tools
