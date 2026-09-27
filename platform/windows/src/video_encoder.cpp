@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <codecapi.h>
+#include <icodecapi.h>
 #include <d3d11_1.h>
 #include <dxgi1_6.h>
 #include <mfapi.h>
