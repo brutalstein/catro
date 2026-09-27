@@ -181,6 +181,19 @@ void RenderBridge::on_render(std::span<float> frames) noexcept {
     if (frames.empty()) {
         return;
     }
+
+    if (deafened_.load(std::memory_order_acquire)) {
+        // Keep the consumer clock moving while making the callback output provably silent.
+        // This avoids queue growth and means undeafen resumes at live audio rather than replaying
+        // a stale backlog. No allocation, lock, or platform call occurs on the audio callback.
+        const auto discarded = ring_.discard(frames.size());
+        (void)discarded;
+        std::fill(frames.begin(), frames.end(), 0.0F);
+        silence_samples_rendered_.fetch_add(frames.size(), std::memory_order_relaxed);
+        deafened_samples_rendered_.fetch_add(frames.size(), std::memory_order_relaxed);
+        return;
+    }
+
     const auto read = ring_.read(frames);
     pcm_samples_rendered_.fetch_add(read, std::memory_order_relaxed);
     if (read < frames.size()) {
@@ -208,6 +221,7 @@ RenderBridgeStatistics RenderBridge::statistics() const noexcept {
         .resync_requests = resync_requests_.load(std::memory_order_relaxed),
         .resync_events = resync_events_.load(std::memory_order_relaxed),
         .stale_samples_discarded = stale_samples_discarded_.load(std::memory_order_relaxed),
+        .deafened_samples_rendered = deafened_samples_rendered_.load(std::memory_order_relaxed),
         .buffered_samples = ring_.size(),
         .peak_buffered_samples = peak_buffered_samples_.load(std::memory_order_relaxed),
     };
