@@ -36,6 +36,7 @@ private:
     void StopScreenShare();
     void UpdateScreenShareUi();
     void DetachPreviewSwapChain() noexcept;
+    void DetachRemoteSwapChain() noexcept;
     [[nodiscard]] std::uint32_t LocalStreamId() const noexcept;
 
     catro::app::ShellState state_;
@@ -45,6 +46,7 @@ private:
     std::unique_ptr<catro::screen::WindowsScreenShareRuntime> screen_runtime_;
     Microsoft::UI::Dispatching::DispatcherQueueTimer screen_timer_{nullptr};
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> attached_preview_swap_chain_;
+    ::Microsoft::WRL::ComPtr<IDXGISwapChain1> attached_remote_swap_chain_;
     bool share_dialog_open_ = false;
     bool muted_ = false;
     bool deafened_ = false;
