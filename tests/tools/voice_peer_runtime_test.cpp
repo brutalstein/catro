@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -50,9 +51,17 @@ public:
     std::optional<audio::AudioError> start() override {
         thread_ = std::thread([this] {
             std::array<float, 480> frames{};
-            std::fill(frames.begin(), frames.end(), sample_);
+            double phase = 0.0;
+            constexpr double step = 2.0 * std::numbers::pi * 300.0 / 48000.0;
             auto next = std::chrono::steady_clock::now();
             while (!stop_.load(std::memory_order_acquire)) {
+                for (auto& frame : frames) {
+                    frame = sample_ * static_cast<float>(std::sin(phase));
+                    phase += step;
+                    if (phase >= 2.0 * std::numbers::pi) {
+                        phase -= 2.0 * std::numbers::pi;
+                    }
+                }
                 sink_.on_captured(frames);
                 next += 10ms;
                 std::this_thread::sleep_until(next);
