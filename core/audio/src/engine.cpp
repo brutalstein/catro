@@ -138,9 +138,13 @@ std::optional<AudioError> AudioEngine::start(const SessionConfig& config) {
         const std::scoped_lock lock(mutex_);
         active = session_.get();
     }
-    for (auto* stream : {active->capture.get(), active->render.get()}) {
+
+    // In monitor mode start render first. Bluetooth and other outputs can take noticeably longer
+    // to leave their prepared state; starting capture first lets the monitor ring fill and report
+    // a burst of artificial startup overruns before playback is even running.
+    const auto start_stream = [&](AudioStream* stream) -> std::optional<AudioError> {
         if (stream == nullptr) {
-            continue;
+            return std::nullopt;
         }
         {
             const std::scoped_lock lock(mutex_);
@@ -148,7 +152,21 @@ std::optional<AudioError> AudioEngine::start(const SessionConfig& config) {
                 return error_;
             }
         }
-        if (const auto error = stream->start()) {
+        return stream->start();
+    };
+
+    if (config.mode == SessionMode::monitor) {
+        if (const auto error = start_stream(active->render.get())) {
+            return abort_start(*error);
+        }
+        if (const auto error = start_stream(active->capture.get())) {
+            return abort_start(*error);
+        }
+    } else {
+        if (const auto error = start_stream(active->capture.get())) {
+            return abort_start(*error);
+        }
+        if (const auto error = start_stream(active->render.get())) {
             return abort_start(*error);
         }
     }
