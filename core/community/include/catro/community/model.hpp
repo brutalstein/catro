@@ -109,6 +109,7 @@ enum class StateErrorCode : std::uint8_t {
     invalid_identifier,
     invalid_name,
     invalid_owner,
+    permission_denied,
     duplicate_identifier,
     invalid_channel_layout,
     too_many_channels,
@@ -165,7 +166,7 @@ struct Invite {
 [[nodiscard]] std::optional<StateError> validate(const LocalState& state);
 [[nodiscard]] std::variant<LocalState, StateError> bootstrap_personal_state(EntropySource& entropy);
 [[nodiscard]] std::variant<Invite, StateError> create_invite(
-    EntropySource& entropy, ServerId server_id, UserId creator_id);
+    EntropySource& entropy, const PersonalServer& server, UserId creator_id);
 
 [[nodiscard]] constexpr bool can_manage_server(ServerRole role) noexcept {
     return role == ServerRole::owner;
