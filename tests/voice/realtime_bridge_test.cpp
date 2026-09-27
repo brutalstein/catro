@@ -214,6 +214,41 @@ TEST_CASE("render queue is bounded and drops complete decoded frames when full")
     CHECK(out == two);
 }
 
+TEST_CASE("render resync discards stale backlog only on the consumer callback") {
+    RenderBridge bridge(2);
+    PcmFrame one{};
+    PcmFrame two{};
+    PcmFrame three{};
+    std::fill(one.begin(), one.end(), 1.0F);
+    std::fill(two.begin(), two.end(), 2.0F);
+    std::fill(three.begin(), three.end(), 3.0F);
+
+    REQUIRE(bridge.try_push(one));
+    REQUIRE(bridge.try_push(two));
+    REQUIRE_FALSE(bridge.try_push(three));
+    bridge.request_resync();
+
+    auto before = bridge.statistics();
+    CHECK(before.buffered_samples == 2U * kFrameSamples);
+    CHECK(before.resync_requests == 1);
+    CHECK(before.resync_events == 0);
+
+    std::array<float, 480> output{};
+    std::fill(output.begin(), output.end(), 99.0F);
+    bridge.on_render(output);
+    CHECK(std::ranges::all_of(output, [](float sample) { return sample == 0.0F; }));
+
+    auto after = bridge.statistics();
+    CHECK(after.buffered_samples == 0);
+    CHECK(after.resync_events == 1);
+    CHECK(after.stale_samples_discarded == 2U * kFrameSamples);
+    CHECK(after.underrun_callbacks == 1);
+
+    REQUIRE(bridge.try_push(three));
+    bridge.on_render(output);
+    CHECK(std::ranges::all_of(output, [](float sample) { return sample == 3.0F; }));
+}
+
 TEST_CASE("real-time bridge memory is clamped to a small fixed ceiling") {
     CaptureBridge minimum(0);
     RenderBridge maximum(1'000'000);
