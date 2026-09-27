@@ -25,6 +25,7 @@ add_subdirectory(core/reporting)
 if(WIN32 AND MSVC)
     add_subdirectory(platform/windows)
     add_subdirectory(tools/capability-probe)
+    add_subdirectory(apps/windows)
 endif()
 add_subdirectory(tools/capability-report)
 
