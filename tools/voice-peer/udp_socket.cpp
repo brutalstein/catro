@@ -170,7 +170,7 @@ UdpPeerSocket::StatusResult UdpPeerSocket::connect_peer(const UdpEndpoint& peer)
     if (!make_address(peer, address, false)) {
         return UdpError{UdpErrorCode::invalid_endpoint};
     }
-    if (::connect(impl_->socket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
+    if (::connect(impl_->socket, reinterpret_cast<const sockaddr*>(&address), static_cast<int>(sizeof(address))) != 0) {
         return UdpError{UdpErrorCode::connect_failed, last_socket_error()};
     }
     return std::monostate{};
@@ -229,17 +229,36 @@ UdpPeerSocket::SizeResult UdpPeerSocket::receive(std::span<std::byte> buffer) no
     const auto size = static_cast<int>(std::min<std::size_t>(buffer.size(), static_cast<std::size_t>(INT_MAX)));
     const auto received = ::recv(impl_->socket, reinterpret_cast<char*>(buffer.data()), size, 0);
     if (received == SOCKET_ERROR) {
+        const auto code = last_socket_error();
+        if (would_block(code)) {
+            return std::size_t{0};
+        }
+        if (code == WSAEMSGSIZE) {
+            return UdpError{UdpErrorCode::datagram_too_large, code};
+        }
+        return UdpError{UdpErrorCode::receive_failed, code};
+    }
+    return static_cast<std::size_t>(received);
 #else
-    const auto received = ::recv(impl_->socket, buffer.data(), buffer.size(), 0);
+    iovec io{};
+    io.iov_base = buffer.data();
+    io.iov_len = buffer.size();
+    msghdr message{};
+    message.msg_iov = &io;
+    message.msg_iovlen = 1;
+    const auto received = ::recvmsg(impl_->socket, &message, 0);
     if (received < 0) {
-#endif
         const auto code = last_socket_error();
         if (would_block(code)) {
             return std::size_t{0};
         }
         return UdpError{UdpErrorCode::receive_failed, code};
     }
+    if ((message.msg_flags & MSG_TRUNC) != 0) {
+        return UdpError{UdpErrorCode::datagram_too_large};
+    }
     return static_cast<std::size_t>(received);
+#endif
 }
 
 std::uint16_t UdpPeerSocket::local_port() const noexcept {
