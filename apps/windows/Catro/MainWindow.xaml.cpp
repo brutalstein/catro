@@ -12,17 +12,14 @@
 #include "Voice/VoiceView.xaml.h"
 
 #include <array>
+#include <winrt/Windows.UI.h>
 
 namespace winrt::Catro::implementation {
 namespace {
 
 namespace xaml = Microsoft::UI::Xaml;
 namespace controls = Microsoft::UI::Xaml::Controls;
-namespace media = Microsoft::UI::Xaml::Media;
-
-media::Brush brush(wchar_t const* key) {
-    return xaml::Application::Current().Resources().Lookup(box_value(key)).as<media::Brush>();
-}
+namespace automation = Microsoft::UI::Xaml::Automation;
 
 } // namespace
 
@@ -108,25 +105,25 @@ void MainWindow::Activate(catro::app::ShellSection section) {
 }
 
 void MainWindow::UpdateNavigationVisuals(catro::app::ShellSection section) {
-    const auto selected_background = brush(L"CatroAccentSoftBrush");
-    const auto selected_foreground = brush(L"CatroAccentBrush");
-    const auto idle_background = brush(L"CatroRailBrush");
-    const auto idle_foreground = brush(L"CatroTextSecondaryBrush");
-
+    struct Item {
+        catro::app::ShellSection section;
+        controls::Button button;
+        controls::Border selection;
+    };
     const std::array items{
-        std::pair{catro::app::ShellSection::home, HomeButton()},
-        std::pair{catro::app::ShellSection::voice, VoiceButton()},
-        std::pair{catro::app::ShellSection::share, ShareButton()},
-        std::pair{catro::app::ShellSection::diagnostics, DiagnosticsButton()},
-        std::pair{catro::app::ShellSection::settings, SettingsButton()},
+        Item{catro::app::ShellSection::home, HomeButton(), HomeSelection()},
+        Item{catro::app::ShellSection::voice, VoiceButton(), VoiceSelection()},
+        Item{catro::app::ShellSection::share, ShareButton(), ShareSelection()},
+        Item{catro::app::ShellSection::diagnostics, DiagnosticsButton(), DiagnosticsSelection()},
+        Item{catro::app::ShellSection::settings, SettingsButton(), SettingsSelection()},
     };
 
-    for (const auto& [candidate, button] : items) {
-        const bool active = candidate == section;
-        button.Background(active ? selected_background : idle_background);
-        button.Foreground(active ? selected_foreground : idle_foreground);
+    for (const auto& item : items) {
+        const bool active = item.section == section;
+        item.selection.Visibility(active ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
+        item.button.Opacity(active ? 1.0 : 0.78);
         automation::AutomationProperties::SetHelpText(
-            button, active ? L"Current section" : L"Open section");
+            item.button, active ? L"Current section" : L"Open section");
     }
 }
 
