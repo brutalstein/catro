@@ -2,6 +2,7 @@
 
 #include <catro/platform/windows/screen_capture.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
