@@ -62,6 +62,11 @@ target_link_libraries(catro_audio_view_model_test PRIVATE catro_diagnostics)
 
 catro_add_test(shell_model apps/shell_model_test.cpp)
 target_link_libraries(catro_shell_model_test PRIVATE Catro::Shell)
+
+catro_add_test(ui_policy apps/ui_policy_test.cpp)
+target_compile_definitions(catro_ui_policy_test PRIVATE
+    CATRO_WINDOWS_XAML_DIR="${CMAKE_SOURCE_DIR}/apps/windows/Catro"
+)
 catro_add_test(report_cli tools/report_cli_test.cpp)
 target_link_libraries(catro_report_cli_test PRIVATE catro_report_cli)
 
