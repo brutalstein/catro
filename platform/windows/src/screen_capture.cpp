@@ -122,16 +122,15 @@ std::variant<DeviceBundle, ScreenCaptureError> create_capture_device() {
 
     UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
     ComPtr<ID3D11Device> device;
-    D3D_FEATURE_LEVEL created_level{};
     const std::array levels{D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
     auto result = D3D11CreateDevice(
         chosen.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flags,
         levels.data(), static_cast<UINT>(levels.size()), D3D11_SDK_VERSION,
-        &device, &created_level, nullptr);
+        &device, nullptr, nullptr);
     if (result == E_INVALIDARG) {
         result = D3D11CreateDevice(
             chosen.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flags,
-            &levels[1], 1, D3D11_SDK_VERSION, &device, &created_level, nullptr);
+            &levels[1], 1, D3D11_SDK_VERSION, &device, nullptr, nullptr);
     }
     if (FAILED(result) || !device) {
         return ScreenCaptureError{ScreenCaptureErrorCode::device_creation_failed, result};
