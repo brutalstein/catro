@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
-#include <limits>
 
 namespace catro::video {
 namespace {
@@ -262,7 +261,9 @@ void H264RtpReassembler::reset() noexcept {
 }
 
 bool H264RtpReassembler::append(std::span<const std::byte> bytes) noexcept {
-    if (bytes.size() > storage_.size() - std::min(size_, storage_.size())) {
+    // Keep subtraction after the explicit invariant check so size_t cannot underflow even if this
+    // class is later changed in a way that accidentally corrupts size_.
+    if (size_ > storage_.size() || bytes.size() > storage_.size() - size_) {
         return false;
     }
     std::memcpy(storage_.data() + size_, bytes.data(), bytes.size());
