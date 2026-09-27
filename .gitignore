@@ -1,4 +1,7 @@
+# Keep local worktree state and generated outputs out of the repo.
 .worktrees/
-/out/
+out/
+build/
+.vs/
 /apps/windows/packages/
 /compile_flags.txt
