@@ -59,12 +59,24 @@ AudioEngine::~AudioEngine() {
 }
 
 std::optional<AudioError> AudioEngine::start(const SessionConfig& config) {
-    stop();
+    // Opening and starting native streams is a lifecycle transaction. A concurrent stop waits for
+    // the transaction to finish instead of returning while a local, unpublished stream can still
+    // become active.
+    const std::scoped_lock lifecycle_lock(lifecycle_mutex_);
+
+    std::unique_ptr<Session> previous;
     std::uint64_t generation = 0;
     {
         const std::scoped_lock lock(mutex_);
+        ++generation_;
+        previous = std::move(session_);
+        state_ = EngineState::idle;
+        error_.reset();
         generation = ++generation_;
     }
+    // Platform destructors may join their worker threads; never do that while holding mutex_.
+    previous.reset();
+
     auto session = std::make_unique<Session>(config.mode);
     const auto failure = [this, generation](AudioError error) { fail(generation, error); };
     const auto record = [&](AudioError error) {
@@ -98,25 +110,58 @@ std::optional<AudioError> AudioEngine::start(const SessionConfig& config) {
                                      kMinimumCushionFrames);
         session->pipe.emplace(target, target + kDriftAllowanceFrames);
     }
-    for (auto* stream : {session->capture.get(), session->render.get()}) {
+
+    // Publish ownership before starting either stream. If a platform reports an asynchronous
+    // failure immediately after start(), fail() can now see the complete session and request both
+    // sides to stop without destroying a stream from its own callback thread.
+    {
+        const std::scoped_lock lock(mutex_);
+        session_ = std::move(session);
+    }
+
+    const auto abort_start = [&](AudioError error) {
+        std::unique_ptr<Session> failed;
+        {
+            const std::scoped_lock lock(mutex_);
+            if (generation == generation_) {
+                state_ = EngineState::failed;
+                error_ = error;
+                failed = std::move(session_);
+            }
+        }
+        failed.reset();
+        return std::optional{error};
+    };
+
+    Session* active = nullptr;
+    {
+        const std::scoped_lock lock(mutex_);
+        active = session_.get();
+    }
+    for (auto* stream : {active->capture.get(), active->render.get()}) {
         if (stream == nullptr) {
             continue;
         }
+        {
+            const std::scoped_lock lock(mutex_);
+            if (generation != generation_ || state_ == EngineState::failed) {
+                return error_;
+            }
+        }
         if (const auto error = stream->start()) {
-            return record(*error);
+            return abort_start(*error);
         }
     }
 
     const std::scoped_lock lock(mutex_);
-    // A stream may already have failed on its own thread; that failure stands.
     if (generation == generation_ && state_ != EngineState::failed) {
         state_ = EngineState::running;
     }
-    session_ = std::move(session);
     return error_;
 }
 
 void AudioEngine::stop() {
+    const std::scoped_lock lifecycle_lock(lifecycle_mutex_);
     std::unique_ptr<Session> finished;
     {
         const std::scoped_lock lock(mutex_);
@@ -125,7 +170,7 @@ void AudioEngine::stop() {
         state_ = EngineState::idle;
         error_.reset();
     }
-    // Destroyed outside the lock: stopping a stream joins its thread, which may be waiting in fail().
+    // Destroyed outside the state lock: stopping a stream may join its platform worker thread.
     finished.reset();
 }
 
@@ -137,7 +182,20 @@ void AudioEngine::fail(std::uint64_t generation, AudioError error) {
         }
         state_ = EngineState::failed;
         error_ = error;
+
+        // Do not destroy streams here. On Windows this callback can be running on the stream
+        // thread itself, and destruction would attempt to join that same thread. request_stop()
+        // is the non-owning, idempotent escape hatch that also stops the peer stream.
+        if (session_) {
+            if (session_->capture) {
+                session_->capture->request_stop();
+            }
+            if (session_->render) {
+                session_->render->request_stop();
+            }
+        }
     }
+    // User code is invoked without either engine mutex held, so it may safely call start()/stop().
     if (on_failure_) {
         on_failure_(error);
     }
