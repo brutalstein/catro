@@ -299,18 +299,21 @@ struct WindowsGraphicsCapture::Impl {
 
         frame_token_ = {};
         closed_token_ = {};
-        session_ = nullptr;
-        pool_ = nullptr;
-        item_ = nullptr;
-        winrt_device_ = nullptr;
-        d3d_device_.Reset();
 
+        // A callback that entered immediately before stopping_ changed may still be holding the
+        // D3D/WinRT objects. Keep those objects alive until every in-flight callback has returned.
         {
             std::unique_lock callback_lock(callback_mutex_);
             callback_cv_.wait(callback_lock, [this] {
                 return active_callbacks_.load(std::memory_order_acquire) == 0;
             });
         }
+
+        session_ = nullptr;
+        pool_ = nullptr;
+        item_ = nullptr;
+        winrt_device_ = nullptr;
+        d3d_device_.Reset();
 
         {
             std::scoped_lock frame_lock(frame_mutex_);
