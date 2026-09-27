@@ -59,6 +59,9 @@ target_link_libraries(catro_voice_peer_runtime_test PRIVATE catro_voice_peer_cli
 if(WIN32 AND MSVC)
     catro_add_test(capture_check tools/capture_check_test.cpp)
     target_link_libraries(catro_capture_check_test PRIVATE catro_capture_check_cli)
+
+    catro_add_test(encode_check tools/encode_check_test.cpp)
+    target_link_libraries(catro_encode_check_test PRIVATE catro_encode_check_cli)
 endif()
 
 catro_add_test(audio_check tools/audio_check_test.cpp)
@@ -109,6 +112,9 @@ if(WIN32 AND MSVC)
 
     catro_add_test(windows_screen_capture windows/screen_capture_test.cpp)
     target_link_libraries(catro_windows_screen_capture_test PRIVATE Catro::Windows)
+
+    catro_add_test(windows_video_encoder windows/video_encoder_test.cpp)
+    target_link_libraries(catro_windows_video_encoder_test PRIVATE Catro::Windows)
 
     catro_add_test(windows_audio windows/audio_platform_test.cpp)
     target_link_libraries(catro_windows_audio_test PRIVATE Catro::Windows)
