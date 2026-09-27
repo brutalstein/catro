@@ -105,33 +105,54 @@ std::filesystem::path staging_path(const std::filesystem::path& path) {
     return staged;
 }
 
-class NamedStateLock {
-public:
-    NamedStateLock() noexcept
-        : handle_(CreateMutexW(nullptr, FALSE, L"Local\\Catro.PersonalState.v1")) {}
+std::optional<LocalStateError> ensure_parent_directory(const std::filesystem::path& path) {
+    std::error_code filesystem_error;
+    const auto parent = path.parent_path();
+    if (parent.empty()) {
+        return std::nullopt;
+    }
+    std::filesystem::create_directories(parent, filesystem_error);
+    if (!filesystem_error) {
+        return std::nullopt;
+    }
+    return LocalStateError{LocalStateErrorCode::path_failure,
+                           "failed to create local state directory",
+                           static_cast<std::uint32_t>(filesystem_error.value())};
+}
 
-    [[nodiscard]] std::optional<LocalStateError> acquire() noexcept {
-        if (!handle_) {
-            return native_error(LocalStateErrorCode::lock_failure, "failed to create local state lock");
-        }
-        const auto result = WaitForSingleObject(handle_.get(), 10'000);
-        if (result == WAIT_OBJECT_0 || result == WAIT_ABANDONED) {
-            acquired_ = true;
-            return std::nullopt;
-        }
-        return native_error(LocalStateErrorCode::lock_failure, "timed out waiting for local state lock",
-                            result == WAIT_FAILED ? GetLastError() : ERROR_TIMEOUT);
+class FileStateLock {
+public:
+    explicit FileStateLock(const std::filesystem::path& state_path) : path_(state_path) {
+        path_ += L".lock";
     }
 
-    ~NamedStateLock() {
-        if (acquired_) {
-            ReleaseMutex(handle_.get());
+    [[nodiscard]] std::optional<LocalStateError> acquire() noexcept {
+        constexpr int kAttempts = 400;
+        constexpr DWORD kSleepMs = 25;
+
+        for (int attempt = 0; attempt < kAttempts; ++attempt) {
+            HANDLE raw = CreateFileW(path_.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                                     OPEN_ALWAYS,
+                                     FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
+            if (raw != INVALID_HANDLE_VALUE) {
+                handle_.reset(raw);
+                return std::nullopt;
+            }
+
+            const auto code = GetLastError();
+            if (code != ERROR_SHARING_VIOLATION && code != ERROR_LOCK_VIOLATION) {
+                return native_error(LocalStateErrorCode::lock_failure,
+                                    "failed to acquire local state file lock", code);
+            }
+            Sleep(kSleepMs);
         }
+        return LocalStateError{LocalStateErrorCode::lock_failure,
+                               "timed out waiting for local state file lock", ERROR_TIMEOUT};
     }
 
 private:
+    std::filesystem::path path_;
     UniqueHandle handle_;
-    bool acquired_ = false;
 };
 
 } // namespace
@@ -186,17 +207,11 @@ std::optional<LocalStateError> save_local_state_atomic(const std::filesystem::pa
                                bounded_codec_detail(*error), 0};
     }
 
-    std::error_code filesystem_error;
-    const auto parent = path.parent_path();
-    if (!parent.empty()) {
-        std::filesystem::create_directories(parent, filesystem_error);
-        if (filesystem_error) {
-            return LocalStateError{LocalStateErrorCode::path_failure,
-                                   "failed to create local state directory",
-                                   static_cast<std::uint32_t>(filesystem_error.value())};
-        }
+    if (const auto error = ensure_parent_directory(path)) {
+        return error;
     }
 
+    std::error_code filesystem_error;
     const auto staged = staging_path(path);
     std::filesystem::remove(staged, filesystem_error);
     filesystem_error.clear();
@@ -218,7 +233,11 @@ std::optional<LocalStateError> save_local_state_atomic(const std::filesystem::pa
 
 std::variant<LocalState, LocalStateError> load_or_create_local_state(
     const std::filesystem::path& path, community::EntropySource& entropy) {
-    NamedStateLock lock;
+    if (const auto error = ensure_parent_directory(path)) {
+        return *error;
+    }
+
+    FileStateLock lock(path);
     if (const auto error = lock.acquire()) {
         return *error;
     }
