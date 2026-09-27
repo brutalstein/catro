@@ -41,10 +41,11 @@ void MainWindow::InitializeComponent() {
     const auto scale = GetDpiForWindow(hwnd) / 96.0;
     AppWindow().Resize({static_cast<int32_t>(1280 * scale), static_cast<int32_t>(820 * scale)});
 
-    ShellGrid().SizeChanged([this](auto&&, xaml::SizeChangedEventArgs const& args) {
-        UpdateResponsiveLayout(args.NewSize().Width);
-    });
     Activate(catro::app::ShellSection::home);
+}
+
+void MainWindow::OnShellSizeChanged(IInspectable const&, xaml::SizeChangedEventArgs const& args) {
+    UpdateResponsiveLayout(args.NewSize().Width);
 }
 
 void MainWindow::OnNavigationClick(IInspectable const& sender, xaml::RoutedEventArgs const&) {
