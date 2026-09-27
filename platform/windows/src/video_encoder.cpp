@@ -201,23 +201,17 @@ ComPtr<IMFMediaType> make_input_type(const HardwareEncoderConfig& config) {
 }
 
 bool set_codec_uint32(ICodecAPI& codec, const GUID& key, std::uint32_t value) noexcept {
-    VARIANT setting;
-    VariantInit(&setting);
+    VARIANT setting{};
     setting.vt = VT_UI4;
     setting.ulVal = value;
-    const auto result = codec.SetValue(&key, &setting);
-    VariantClear(&setting);
-    return SUCCEEDED(result);
+    return SUCCEEDED(codec.SetValue(&key, &setting));
 }
 
 bool set_codec_bool(ICodecAPI& codec, const GUID& key, bool value) noexcept {
-    VARIANT setting;
-    VariantInit(&setting);
+    VARIANT setting{};
     setting.vt = VT_BOOL;
     setting.boolVal = value ? VARIANT_TRUE : VARIANT_FALSE;
-    const auto result = codec.SetValue(&key, &setting);
-    VariantClear(&setting);
-    return SUCCEEDED(result);
+    return SUCCEEDED(codec.SetValue(&key, &setting));
 }
 
 } // namespace
