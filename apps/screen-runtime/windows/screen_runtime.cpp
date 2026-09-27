@@ -9,6 +9,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -181,6 +182,7 @@ struct WindowsScreenShareRuntime::Impl {
 
     void stop() noexcept {
         stop_requested_.store(true, std::memory_order_release);
+        stop_cv_.notify_all();
         if (worker_.joinable()) {
             worker_.join();
         }
@@ -456,9 +458,18 @@ struct WindowsScreenShareRuntime::Impl {
 
         while (!stop_requested_.load(
                    std::memory_order_acquire)) {
-            const auto before_sleep = Clock::now();
-            if (before_sleep < next_frame) {
-                std::this_thread::sleep_until(next_frame);
+            {
+                std::unique_lock stop_lock(stop_mutex_);
+                stop_cv_.wait_until(
+                    stop_lock,
+                    next_frame,
+                    [this] {
+                        return stop_requested_.load(
+                            std::memory_order_acquire);
+                    });
+            }
+            if (stop_requested_.load(std::memory_order_acquire)) {
+                break;
             }
 
             auto now = Clock::now();
@@ -623,6 +634,8 @@ struct WindowsScreenShareRuntime::Impl {
     ComPtr<IDXGISwapChain1> preview_swap_chain_;
 
     std::thread worker_;
+    std::mutex stop_mutex_;
+    std::condition_variable stop_cv_;
     std::atomic_bool stop_requested_{false};
     std::atomic<ScreenShareState> state_{
         ScreenShareState::idle};
