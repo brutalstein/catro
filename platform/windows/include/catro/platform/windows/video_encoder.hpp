@@ -101,6 +101,10 @@ struct HardwareEncoderStatistics {
     std::uint64_t input_failures = 0;
     std::uint64_t output_failures = 0;
     std::uint64_t output_timeouts = 0;
+    // Successful Media Foundation sample allocations. With a stable source size, input should
+    // remain at one for the lifetime of the encoder; caller-provided output should be at most one.
+    std::uint64_t input_sample_allocations = 0;
+    std::uint64_t output_sample_allocations = 0;
 
     std::uint64_t conversion_total_us = 0;
     std::uint64_t conversion_max_us = 0;

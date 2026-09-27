@@ -16,6 +16,8 @@ TEST_CASE("Windows H264 encoder is inert until started") {
     CHECK(stats.input_failures == 0);
     CHECK(stats.output_failures == 0);
     CHECK(stats.output_timeouts == 0);
+    CHECK(stats.input_sample_allocations == 0);
+    CHECK(stats.output_sample_allocations == 0);
 
     encoder.stop();
     encoder.stop();

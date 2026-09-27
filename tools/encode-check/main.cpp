@@ -207,6 +207,8 @@ int wmain(int argc, wchar_t** argv) {
               << ", input-fail " << encode_stats.input_failures
               << ", output-fail " << encode_stats.output_failures
               << ", timeout " << encode_stats.output_timeouts
+              << ", mf-input-samples " << encode_stats.input_sample_allocations
+              << ", mf-output-samples " << encode_stats.output_sample_allocations
               << ", convert avg/max " << (encode_stats.conversion_total_us / encoded)
               << "/" << encode_stats.conversion_max_us << " us"
               << ", encode avg/max " << (encode_stats.encode_total_us / encoded)

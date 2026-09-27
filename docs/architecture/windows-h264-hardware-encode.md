@@ -52,6 +52,12 @@ The encoder intentionally keeps one frame in flight. This trades some maximum th
 - no reuse of the NV12 surface before the previous frame has produced output;
 - simple failure accounting.
 
+Because only one frame can be in flight, the Media Foundation input sample wrapping the persistent
+NV12 texture is allocated once per stable source size and reused after output completes. If an MFT
+requires caller-provided output samples, that sample and its backing buffer are also allocated once
+and reused. The diagnostic exposes both allocation counters so accidental per-frame allocator churn
+is visible during real-machine validation.
+
 Low-latency mode is requested through `ICodecAPI` and reported as confirmed or unconfirmed rather
 than assumed.
 
@@ -90,7 +96,11 @@ Before screen transport is implemented, a real Windows machine must show:
 - encoded frames and bytes increasing for the full run;
 - zero conversion/input/output failures and zero timeouts;
 - conversion + encoder latency comfortably below the configured frame interval after warmup;
-- no continuously growing capture overwrite/contention counters;
+- capture contention drops remain zero; mailbox overwrite may increase when WGC produces frames
+  faster than the configured encode rate, which is the intended one-frame latest-wins policy rather
+  than queue growth;
+- Media Foundation input sample allocations remain at one for a stable source size and
+  caller-provided output sample allocations remain at most one;
 - the existing voice and screen-capture tests still green.
 
 Only compressed H.264 packetization/transport is allowed after this gate. Share Screen remains

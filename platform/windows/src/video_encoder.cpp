@@ -368,6 +368,10 @@ struct WindowsH264HardwareEncoder::Impl {
         }
         output_stream_info_ = stream_info;
 
+        if (const auto error = create_input_sample()) {
+            return fail(*error);
+        }
+
         if (FAILED(transform_->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0)) ||
             FAILED(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)) ||
             FAILED(transform_->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0))) {
@@ -422,27 +426,20 @@ struct WindowsH264HardwareEncoder::Impl {
             }
         }
 
-        ComPtr<IMFMediaBuffer> surface_buffer;
-        auto result = MFCreateDXGISurfaceBuffer(
-            __uuidof(ID3D11Texture2D), nv12_.Get(), 0, FALSE, &surface_buffer);
-        if (FAILED(result) || !surface_buffer) {
+        if (!input_sample_) {
             ++stats_.input_failures;
-            return HardwareEncoderError{HardwareEncoderErrorCode::input_failed, result};
-        }
-
-        ComPtr<IMFSample> sample;
-        result = MFCreateSample(&sample);
-        if (FAILED(result) || !sample || FAILED(sample->AddBuffer(surface_buffer.Get()))) {
-            ++stats_.input_failures;
-            return HardwareEncoderError{HardwareEncoderErrorCode::input_failed, result};
+            return HardwareEncoderError{HardwareEncoderErrorCode::input_failed};
         }
 
         const auto pts = static_cast<std::int64_t>(stats_.frames_submitted) * frame_duration_100ns_;
-        sample->SetSampleTime(pts);
-        sample->SetSampleDuration(frame_duration_100ns_);
+        if (FAILED(input_sample_->SetSampleTime(pts)) ||
+            FAILED(input_sample_->SetSampleDuration(frame_duration_100ns_))) {
+            ++stats_.input_failures;
+            return HardwareEncoderError{HardwareEncoderErrorCode::input_failed};
+        }
 
         const auto encode_started = Clock::now();
-        result = transform_->ProcessInput(0, sample.Get(), 0);
+        auto result = transform_->ProcessInput(0, input_sample_.Get(), 0);
         if (FAILED(result)) {
             ++stats_.input_failures;
             return HardwareEncoderError{HardwareEncoderErrorCode::input_failed, result};
@@ -486,6 +483,10 @@ struct WindowsH264HardwareEncoder::Impl {
 
         events_.Reset();
         transform_.Reset();
+        input_sample_.Reset();
+        input_surface_buffer_.Reset();
+        caller_output_sample_.Reset();
+        caller_output_buffer_.Reset();
         device_manager_.Reset();
         processor_.Reset();
         processor_enumerator_.Reset();
@@ -615,11 +616,47 @@ struct WindowsH264HardwareEncoder::Impl {
             return std::nullopt;
         }
 
+        input_sample_.Reset();
+        input_surface_buffer_.Reset();
         processor_.Reset();
         processor_enumerator_.Reset();
         nv12_output_view_.Reset();
         nv12_.Reset();
-        return create_conversion_surface(source);
+
+        if (const auto error = create_conversion_surface(source)) {
+            return error;
+        }
+        if (media_foundation_started_) {
+            return create_input_sample();
+        }
+        return std::nullopt;
+    }
+
+    std::optional<HardwareEncoderError> create_input_sample() {
+        input_sample_.Reset();
+        input_surface_buffer_.Reset();
+
+        auto result = MFCreateDXGISurfaceBuffer(
+            __uuidof(ID3D11Texture2D), nv12_.Get(), 0, FALSE, &input_surface_buffer_);
+        if (FAILED(result) || !input_surface_buffer_) {
+            return HardwareEncoderError{HardwareEncoderErrorCode::input_failed, result};
+        }
+
+        result = MFCreateSample(&input_sample_);
+        if (FAILED(result) || !input_sample_) {
+            input_surface_buffer_.Reset();
+            return HardwareEncoderError{HardwareEncoderErrorCode::input_failed, result};
+        }
+
+        result = input_sample_->AddBuffer(input_surface_buffer_.Get());
+        if (FAILED(result)) {
+            input_sample_.Reset();
+            input_surface_buffer_.Reset();
+            return HardwareEncoderError{HardwareEncoderErrorCode::input_failed, result};
+        }
+
+        ++stats_.input_sample_allocations;
+        return std::nullopt;
     }
 
     std::optional<HardwareEncoderError> convert(ID3D11Texture2D& source) {
@@ -723,25 +760,39 @@ struct WindowsH264HardwareEncoder::Impl {
     }
 
     std::variant<ComPtr<IMFSample>, HardwareEncoderError> make_output_sample() {
-        if ((output_stream_info_.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES) != 0 ||
-            (output_stream_info_.dwFlags & MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES) != 0) {
+        if ((output_stream_info_.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES) != 0) {
             return ComPtr<IMFSample>{};
         }
 
-        ComPtr<IMFSample> sample;
-        auto result = MFCreateSample(&sample);
-        if (FAILED(result) || !sample) {
-            return HardwareEncoderError{HardwareEncoderErrorCode::output_failed, result};
+        if (!caller_output_sample_) {
+            ComPtr<IMFSample> sample;
+            auto result = MFCreateSample(&sample);
+            if (FAILED(result) || !sample) {
+                return HardwareEncoderError{HardwareEncoderErrorCode::output_failed, result};
+            }
+
+            const auto bytes =
+                std::max<std::uint32_t>(output_stream_info_.cbSize, kFallbackOutputBytes);
+            ComPtr<IMFMediaBuffer> buffer;
+            result = MFCreateMemoryBuffer(bytes, &buffer);
+            if (FAILED(result) || !buffer) {
+                return HardwareEncoderError{HardwareEncoderErrorCode::output_failed, result};
+            }
+            result = sample->AddBuffer(buffer.Get());
+            if (FAILED(result)) {
+                return HardwareEncoderError{HardwareEncoderErrorCode::output_failed, result};
+            }
+
+            caller_output_sample_ = std::move(sample);
+            caller_output_buffer_ = std::move(buffer);
+            ++stats_.output_sample_allocations;
         }
 
-        const auto bytes =
-            std::max<std::uint32_t>(output_stream_info_.cbSize, kFallbackOutputBytes);
-        ComPtr<IMFMediaBuffer> buffer;
-        result = MFCreateMemoryBuffer(bytes, &buffer);
-        if (FAILED(result) || !buffer || FAILED(sample->AddBuffer(buffer.Get()))) {
-            return HardwareEncoderError{HardwareEncoderErrorCode::output_failed, result};
+        if (!caller_output_buffer_ ||
+            FAILED(caller_output_buffer_->SetCurrentLength(0))) {
+            return HardwareEncoderError{HardwareEncoderErrorCode::output_failed};
         }
-        return sample;
+        return caller_output_sample_;
     }
 
     std::optional<HardwareEncoderError> collect_output(
@@ -855,6 +906,10 @@ struct WindowsH264HardwareEncoder::Impl {
     ComPtr<IMFDXGIDeviceManager> device_manager_;
     ComPtr<IMFTransform> transform_;
     ComPtr<IMFMediaEventGenerator> events_;
+    ComPtr<IMFSample> input_sample_;
+    ComPtr<IMFMediaBuffer> input_surface_buffer_;
+    ComPtr<IMFSample> caller_output_sample_;
+    ComPtr<IMFMediaBuffer> caller_output_buffer_;
     MFT_OUTPUT_STREAM_INFO output_stream_info_{};
 };
 
