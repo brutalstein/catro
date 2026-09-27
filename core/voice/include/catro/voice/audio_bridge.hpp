@@ -34,6 +34,7 @@ struct RenderBridgeStatistics {
     std::uint64_t requested_samples = 0;
     std::uint64_t pcm_samples_rendered = 0;
     std::uint64_t silence_samples_rendered = 0;
+    std::uint64_t startup_silence_samples = 0;
     std::uint64_t underrun_callbacks = 0;
     std::uint64_t frames_enqueued = 0;
     // Queue-full attempts. A caller may retry the same frame; actual media drops are owned by the pipeline.
@@ -90,7 +91,9 @@ private:
     std::atomic<std::uint64_t> requested_samples_{0};
     std::atomic<std::uint64_t> pcm_samples_rendered_{0};
     std::atomic<std::uint64_t> silence_samples_rendered_{0};
+    std::atomic<std::uint64_t> startup_silence_samples_{0};
     std::atomic<std::uint64_t> underrun_callbacks_{0};
+    std::atomic_bool primed_{false};
     std::atomic<std::uint64_t> frames_enqueued_{0};
     std::atomic<std::uint64_t> push_rejections_{0};
     std::atomic<std::size_t> peak_buffered_samples_{0};
