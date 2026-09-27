@@ -105,7 +105,7 @@ TEST_CASE("typed identifiers round trip and reject zero or malformed text") {
 TEST_CASE("invite code preserves all 128 random bits in canonical Crockford form") {
     SequenceEntropy entropy(77);
     const auto local = state();
-    const auto created = create_invite(entropy, local.personal_server.id, local.identity.id);
+    const auto created = create_invite(entropy, local.personal_server, local.identity.id);
     REQUIRE(std::holds_alternative<Invite>(created));
 
     const auto invite = std::get<Invite>(created);
@@ -125,6 +125,17 @@ TEST_CASE("invite code preserves all 128 random bits in canonical Crockford form
     auto impossible = text;
     impossible[0] = 'Z';
     CHECK_FALSE(parse_invite_code(impossible));
+}
+
+TEST_CASE("normal members cannot issue server invites") {
+    SequenceEntropy entropy(91);
+    const auto local = state();
+    UserId member_id{};
+    member_id.bytes[0] = std::byte{0x55};
+
+    const auto denied = create_invite(entropy, local.personal_server, member_id);
+    REQUIRE(std::holds_alternative<StateError>(denied));
+    CHECK(std::get<StateError>(denied).code == StateErrorCode::permission_denied);
 }
 
 TEST_CASE("only the owner receives elevated server authority") {
