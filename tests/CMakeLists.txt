@@ -107,6 +107,9 @@ if(WIN32 AND MSVC)
     catro_add_test(windows_voice_runtime windows/voice_runtime_test.cpp)
     target_link_libraries(catro_windows_voice_runtime_test PRIVATE catro_voice_runtime)
 
+    catro_add_test(windows_screen_capture windows/screen_capture_test.cpp)
+    target_link_libraries(catro_windows_screen_capture_test PRIVATE Catro::Windows)
+
     catro_add_test(windows_audio windows/audio_platform_test.cpp)
     target_link_libraries(catro_windows_audio_test PRIVATE Catro::Windows)
     # Catch2 exits with 4 when every case skipped, as on runners without audio endpoints.
