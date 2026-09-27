@@ -29,6 +29,9 @@ target_compile_definitions(catro_canonical_determinism_test PRIVATE CATRO_FIXTUR
 catro_add_test(audio audio/audio_test.cpp)
 target_link_libraries(catro_audio_test PRIVATE Catro::Audio)
 
+catro_add_test(voice voice/voice_test.cpp)
+target_link_libraries(catro_voice_test PRIVATE Catro::Voice)
+
 catro_add_test(audio_check tools/audio_check_test.cpp)
 target_link_libraries(catro_audio_check_test PRIVATE catro_audio_check_cli)
 catro_add_test(diagnostics apps/diagnostics_test.cpp)
