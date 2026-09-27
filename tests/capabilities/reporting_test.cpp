@@ -1,3 +1,4 @@
+#include <catro/capabilities/probe.hpp>
 #include <catro/reporting/canonical_json.hpp>
 #include <catro/reporting/human_report.hpp>
 #include <catro/reporting/report.hpp>
@@ -160,6 +161,40 @@ TEST_CASE("every fixture report round-trips byte for byte") {
             REQUIRE(derive_media_plan(parsed.report->snapshot, report.plan.request, kPolicyVersion) == report.plan);
         }
     }
+}
+
+TEST_CASE("probe fragments have bounded deterministic canonical transport") {
+    const auto snapshot = fx::valid_snapshot();
+    ProbeFragment fragment{
+        .probe_id = std::string(fx::kAudioProbe),
+        .family = ProbeFamily::audio,
+        .revision = 1,
+        .duration = std::chrono::microseconds{1234},
+        .outcome = ProbeOutcome::success,
+        .audio = AudioProbeFacts{snapshot.devices.audio_endpoints, snapshot.runtime.audio_endpoints},
+    };
+    std::ranges::reverse(fragment.audio->endpoints);
+    std::ranges::reverse(fragment.audio->states);
+
+    const auto json = to_canonical_json(fragment);
+    REQUIRE(json.starts_with("{\n  \"schema_id\": \"catro.capabilities\",\n  \"schema_version\": {\n"));
+    REQUIRE(position(json, "\"probe_id\"") < position(json, "\"family\""));
+    REQUIRE(position(json, "\"family\"") < position(json, "\"audio\""));
+    REQUIRE_FALSE(has(json, "\r"));
+
+    const auto parsed = parse_probe_fragment(json);
+    REQUIRE(parsed.ok());
+    REQUIRE(to_canonical_json(*parsed.fragment) == json);
+
+    auto reordered = fragment;
+    std::ranges::reverse(reordered.audio->endpoints);
+    std::ranges::reverse(reordered.audio->states);
+    REQUIRE(to_canonical_json(reordered) == json);
+
+    REQUIRE(parse_probe_fragment(std::string(kMaxProbeFragmentBytes + 1, ' ')).error->code ==
+            ReportErrorCode::input_too_large);
+    const auto duplicate = edited(json, "\"probe_id\":", "\"probe_id\": \"shadow\",\n  \"probe_id\":");
+    REQUIRE(parse_probe_fragment(duplicate).error->code == ReportErrorCode::duplicate_key);
 }
 
 TEST_CASE("parsing rejects malformed, oversized, and incompatible input") {

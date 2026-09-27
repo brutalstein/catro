@@ -18,6 +18,7 @@ catro_add_test(operating_profile capabilities/operating_profile_test.cpp)
 catro_add_test(local_envelope capabilities/local_envelope_test.cpp)
 catro_add_test(policy capabilities/policy_test.cpp)
 catro_add_test(policy_pathology capabilities/policy_pathology_test.cpp)
+catro_add_test(probe_coordinator capabilities/probe_coordinator_test.cpp)
 
 catro_add_test(reporting capabilities/reporting_test.cpp)
 target_link_libraries(catro_reporting_test PRIVATE Catro::Reporting)

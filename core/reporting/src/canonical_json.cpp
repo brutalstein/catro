@@ -87,6 +87,57 @@ caps::CapabilitySnapshot canonical_order(caps::CapabilitySnapshot snapshot) {
     return snapshot;
 }
 
+caps::ProbeFragment canonical_order(caps::ProbeFragment fragment) {
+    if (fragment.system) {
+        sort_set(fragment.system->hardware.cpu.simd);
+    }
+    if (fragment.gpu_display) {
+        auto& facts = *fragment.gpu_display;
+        std::ranges::sort(facts.gpus, {}, &caps::GpuCapability::id);
+        for (auto& gpu : facts.gpus) {
+            sort_set(gpu.graphics_apis);
+        }
+        std::ranges::sort(facts.displays, {}, &caps::DisplayCapability::id);
+        for (auto& display : facts.displays) {
+            sort_set(display.modes, mode_before);
+        }
+        std::ranges::sort(facts.capture_paths, {}, &caps::CapturePathCapability::id);
+        for (auto& capture : facts.capture_paths) {
+            sort_set(capture.output_formats);
+        }
+        std::ranges::sort(facts.transfer_paths, [](const caps::TransferPathCapability& lhs,
+                                                   const caps::TransferPathCapability& rhs) {
+            return std::tie(lhs.source, lhs.destination, lhs.source_gpu, lhs.destination_gpu) <
+                   std::tie(rhs.source, rhs.destination, rhs.source_gpu, rhs.destination_gpu);
+        });
+        for (auto& transfer : facts.transfer_paths) {
+            sort_set(transfer.conversions);
+        }
+        std::ranges::sort(facts.display_states, {}, &caps::DisplayState::display);
+        std::ranges::sort(facts.capture_permissions, {}, &caps::CapturePermissionState::path);
+    }
+    if (fragment.encoders) {
+        std::ranges::sort(fragment.encoders->encoders, {}, &caps::EncoderCapability::id);
+        for (auto& encoder : fragment.encoders->encoders) {
+            std::ranges::sort(encoder.modes, {}, caps::mode_key);
+        }
+    }
+    if (fragment.audio) {
+        std::ranges::sort(fragment.audio->endpoints, {}, &caps::AudioEndpointCapability::id);
+        for (auto& endpoint : fragment.audio->endpoints) {
+            sort_set(endpoint.sample_formats);
+        }
+        std::ranges::sort(fragment.audio->states, {}, &caps::AudioEndpointState::endpoint);
+        for (auto& state : fragment.audio->states) {
+            sort_set(state.default_roles);
+        }
+    }
+    std::ranges::sort(fragment.issues, [](const caps::ProbeIssue& lhs, const caps::ProbeIssue& rhs) {
+        return std::tie(lhs.probe_id, lhs.code) < std::tie(rhs.probe_id, rhs.code);
+    });
+    return fragment;
+}
+
 } // namespace detail
 
 namespace {
@@ -206,6 +257,38 @@ struct Failure {
     ReportErrorCode code;
     std::string path;
 };
+
+struct ParsedDocument {
+    Json document;
+    std::optional<ReportErrorCode> error;
+};
+
+ParsedDocument parse_document(std::string_view text, std::size_t maximum_bytes) {
+    if (text.size() > maximum_bytes) {
+        return {{}, ReportErrorCode::input_too_large};
+    }
+    std::vector<std::set<std::string>> open_objects;
+    bool duplicate_key = false;
+    const Json::parser_callback_t detect_duplicates = [&](int, Json::parse_event_t event, Json& parsed) {
+        if (event == Json::parse_event_t::object_start) {
+            open_objects.emplace_back();
+        } else if (event == Json::parse_event_t::object_end) {
+            open_objects.pop_back();
+        } else if (event == Json::parse_event_t::key && !open_objects.back().insert(parsed.get<std::string>()).second) {
+            duplicate_key = true;
+        }
+        return true;
+    };
+    try {
+        auto document = Json::parse(text.begin(), text.end(), detect_duplicates);
+        if (duplicate_key) {
+            return {{}, ReportErrorCode::duplicate_key};
+        }
+        return {std::move(document), std::nullopt};
+    } catch (const Json::parse_error&) {
+        return {{}, ReportErrorCode::malformed_json};
+    }
+}
 
 [[noreturn]] void fail(ReportErrorCode code, std::string path) {
     throw Failure{code, std::move(path)};
@@ -466,40 +549,50 @@ ReportParseResult parse_report(std::string_view text) {
         result.error = ReportParseError{code, std::move(path)};
         return std::move(result);
     };
-    if (text.size() > kMaxReportBytes) {
-        return failed(ReportErrorCode::input_too_large, "");
-    }
-
-    // The JSON library keeps the last of repeated keys; untrusted input must not hide values.
-    std::vector<std::set<std::string>> open_objects;
-    bool duplicate_key = false;
-    const Json::parser_callback_t detect_duplicates = [&](int, Json::parse_event_t event, Json& parsed) {
-        if (event == Json::parse_event_t::object_start) {
-            open_objects.emplace_back();
-        } else if (event == Json::parse_event_t::object_end) {
-            open_objects.pop_back();
-        } else if (event == Json::parse_event_t::key && !open_objects.back().insert(parsed.get<std::string>()).second) {
-            duplicate_key = true;
-        }
-        return true;
-    };
-    Json document;
-    try {
-        document = Json::parse(text.begin(), text.end(), detect_duplicates);
-    } catch (const Json::parse_error&) {
-        return failed(ReportErrorCode::malformed_json, "");
-    }
-    if (duplicate_key) {
-        return failed(ReportErrorCode::duplicate_key, "");
+    auto parsed = parse_document(text, kMaxReportBytes);
+    if (parsed.error) {
+        return failed(*parsed.error, "");
     }
 
     try {
-        auto report = decode_report(document);
+        auto report = decode_report(parsed.document);
         result.validation = caps::validate(report.snapshot);
         if (!result.validation.ok()) {
             return failed(ReportErrorCode::invalid_snapshot, "snapshot");
         }
         result.report = std::move(report);
+        return result;
+    } catch (const Failure& failure) {
+        return failed(failure.code, failure.path);
+    }
+}
+
+std::string to_canonical_json(const caps::ProbeFragment& fragment) {
+    const auto ordered = canonical_order(fragment);
+    return encode(ordered).dump(2, ' ', false, OrderedJson::error_handler_t::replace) + "\n";
+}
+
+FragmentParseResult parse_probe_fragment(std::string_view text) {
+    FragmentParseResult result;
+    const auto failed = [&result](ReportErrorCode code, std::string path) {
+        result.error = ReportParseError{code, std::move(path)};
+        return std::move(result);
+    };
+    auto parsed = parse_document(text, kMaxProbeFragmentBytes);
+    if (parsed.error) {
+        return failed(*parsed.error, "");
+    }
+
+    try {
+        caps::ProbeFragment fragment;
+        decode(parsed.document, fragment, "");
+        if (fragment.schema_id != caps::kSchemaId) {
+            return failed(ReportErrorCode::unsupported_schema, "schema_id");
+        }
+        if (!caps::is_supported(fragment.schema_version)) {
+            return failed(ReportErrorCode::unsupported_schema, "schema_version");
+        }
+        result.fragment = std::move(fragment);
         return result;
     } catch (const Failure& failure) {
         return failed(failure.code, failure.path);

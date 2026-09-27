@@ -5,6 +5,7 @@ add_library(catro_capabilities STATIC
     src/local_envelope.cpp
     src/candidate_ranking.cpp
     src/policy.cpp
+    src/probe_coordinator.cpp
 )
 add_library(Catro::Capabilities ALIAS catro_capabilities)
 

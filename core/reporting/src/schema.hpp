@@ -2,6 +2,7 @@
 
 #include <catro/capabilities/media_plan.hpp>
 #include <catro/capabilities/model.hpp>
+#include <catro/capabilities/probe.hpp>
 
 #include <algorithm>
 #include <array>
@@ -309,6 +310,32 @@ template <> struct Schema<caps::CapabilitySnapshot> { static constexpr auto fiel
     field("hardware", &caps::CapabilitySnapshot::hardware), field("devices", &caps::CapabilitySnapshot::devices),
     field("runtime", &caps::CapabilitySnapshot::runtime), field("probes", &caps::CapabilitySnapshot::probes),
     field("issues", &caps::CapabilitySnapshot::issues)}; };
+template <> struct Schema<caps::SystemProbeFacts> { static constexpr auto fields = std::tuple{
+    field("platform", &caps::SystemProbeFacts::platform), field("hardware", &caps::SystemProbeFacts::hardware)}; };
+template <> struct Schema<caps::RuntimeProbeFacts> { static constexpr auto fields = std::tuple{
+    field("power_source", &caps::RuntimeProbeFacts::power_source),
+    field("battery_present", &caps::RuntimeProbeFacts::battery_present),
+    field("low_power_mode", &caps::RuntimeProbeFacts::low_power_mode), field("thermal", &caps::RuntimeProbeFacts::thermal),
+    field("memory_pressure", &caps::RuntimeProbeFacts::memory_pressure),
+    field("remote_session", &caps::RuntimeProbeFacts::remote_session), field("headless", &caps::RuntimeProbeFacts::headless)}; };
+template <> struct Schema<caps::GpuDisplayProbeFacts> { static constexpr auto fields = std::tuple{
+    field("gpus", &caps::GpuDisplayProbeFacts::gpus), field("displays", &caps::GpuDisplayProbeFacts::displays),
+    field("capture_paths", &caps::GpuDisplayProbeFacts::capture_paths),
+    field("transfer_paths", &caps::GpuDisplayProbeFacts::transfer_paths),
+    field("display_states", &caps::GpuDisplayProbeFacts::display_states),
+    field("capture_permissions", &caps::GpuDisplayProbeFacts::capture_permissions)}; };
+template <> struct Schema<caps::EncoderProbeFacts> { static constexpr auto fields = std::tuple{
+    field("encoders", &caps::EncoderProbeFacts::encoders)}; };
+template <> struct Schema<caps::AudioProbeFacts> { static constexpr auto fields = std::tuple{
+    field("endpoints", &caps::AudioProbeFacts::endpoints), field("states", &caps::AudioProbeFacts::states)}; };
+template <> struct Schema<caps::ProbeFragment> { static constexpr auto fields = std::tuple{
+    field("schema_id", &caps::ProbeFragment::schema_id), field("schema_version", &caps::ProbeFragment::schema_version),
+    field("probe_id", &caps::ProbeFragment::probe_id), field("family", &caps::ProbeFragment::family),
+    field("revision", &caps::ProbeFragment::revision), field("duration", &caps::ProbeFragment::duration),
+    field("outcome", &caps::ProbeFragment::outcome), field("native_error", &caps::ProbeFragment::native_error),
+    field("system", &caps::ProbeFragment::system), field("runtime", &caps::ProbeFragment::runtime),
+    field("gpu_display", &caps::ProbeFragment::gpu_display), field("encoders", &caps::ProbeFragment::encoders),
+    field("audio", &caps::ProbeFragment::audio), field("issues", &caps::ProbeFragment::issues)}; };
 template <> struct Schema<caps::RequestedQuality> { static constexpr auto fields = std::tuple{
     field("resolution", &caps::RequestedQuality::resolution), field("frame_rate", &caps::RequestedQuality::frame_rate),
     field("hdr", &caps::RequestedQuality::hdr)}; };
@@ -362,6 +389,7 @@ template <> struct Schema<caps::MediaPlan> { static constexpr auto fields = std:
 // Sorts every snapshot collection whose order carries no meaning, so every projection is
 // independent of enumeration order. Plan data is already deterministic and keeps rank order.
 caps::CapabilitySnapshot canonical_order(caps::CapabilitySnapshot snapshot);
+caps::ProbeFragment canonical_order(caps::ProbeFragment fragment);
 
 // Calls visit(name, member) for each serialized member of a record, in schema order.
 template <Record T, class Visit>
