@@ -328,6 +328,45 @@
                                    HorizontalAlignment="Center" />
                     </StackPanel>
 
+                    <Grid x:Name="RemoteShareHost"
+                          Visibility="Collapsed"
+                          Margin="22"
+                          MaxWidth="960"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Border CornerRadius="14"
+                                Background="Black"
+                                BorderBrush="{ThemeResource CatroStrokeBrush}"
+                                BorderThickness="1">
+                            <Grid>
+                                <SwapChainPanel x:Name="RemoteShareSwapChainPanel"
+                                                HorizontalAlignment="Stretch"
+                                                VerticalAlignment="Stretch" />
+                                <Border Padding="8,4"
+                                        Margin="10"
+                                        CornerRadius="8"
+                                        Background="{ThemeResource CatroSurfaceBrush}"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Top">
+                                    <TextBlock Text="REMOTE STREAM"
+                                               FontSize="9"
+                                               FontWeight="SemiBold"
+                                               CharacterSpacing="70"
+                                               Foreground="{ThemeResource CatroSageBrush}" />
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <TextBlock x:Name="RemoteShareMetaText"
+                                   Grid.Row="1"
+                                   Margin="2,10,2,0"
+                                   FontSize="11"
+                                   Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                    </Grid>
+
                     <Grid x:Name="SharePreviewHost"
                           Visibility="Collapsed"
                           Margin="22"
