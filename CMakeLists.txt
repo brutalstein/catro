@@ -8,6 +8,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Catro uses headers, not C++20 modules; skip per-source module dependency scanning.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
+# Tools run side by side: the report tool starts the probe helper from its own directory.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
 option(CATRO_BUILD_TESTS "Build Catro tests" ON)
 
 include(cmake/Dependencies.cmake)
@@ -23,6 +26,7 @@ if(WIN32 AND MSVC)
     add_subdirectory(platform/windows)
     add_subdirectory(tools/capability-probe)
 endif()
+add_subdirectory(tools/capability-report)
 
 if(CATRO_BUILD_TESTS)
     enable_testing()
