@@ -79,6 +79,11 @@ target_link_libraries(catro_macos_translation_test PRIVATE catro_macos_translati
 catro_add_test(windows_translation windows/translation_test.cpp)
 target_link_libraries(catro_windows_translation_test PRIVATE catro_windows_translation)
 
+if(APPLE)
+    catro_add_test(macos_local_state macos/local_state_test.cpp)
+    target_link_libraries(catro_macos_local_state_test PRIVATE Catro::Macos)
+endif()
+
 # Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.
 if(WIN32 AND MSVC)
     add_executable(catro_hanging_probe_helper helpers/hanging_probe_helper.cpp)
