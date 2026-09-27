@@ -249,9 +249,14 @@ H264RtpReassembler::H264RtpReassembler(
     : storage_(frame_storage), config_(config) {}
 
 void H264RtpReassembler::reset() noexcept {
+    clear_frame_state();
+    expected_sequence_ = 0;
+    have_sequence_ = false;
+}
+
+void H264RtpReassembler::clear_frame_state() noexcept {
     size_ = 0;
     timestamp_ = 0;
-    expected_sequence_ = 0;
     fu_nal_type_ = 0;
     damage_error_ = H264ReassemblyError::none;
     active_ = false;
@@ -271,17 +276,10 @@ bool H264RtpReassembler::append(std::span<const std::byte> bytes) noexcept {
     return true;
 }
 
-void H264RtpReassembler::begin_frame(
-    std::uint32_t timestamp, std::uint16_t sequence) noexcept {
-    size_ = 0;
+void H264RtpReassembler::begin_frame(std::uint32_t timestamp) noexcept {
+    clear_frame_state();
     timestamp_ = timestamp;
-    expected_sequence_ = sequence;
-    fu_nal_type_ = 0;
-    damage_error_ = H264ReassemblyError::none;
     active_ = true;
-    damaged_ = false;
-    fu_active_ = false;
-    keyframe_ = false;
 }
 
 void H264RtpReassembler::mark_damage(H264ReassemblyError error) noexcept {
@@ -305,7 +303,7 @@ H264ReassemblyResult H264RtpReassembler::finish_or_drop(bool marker) noexcept {
 
     if (damaged_) {
         const auto error = damage_error_;
-        reset();
+        clear_frame_state();
         return {H264ReassemblyStatus::frame_dropped, error, {}};
     }
 
@@ -327,7 +325,8 @@ H264ReassemblyResult H264RtpReassembler::push(
             H264ReassemblyError::invalid_config,
             {}};
     }
-    if (datagram.size() <= kRtpHeaderBytes) {
+    if (datagram.size() <= kRtpHeaderBytes ||
+        datagram.size() > static_cast<std::size_t>(config_.mtu_bytes)) {
         return {
             H264ReassemblyStatus::packet_rejected,
             H264ReassemblyError::malformed_rtp,
@@ -361,13 +360,17 @@ H264ReassemblyResult H264RtpReassembler::push(
     }
 
     if (!active_ || timestamp != timestamp_) {
-        begin_frame(timestamp, sequence);
+        // A timestamp transition starts a fresh access unit, but RTP sequence continuity belongs
+        // to the SSRC stream rather than to an individual frame. Preserve expected_sequence_ so a
+        // completely lost frame is still observable on the next received packet.
+        begin_frame(timestamp);
     }
 
-    if (sequence != expected_sequence_) {
+    if (have_sequence_ && sequence != expected_sequence_) {
         mark_damage(H264ReassemblyError::sequence_gap);
     }
     expected_sequence_ = static_cast<std::uint16_t>(sequence + 1U);
+    have_sequence_ = true;
 
     if (damaged_) {
         return finish_or_drop(marker);
