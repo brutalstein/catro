@@ -1,7 +1,9 @@
 #include "udp_socket.hpp"
 
 #include <algorithm>
+#include <array>
 #include <climits>
+#include <limits>
 #include <new>
 #include <utility>
 
@@ -31,6 +33,9 @@
 
 namespace catro::tools {
 namespace {
+
+constexpr std::size_t kMaxUdpPayloadBytes = 65'507;
+constexpr std::size_t kMaxSendSegments = 8;
 
 #if defined(_WIN32)
 using NativeSocket = SOCKET;
@@ -208,15 +213,60 @@ UdpPeerSocket::StatusResult UdpPeerSocket::connect_peer(const UdpEndpoint& peer)
 }
 
 UdpPeerSocket::SizeResult UdpPeerSocket::send(std::span<const std::byte> datagram) noexcept {
-    if (datagram.empty()) {
+    const std::array segments{datagram};
+    return send_segments(segments);
+}
+
+UdpPeerSocket::SizeResult UdpPeerSocket::send_segments(
+    std::span<const std::span<const std::byte>> segments) noexcept {
+    if (segments.empty()) {
         return std::size_t{0};
     }
+    if (segments.size() > kMaxSendSegments) {
+        return UdpError{UdpErrorCode::datagram_too_large};
+    }
+
+    std::size_t total = 0;
+    for (const auto segment : segments) {
+        if (segment.size() > kMaxUdpPayloadBytes - std::min(total, kMaxUdpPayloadBytes)) {
+            return UdpError{UdpErrorCode::datagram_too_large};
+        }
+        total += segment.size();
+    }
+    if (total == 0) {
+        return std::size_t{0};
+    }
+
 #if defined(_WIN32)
-    const auto size = static_cast<int>(std::min<std::size_t>(datagram.size(), static_cast<std::size_t>(INT_MAX)));
-    const auto sent = ::send(impl_->socket, reinterpret_cast<const char*>(datagram.data()), size, 0);
-    if (sent == SOCKET_ERROR) {
+    std::array<WSABUF, kMaxSendSegments> buffers{};
+    for (std::size_t index = 0; index < segments.size(); ++index) {
+        // WSASend predates const-correct buffer declarations. It does not modify send buffers.
+        buffers[index].buf = reinterpret_cast<char*>(
+            const_cast<std::byte*>(segments[index].data()));
+        buffers[index].len = static_cast<ULONG>(segments[index].size());
+    }
+
+    DWORD sent = 0;
+    const auto result = WSASend(
+        impl_->socket,
+        buffers.data(),
+        static_cast<DWORD>(segments.size()),
+        &sent,
+        0,
+        nullptr,
+        nullptr);
+    if (result == SOCKET_ERROR) {
 #else
-    const auto sent = ::send(impl_->socket, datagram.data(), datagram.size(), 0);
+    std::array<iovec, kMaxSendSegments> vectors{};
+    for (std::size_t index = 0; index < segments.size(); ++index) {
+        vectors[index].iov_base = const_cast<std::byte*>(segments[index].data());
+        vectors[index].iov_len = segments[index].size();
+    }
+
+    msghdr message{};
+    message.msg_iov = vectors.data();
+    message.msg_iovlen = segments.size();
+    const auto sent = ::sendmsg(impl_->socket, &message, 0);
     if (sent < 0) {
 #endif
         const auto code = last_socket_error();
@@ -228,7 +278,12 @@ UdpPeerSocket::SizeResult UdpPeerSocket::send(std::span<const std::byte> datagra
         }
         return UdpError{UdpErrorCode::send_failed, code};
     }
-    return static_cast<std::size_t>(sent);
+
+    const auto sent_size = static_cast<std::size_t>(sent);
+    if (sent_size != total) {
+        return UdpError{UdpErrorCode::send_failed};
+    }
+    return sent_size;
 }
 
 UdpPeerSocket::WaitResult UdpPeerSocket::wait_readable(std::chrono::microseconds timeout) noexcept {

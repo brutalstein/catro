@@ -67,8 +67,10 @@ struct UdpError {
     return "UDP error";
 }
 
-// Connected UDP socket used only by the development voice peer. Numeric IPv4 keeps resolution and
+// Connected UDP socket shared by the engineering media peers. Numeric IPv4 keeps resolution and
 // DNS off the real-time validation path. The socket is non-blocking; wait_readable sleeps in select.
+// send_segments() maps directly to WSASend/sendmsg so RTP headers and encoded payload can leave the
+// process as one UDP datagram without first being concatenated into a temporary heap buffer.
 class UdpPeerSocket {
 public:
     using OpenResult = std::variant<std::unique_ptr<UdpPeerSocket>, UdpError>;
@@ -84,6 +86,8 @@ public:
 
     [[nodiscard]] StatusResult connect_peer(const UdpEndpoint& peer) noexcept;
     [[nodiscard]] SizeResult send(std::span<const std::byte> datagram) noexcept;
+    [[nodiscard]] SizeResult send_segments(
+        std::span<const std::span<const std::byte>> segments) noexcept;
     // true = readable, false = timeout.
     [[nodiscard]] WaitResult wait_readable(std::chrono::microseconds timeout) noexcept;
     // 0 means the non-blocking socket had no datagram available.

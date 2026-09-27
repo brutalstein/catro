@@ -109,6 +109,38 @@ TEST_CASE("connected UDP sockets exchange one bounded datagram on loopback") {
     CHECK(std::get<std::size_t>(empty) == 0);
 }
 
+TEST_CASE("connected UDP sockets send scatter gather segments as one datagram") {
+    auto first = bind_loopback();
+    auto second = bind_loopback();
+    connect_pair(*first, *second);
+
+    const std::array header{
+        std::byte{0x80}, std::byte{0x60}, std::byte{0x00}, std::byte{0x01}};
+    const std::array payload{
+        std::byte{0x65}, std::byte{0xaa}, std::byte{0xbb}, std::byte{0xcc}};
+    const std::array<std::span<const std::byte>, 2> segments{
+        std::span<const std::byte>(header),
+        std::span<const std::byte>(payload)};
+
+    const auto sent = first->send_segments(segments);
+    REQUIRE(std::holds_alternative<std::size_t>(sent));
+    CHECK(std::get<std::size_t>(sent) == header.size() + payload.size());
+
+    const auto ready = second->wait_readable(500ms);
+    REQUIRE(std::holds_alternative<bool>(ready));
+    REQUIRE(std::get<bool>(ready));
+
+    std::array<std::byte, 64> received{};
+    const auto result = second->receive(received);
+    REQUIRE(std::holds_alternative<std::size_t>(result));
+    const auto size = std::get<std::size_t>(result);
+    REQUIRE(size == header.size() + payload.size());
+    CHECK(std::equal(header.begin(), header.end(), received.begin()));
+    CHECK(std::equal(
+        payload.begin(), payload.end(),
+        received.begin() + static_cast<std::ptrdiff_t>(header.size())));
+}
+
 TEST_CASE("oversized UDP datagrams are rejected instead of silently truncated") {
     auto first = bind_loopback();
     auto second = bind_loopback();
