@@ -37,6 +37,14 @@ struct VoicePeerControl {
     std::atomic_bool stop_requested{false};
     std::atomic_bool muted{false};
     std::atomic_bool deafened{false};
+
+    // Worker-published observability for native shells. These are snapshots only; the media worker
+    // never waits for the UI and the UI never owns media state.
+    std::atomic_bool media_started{false};
+    std::atomic<std::uint64_t> sent_packets{0};
+    std::atomic<std::uint64_t> received_packets{0};
+    std::atomic<std::uint64_t> peer_unreachable_events{0};
+    std::atomic<int> last_exit_code{-1};
 };
 
 enum VoicePeerExit : int {
