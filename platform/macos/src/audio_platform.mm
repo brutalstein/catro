@@ -298,6 +298,12 @@ public:
         return status == noErr ? std::nullopt : std::optional{error_for(status)};
     }
 
+    void request_stop() noexcept override {
+        if (unit_ != nullptr) {
+            (void)AudioOutputUnitStop(unit_);
+        }
+    }
+
     std::uint64_t glitches() const noexcept override { return glitches_.load(std::memory_order_relaxed); }
 
 private:
