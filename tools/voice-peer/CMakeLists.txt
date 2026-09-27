@@ -1,0 +1,26 @@
+add_library(catro_voice_peer_transport STATIC udp_socket.cpp)
+target_include_directories(catro_voice_peer_transport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(catro_voice_peer_transport PUBLIC ws2_32)
+endif()
+catro_enable_warnings(catro_voice_peer_transport)
+
+add_library(catro_voice_peer_cli STATIC voice_peer.cpp)
+target_include_directories(catro_voice_peer_cli PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(catro_voice_peer_cli
+    PUBLIC Catro::Voice Catro::Audio catro_voice_peer_transport
+)
+catro_enable_warnings(catro_voice_peer_cli)
+
+if(WIN32 AND MSVC)
+    add_executable(catro_voice_peer main.cpp)
+    set_target_properties(catro_voice_peer PROPERTIES OUTPUT_NAME "catro-voice-peer")
+    target_link_libraries(catro_voice_peer PRIVATE catro_voice_peer_cli Catro::Windows)
+    target_compile_definitions(catro_voice_peer PRIVATE NOMINMAX UNICODE _UNICODE _WIN32_WINNT=0x0A00)
+    catro_enable_warnings(catro_voice_peer)
+elseif(APPLE)
+    add_executable(catro_voice_peer main.cpp)
+    set_target_properties(catro_voice_peer PROPERTIES OUTPUT_NAME "catro-voice-peer")
+    target_link_libraries(catro_voice_peer PRIVATE catro_voice_peer_cli Catro::Macos)
+    catro_enable_warnings(catro_voice_peer)
+endif()
