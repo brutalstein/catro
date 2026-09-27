@@ -1,8 +1,0 @@
-namespace Catro
-{
-    [default_interface]
-    runtimeclass VoiceView : Microsoft.UI.Xaml.Controls.UserControl
-    {
-        VoiceView();
-    }
-}
