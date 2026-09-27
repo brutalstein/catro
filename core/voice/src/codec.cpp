@@ -71,7 +71,7 @@ Encoder::CreateResult Encoder::create(const EncoderConfig& config) noexcept {
     if (!encoder) {
         return CodecError{CodecErrorCode::allocation_failed, OPUS_ALLOC_FAIL};
     }
-    return encoder;
+    return std::move(encoder);
 }
 
 std::variant<std::size_t, CodecError> Encoder::encode(std::span<const float> pcm,
@@ -122,7 +122,7 @@ Decoder::CreateResult Decoder::create() noexcept {
     if (!decoder) {
         return CodecError{CodecErrorCode::allocation_failed, OPUS_ALLOC_FAIL};
     }
-    return decoder;
+    return std::move(decoder);
 }
 
 std::variant<std::size_t, CodecError> Decoder::decode(std::span<const std::byte> packet,
