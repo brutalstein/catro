@@ -1,5 +1,12 @@
 # Catro — Full Project Context
 
+> **Current-development note (2026-09-27):** Sections describing the original native-foundation
+> milestone are historical constraints for that completed phase. The repository has since progressed
+> through native audio and a validated two-client/WinUI voice path. The active vertical sequence is
+> now **Windows native screen capture -> real-machine capture validation -> hardware video encode ->
+> two-client screen stream**. Do not interpret the historical "no voice/real capture" milestone text
+> below as a prohibition on the current media work.
+
 > **Purpose of this document**  
 > This file consolidates the complete working context established so far between the user, ChatGPT, and the coding agent/Codex for the **Catro** project. It is intended to be dropped into a fresh coding-agent session so the project can continue without losing architectural intent, constraints, priorities, or the reasoning behind previous decisions.
 
@@ -1813,22 +1820,19 @@ The agent should ask for user input only when a decision materially changes the 
 
 # 47. Current Immediate Next Step
 
-**Do not begin product code yet.**
+The native-foundation, audio, and Windows voice validation phases have moved past the original
+planning-only state described in the historical sections above.
 
-The immediate expected output from the coding agent is:
+The active sequence is now:
 
-> A complete, self-reviewed, dependency-ordered implementation plan for the native-foundation milestone.
+1. Windows Graphics Capture into bounded GPU-resident D3D11 frames.
+2. Real Windows machine capture validation with explicit counters.
+3. Hardware video encoder activation on the selected adapter.
+4. Two-client screen stream.
+5. Game/system audio integration.
 
-That plan should:
-
-- Be broken into small verifiable slices.
-- Define exact commit boundaries.
-- Define tests and verification commands.
-- Keep the repo buildable after each step.
-- Include a milestone verification matrix.
-- Be self-reviewed for scope, determinism, platform coupling, test timing, and fake hardware validation.
-
-Only after the user approves that implementation plan should the agent begin implementation.
+Keep the repository buildable and testable after every slice. Do not stack hardware encoding on an
+unvalidated capture path, and do not claim hardware behavior that was not actually run.
 
 ---
 
