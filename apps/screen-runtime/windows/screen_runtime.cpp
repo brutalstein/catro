@@ -23,6 +23,7 @@
 namespace catro::screen {
 namespace {
 
+using Microsoft::WRL::ComPtr;
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 using platform::windows::D3D11CompositionVideoPresenter;
@@ -375,6 +376,13 @@ struct WindowsScreenShareRuntime::Impl {
                         error->native_code);
                     return false;
                 }
+                const auto preview_stats = presenter.statistics();
+                preview_frames_.store(
+                    preview_stats.frames_presented,
+                    std::memory_order_relaxed);
+                preview_drops_.store(
+                    preview_stats.frames_dropped,
+                    std::memory_order_relaxed);
                 publish_preview_swap_chain();
             }
 
@@ -386,6 +394,8 @@ struct WindowsScreenShareRuntime::Impl {
                     error->native_code);
                 return false;
             }
+            frames_encoded_.fetch_add(
+                1, std::memory_order_relaxed);
 
             PacketContext context{
                 .socket = socket.get(),

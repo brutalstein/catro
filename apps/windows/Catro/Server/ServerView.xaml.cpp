@@ -5,13 +5,21 @@
 #include "ServerView.g.cpp"
 #endif
 
+#include <catro/platform/windows/screen_capture.hpp>
+#include <catro/screen_runtime.hpp>
+#include <catro/video/geometry.hpp>
+
+#include <microsoft.ui.xaml.media.dxinterop.h>
+
 #include <charconv>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace winrt::Catro::implementation {
 namespace {
@@ -85,9 +93,58 @@ DirectVoiceConfig direct_voice_config() {
     return config;
 }
 
+struct DirectVideoConfig {
+    catro::transport::UdpEndpoint bind;
+    catro::transport::UdpEndpoint peer;
+};
+
+DirectVideoConfig direct_video_config() {
+    const auto explicit_slot = environment("CATRO_VIDEO_SLOT");
+    const auto voice_slot = environment("CATRO_VOICE_SLOT");
+    const bool slot_two =
+        explicit_slot.value_or(voice_slot.value_or("")) == "2";
+
+    DirectVideoConfig config{
+        .bind = {"127.0.0.1", static_cast<std::uint16_t>(slot_two ? 55001 : 55000)},
+        .peer = {"127.0.0.1", static_cast<std::uint16_t>(slot_two ? 55000 : 55001)},
+    };
+
+    if (const auto value = environment("CATRO_VIDEO_BIND")) {
+        if (const auto parsed = parse_endpoint(*value)) {
+            config.bind = {parsed->address, parsed->port};
+        }
+    }
+    if (const auto value = environment("CATRO_VIDEO_PEER")) {
+        if (const auto parsed = parse_endpoint(*value)) {
+            config.peer = {parsed->address, parsed->port};
+        }
+    }
+    return config;
+}
+
+std::wstring capture_source_label(
+    const catro::platform::windows::CaptureSource& source) {
+    std::wstring label =
+        source.kind == catro::platform::windows::CaptureSourceKind::display
+            ? L"Display — "
+            : L"Window — ";
+    label += to_hstring(source.title).c_str();
+    label += L"  ·  ";
+    label += std::to_wstring(source.width);
+    label += L"×";
+    label += std::to_wstring(source.height);
+    return label;
+}
+
 } // namespace
 
 ServerView::~ServerView() {
+    if (screen_timer_) {
+        screen_timer_.Stop();
+    }
+    if (screen_runtime_) {
+        screen_runtime_->stop();
+    }
     if (voice_timer_) {
         voice_timer_.Stop();
     }
@@ -100,6 +157,13 @@ ServerView::~ServerView() {
 void ServerView::InitializeComponent() {
     ServerViewT<ServerView>::InitializeComponent();
     voice_runtime_ = catro_voice_runtime_create();
+    screen_runtime_ =
+        std::make_unique<catro::screen::WindowsScreenShareRuntime>();
+
+    screen_timer_ = DispatcherQueue().CreateTimer();
+    screen_timer_.Interval(100ms);
+    screen_timer_.Tick(
+        [this](auto&&, auto&&) { UpdateScreenShareUi(); });
 
     voice_timer_ = DispatcherQueue().CreateTimer();
     voice_timer_.Interval(500ms);
@@ -111,17 +175,30 @@ void ServerView::InitializeComponent() {
                 voice_timer_.Start();
             }
         }
+        if (screen_runtime_) {
+            const auto share = screen_runtime_->snapshot();
+            if (share.state == catro::screen::ScreenShareState::starting ||
+                share.state == catro::screen::ScreenShareState::sharing) {
+                screen_timer_.Start();
+            }
+        }
         UpdateVoiceUi();
+        UpdateScreenShareUi();
     });
     Unloaded([this](auto&&, auto&&) {
-        // Voice is room state, not page state. Navigating to Settings/System must not disconnect.
+        // Voice and screen share are room state, not page state. Navigating to Settings/System must
+        // not disconnect either media worker; only stop their UI polling timers.
         if (voice_timer_) {
             voice_timer_.Stop();
+        }
+        if (screen_timer_) {
+            screen_timer_.Stop();
         }
     });
 
     ShowChannel("general");
     UpdateVoiceUi();
+    UpdateScreenShareUi();
 }
 
 void ServerView::SetLocalState(const catro::community::LocalState& state) {
@@ -189,6 +266,23 @@ void ServerView::OnDeafenVoice(IInspectable const&, xaml::RoutedEventArgs const&
     UpdateVoiceUi();
 }
 
+void ServerView::OnShareScreen(IInspectable const&, xaml::RoutedEventArgs const&) {
+    if (!screen_runtime_ || share_dialog_open_) {
+        return;
+    }
+
+    const auto snapshot = screen_runtime_->snapshot();
+    if (snapshot.state == catro::screen::ScreenShareState::starting ||
+        snapshot.state == catro::screen::ScreenShareState::sharing) {
+        StopScreenShare();
+        UpdateVoiceUi();
+        UpdateScreenShareUi();
+        return;
+    }
+
+    BeginScreenShare();
+}
+
 void ServerView::OnSizeChanged(IInspectable const&, xaml::SizeChangedEventArgs const& args) {
     const auto width = args.NewSize().Width;
     const bool show_members = width >= 920.0;
@@ -229,6 +323,7 @@ void ServerView::StopVoice() {
     if (voice_runtime_ == nullptr) {
         return;
     }
+    StopScreenShare();
     catro_voice_runtime_stop(voice_runtime_);
     muted_ = false;
     deafened_ = false;
@@ -241,6 +336,8 @@ void ServerView::StopVoice() {
 void ServerView::UpdateVoiceUi() {
     if (voice_runtime_ == nullptr) {
         JoinVoiceButton().IsEnabled(false);
+        ShareScreenButton().IsEnabled(false);
+        ShareScreenIconButton().IsEnabled(false);
         VoiceStateText().Text(L"Unavailable");
         return;
     }
@@ -248,6 +345,18 @@ void ServerView::UpdateVoiceUi() {
     const auto snapshot = catro_voice_runtime_snapshot(voice_runtime_);
     const bool active = snapshot.state == CATRO_VOICE_STARTING || snapshot.state == CATRO_VOICE_JOINED;
     const bool joined = snapshot.state == CATRO_VOICE_JOINED;
+
+    bool share_active = false;
+    if (screen_runtime_) {
+        const auto share = screen_runtime_->snapshot();
+        share_active =
+            share.state == catro::screen::ScreenShareState::starting ||
+            share.state == catro::screen::ScreenShareState::sharing;
+    }
+    const bool can_share =
+        share_active || (joined && !share_dialog_open_);
+    ShareScreenButton().IsEnabled(can_share);
+    ShareScreenIconButton().IsEnabled(can_share);
 
     JoinVoiceButton().IsEnabled(true);
     const hstring join_label =
@@ -300,6 +409,305 @@ void ServerView::UpdateVoiceUi() {
         VoiceStateText().Text(L"Connected");
     } else {
         VoiceStateText().Text(L"Waiting for peer");
+    }
+}
+
+winrt::fire_and_forget ServerView::BeginScreenShare() {
+    auto lifetime = get_strong();
+    share_dialog_open_ = true;
+    UpdateVoiceUi();
+
+    try {
+        const auto sources =
+            catro::platform::windows::enumerate_capture_sources();
+        if (sources.empty()) {
+            share_dialog_open_ = false;
+            VoiceStateText().Text(L"No shareable windows or displays");
+            UpdateVoiceUi();
+            co_return;
+        }
+
+        controls::ContentDialog dialog;
+        dialog.XamlRoot(XamlRoot());
+        dialog.Title(box_value(hstring{L"Share your screen"}));
+        dialog.PrimaryButtonText(L"Go live");
+        dialog.CloseButtonText(L"Cancel");
+        dialog.DefaultButton(controls::ContentDialogButton::Primary);
+
+        controls::StackPanel form;
+        form.Spacing(10);
+
+        controls::TextBlock source_label;
+        source_label.Text(L"Source");
+        source_label.FontWeight(Windows::UI::Text::FontWeights::SemiBold());
+        form.Children().Append(source_label);
+
+        controls::ComboBox source_box;
+        source_box.HorizontalAlignment(xaml::HorizontalAlignment::Stretch);
+        for (const auto& source : sources) {
+            source_box.Items().Append(
+                box_value(hstring{capture_source_label(source)}));
+        }
+        source_box.SelectedIndex(0);
+        form.Children().Append(source_box);
+
+        controls::TextBlock resolution_label;
+        resolution_label.Text(L"Stream resolution ceiling");
+        resolution_label.FontWeight(Windows::UI::Text::FontWeights::SemiBold());
+        form.Children().Append(resolution_label);
+
+        controls::ComboBox preset_box;
+        preset_box.HorizontalAlignment(xaml::HorizontalAlignment::Stretch);
+        preset_box.Items().Append(box_value(hstring{L"1080p"}));
+        preset_box.Items().Append(box_value(hstring{L"900p"}));
+        preset_box.Items().Append(box_value(hstring{L"720p"}));
+        preset_box.Items().Append(box_value(hstring{L"Custom"}));
+        preset_box.SelectedIndex(0);
+        form.Children().Append(preset_box);
+
+        controls::NumberBox width_box;
+        width_box.Header(box_value(hstring{L"Maximum width"}));
+        width_box.Minimum(320);
+        width_box.Maximum(7680);
+        width_box.SmallChange(2);
+        width_box.Value(1920);
+        form.Children().Append(width_box);
+
+        controls::NumberBox height_box;
+        height_box.Header(box_value(hstring{L"Maximum height"}));
+        height_box.Minimum(180);
+        height_box.Maximum(4320);
+        height_box.SmallChange(2);
+        height_box.Value(1080);
+        form.Children().Append(height_box);
+
+        preset_box.SelectionChanged(
+            [width_box, height_box](auto const& sender, auto const&) {
+                const auto selected =
+                    sender.as<controls::ComboBox>().SelectedIndex();
+                if (selected == 0) {
+                    width_box.Value(1920);
+                    height_box.Value(1080);
+                } else if (selected == 1) {
+                    width_box.Value(1600);
+                    height_box.Value(900);
+                } else if (selected == 2) {
+                    width_box.Value(1280);
+                    height_box.Value(720);
+                }
+            });
+
+        controls::NumberBox fps_box;
+        fps_box.Header(box_value(hstring{L"Frames per second"}));
+        fps_box.Minimum(1);
+        fps_box.Maximum(120);
+        fps_box.SmallChange(1);
+        fps_box.Value(30);
+        form.Children().Append(fps_box);
+
+        controls::NumberBox bitrate_box;
+        bitrate_box.Header(box_value(hstring{L"Bitrate (Mbps)"}));
+        bitrate_box.Minimum(0.128);
+        bitrate_box.Maximum(50.0);
+        bitrate_box.SmallChange(0.5);
+        bitrate_box.Value(6.0);
+        form.Children().Append(bitrate_box);
+
+        controls::TextBlock note;
+        note.Text(
+            L"Catro preserves the selected source aspect ratio, never upscales it, and rounds only "
+            L"to the even dimensions required by NV12/H.264. Your actual outgoing size is shown "
+            L"under the preview after the stream starts.");
+        note.TextWrapping(xaml::TextWrapping::Wrap);
+        note.Foreground(
+            Application::Current().Resources().Lookup(
+                box_value(hstring{L"CatroTextTertiaryBrush"}))
+                .as<Microsoft::UI::Xaml::Media::Brush>());
+        form.Children().Append(note);
+
+        dialog.Content(form);
+        const auto result = co_await dialog.ShowAsync();
+        share_dialog_open_ = false;
+
+        if (result != controls::ContentDialogResult::Primary) {
+            UpdateVoiceUi();
+            co_return;
+        }
+
+        const auto selected = source_box.SelectedIndex();
+        const auto width_value = width_box.Value();
+        const auto height_value = height_box.Value();
+        const auto fps_value = fps_box.Value();
+        const auto bitrate_value = bitrate_box.Value();
+
+        if (selected < 0 ||
+            static_cast<std::size_t>(selected) >= sources.size() ||
+            !std::isfinite(width_value) ||
+            !std::isfinite(height_value) ||
+            !std::isfinite(fps_value) ||
+            !std::isfinite(bitrate_value)) {
+            VoiceStateText().Text(L"Invalid screen-share settings");
+            UpdateVoiceUi();
+            co_return;
+        }
+
+        const auto width =
+            static_cast<std::uint32_t>(width_value);
+        const auto height =
+            static_cast<std::uint32_t>(height_value);
+        const auto fps =
+            static_cast<std::uint32_t>(fps_value);
+        const auto bitrate = static_cast<std::uint32_t>(
+            bitrate_value * 1'000'000.0 + 0.5);
+
+        const auto fitted = catro::video::fit_even_video_extent(
+            sources[static_cast<std::size_t>(selected)].width,
+            sources[static_cast<std::size_t>(selected)].height,
+            width,
+            height);
+        if (!fitted || fps == 0 || fps > 120 ||
+            bitrate < 128'000 || bitrate > 50'000'000) {
+            VoiceStateText().Text(L"Invalid screen-share settings");
+            UpdateVoiceUi();
+            co_return;
+        }
+
+        const auto direct = direct_video_config();
+        catro::screen::ScreenShareConfig config;
+        config.source =
+            sources[static_cast<std::size_t>(selected)];
+        config.bind = direct.bind;
+        config.peer = direct.peer;
+        config.max_width = width;
+        config.max_height = height;
+        config.fps = fps;
+        config.bitrate = bitrate;
+        config.ssrc = LocalStreamId() ^ 0x56494430U;
+        if (config.ssrc == 0) {
+            config.ssrc = 1;
+        }
+
+        if (const auto failure =
+                screen_runtime_->start(config)) {
+            VoiceStateText().Text(
+                to_hstring(failure->message));
+            UpdateVoiceUi();
+            co_return;
+        }
+
+        SharePreviewHost().Visibility(xaml::Visibility::Visible);
+        VoiceIdentityPanel().Visibility(xaml::Visibility::Collapsed);
+        screen_timer_.Start();
+        UpdateScreenShareUi();
+        UpdateVoiceUi();
+    } catch (const winrt::hresult_error& failure) {
+        share_dialog_open_ = false;
+        VoiceStateText().Text(
+            hstring{L"Screen share UI error: "} +
+            failure.message());
+        UpdateVoiceUi();
+    } catch (...) {
+        share_dialog_open_ = false;
+        VoiceStateText().Text(L"Screen share UI error");
+        UpdateVoiceUi();
+    }
+}
+
+void ServerView::DetachPreviewSwapChain() noexcept {
+    try {
+        auto panel_native =
+            LocalShareSwapChainPanel().as<ISwapChainPanelNative>();
+        (void)panel_native->SetSwapChain(nullptr);
+    } catch (...) {
+    }
+    attached_preview_swap_chain_.Reset();
+}
+
+void ServerView::StopScreenShare() noexcept {
+    if (screen_timer_) {
+        screen_timer_.Stop();
+    }
+    if (screen_runtime_) {
+        screen_runtime_->stop();
+    }
+    DetachPreviewSwapChain();
+    SharePreviewHost().Visibility(xaml::Visibility::Collapsed);
+    VoiceIdentityPanel().Visibility(xaml::Visibility::Visible);
+    ShareScreenButton().Content(
+        box_value(hstring{L"Share screen"}));
+    controls::ToolTipService::SetToolTip(
+        ShareScreenIconButton(),
+        box_value(hstring{L"Share screen"}));
+}
+
+void ServerView::UpdateScreenShareUi() {
+    if (!screen_runtime_) {
+        return;
+    }
+
+    const auto snapshot = screen_runtime_->snapshot();
+    const bool active =
+        snapshot.state == catro::screen::ScreenShareState::starting ||
+        snapshot.state == catro::screen::ScreenShareState::sharing;
+
+    ShareScreenButton().Content(
+        box_value(active ? hstring{L"Stop sharing"}
+                         : hstring{L"Share screen"}));
+    controls::ToolTipService::SetToolTip(
+        ShareScreenIconButton(),
+        box_value(active ? hstring{L"Stop sharing"}
+                         : hstring{L"Share screen"}));
+
+    if (active) {
+        SharePreviewHost().Visibility(xaml::Visibility::Visible);
+        VoiceIdentityPanel().Visibility(xaml::Visibility::Collapsed);
+
+        const auto swap_chain =
+            screen_runtime_->preview_swap_chain();
+        if (swap_chain &&
+            attached_preview_swap_chain_.Get() !=
+                swap_chain.Get()) {
+            auto panel_native =
+                LocalShareSwapChainPanel().as<ISwapChainPanelNative>();
+            winrt::check_hresult(
+                panel_native->SetSwapChain(
+                    swap_chain.Get()));
+            attached_preview_swap_chain_ = swap_chain;
+        }
+
+        ShareSourceText().Text(
+            snapshot.source_title.empty()
+                ? hstring{L"Starting…"}
+                : to_hstring(snapshot.source_title));
+
+        if (snapshot.encoded_width != 0 &&
+            snapshot.encoded_height != 0) {
+            std::wstring meta =
+                std::to_wstring(snapshot.encoded_width);
+            meta += L"×";
+            meta += std::to_wstring(snapshot.encoded_height);
+            meta += L"  ·  LIVE";
+            ShareMetaText().Text(hstring{meta});
+        } else {
+            ShareMetaText().Text(L"Starting…");
+        }
+        return;
+    }
+
+    if (snapshot.state ==
+        catro::screen::ScreenShareState::failed) {
+        DetachPreviewSwapChain();
+        SharePreviewHost().Visibility(xaml::Visibility::Collapsed);
+        VoiceIdentityPanel().Visibility(xaml::Visibility::Visible);
+        if (!snapshot.error.empty()) {
+            controls::ToolTipService::SetToolTip(
+                ShareScreenButton(),
+                box_value(to_hstring(snapshot.error)));
+            VoiceStateText().Text(L"Screen share error");
+        }
+        if (screen_timer_) {
+            screen_timer_.Stop();
+        }
     }
 }
 
