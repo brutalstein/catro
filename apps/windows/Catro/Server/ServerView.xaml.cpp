@@ -17,6 +17,7 @@ namespace winrt::Catro::implementation {
 namespace {
 
 namespace xaml = Microsoft::UI::Xaml;
+namespace controls = Microsoft::UI::Xaml::Controls;
 using namespace std::chrono_literals;
 
 struct Endpoint {
@@ -30,10 +31,12 @@ std::optional<std::string> environment(char const* name) {
         return std::nullopt;
     }
 
-    std::string value(static_cast<std::size_t>(required - 1), '\0');
-    if (GetEnvironmentVariableA(name, value.data(), required) == 0) {
+    std::string value(static_cast<std::size_t>(required), '\0');
+    const auto written = GetEnvironmentVariableA(name, value.data(), required);
+    if (written == 0 || written >= required) {
         return std::nullopt;
     }
+    value.resize(static_cast<std::size_t>(written));
     return value;
 }
 
@@ -251,10 +254,10 @@ void ServerView::UpdateVoiceUi() {
     ProfileDeafenButton().IsEnabled(joined);
 
     const bool effective_muted = muted_ || deafened_;
-    ToolTipService::SetToolTip(MuteVoiceButton(), box_value(effective_muted ? L"Unmute" : L"Mute"));
-    ToolTipService::SetToolTip(ProfileMuteButton(), box_value(effective_muted ? L"Unmute" : L"Mute"));
-    ToolTipService::SetToolTip(DeafenVoiceButton(), box_value(deafened_ ? L"Undeafen" : L"Deafen"));
-    ToolTipService::SetToolTip(ProfileDeafenButton(), box_value(deafened_ ? L"Undeafen" : L"Deafen"));
+    controls::ToolTipService::SetToolTip(MuteVoiceButton(), box_value(effective_muted ? L"Unmute" : L"Mute"));
+    controls::ToolTipService::SetToolTip(ProfileMuteButton(), box_value(effective_muted ? L"Unmute" : L"Mute"));
+    controls::ToolTipService::SetToolTip(DeafenVoiceButton(), box_value(deafened_ ? L"Undeafen" : L"Deafen"));
+    controls::ToolTipService::SetToolTip(ProfileDeafenButton(), box_value(deafened_ ? L"Undeafen" : L"Deafen"));
 
     MuteVoiceButton().Opacity(effective_muted ? 1.0 : 0.72);
     ProfileMuteButton().Opacity(effective_muted ? 1.0 : 0.72);
@@ -264,7 +267,7 @@ void ServerView::UpdateVoiceUi() {
     if (snapshot.state == CATRO_VOICE_FAILED) {
         VoiceStateText().Text(L"Voice error");
         if (snapshot.error[0] != '\0') {
-            ToolTipService::SetToolTip(VoiceStateText(), box_value(to_hstring(snapshot.error)));
+            controls::ToolTipService::SetToolTip(VoiceStateText(), box_value(to_hstring(std::string(snapshot.error))));
         }
         if (voice_timer_) {
             voice_timer_.Stop();
