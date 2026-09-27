@@ -276,6 +276,7 @@ struct WindowsGraphicsCapture::Impl {
     };
 
     std::optional<ScreenCaptureError> start_primary_display(const ScreenCaptureConfig& config) {
+        initialize_apartment();
         auto item_result = primary_display_item();
         return start_item(std::move(item_result), config);
     }
@@ -283,8 +284,17 @@ struct WindowsGraphicsCapture::Impl {
     std::optional<ScreenCaptureError> start_source(
         const CaptureSource& source,
         const ScreenCaptureConfig& config) {
+        initialize_apartment();
         auto item_result = capture_item_for_source(source);
         return start_item(std::move(item_result), config);
+    }
+
+    void initialize_apartment() noexcept {
+        try {
+            winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        } catch (const winrt::hresult_error&) {
+            // WinUI callers already own an STA. WGC activation is valid from that apartment.
+        }
     }
 
     std::optional<ScreenCaptureError> start_item(
@@ -294,12 +304,6 @@ struct WindowsGraphicsCapture::Impl {
         stop_locked();
 
         try {
-            try {
-                winrt::init_apartment(winrt::apartment_type::multi_threaded);
-            } catch (const winrt::hresult_error&) {
-                // WinUI callers already own an STA. WGC activation is valid from that apartment.
-            }
-
             if (!capture::GraphicsCaptureSession::IsSupported()) {
                 return fail(ScreenCaptureError{ScreenCaptureErrorCode::unsupported});
             }
