@@ -1,0 +1,4 @@
+#include <windows.h>
+
+#define IDI_CATRO_APP 101
+IDI_CATRO_APP ICON "Assets\\Catro.ico"
