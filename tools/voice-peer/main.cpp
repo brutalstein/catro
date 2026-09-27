@@ -1,5 +1,6 @@
 #include "voice_peer.hpp"
 
+#include <atomic>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -15,6 +16,15 @@
 namespace {
 
 using Platform = catro::platform::windows::WasapiAudioPlatform;
+std::atomic_bool g_stop_requested{false};
+
+BOOL WINAPI console_control_handler(DWORD event) {
+    if (event == CTRL_C_EVENT || event == CTRL_BREAK_EVENT) {
+        g_stop_requested.store(true, std::memory_order_relaxed);
+        return TRUE;
+    }
+    return FALSE;
+}
 
 std::string utf8(std::wstring_view text) {
     if (text.empty()) {
@@ -31,9 +41,17 @@ std::string utf8(std::wstring_view text) {
 #else
 #include <catro/platform/macos/audio_platform.hpp>
 
+#include <csignal>
+
 namespace {
 
 using Platform = catro::platform::macos::CoreAudioPlatform;
+static_assert(std::atomic_bool::is_always_lock_free);
+std::atomic_bool g_stop_requested{false};
+
+void stop_signal_handler(int) {
+    g_stop_requested.store(true, std::memory_order_relaxed);
+}
 
 } // namespace
 #endif
@@ -43,7 +61,8 @@ namespace {
 int run(const std::vector<std::string>& storage) {
     const std::vector<std::string_view> arguments(storage.begin(), storage.end());
     Platform platform;
-    return catro::tools::run_voice_peer(arguments, platform, std::cout, std::cerr);
+    return catro::tools::run_voice_peer(arguments, platform, std::cout, std::cerr,
+                                        &g_stop_requested);
 }
 
 } // namespace
@@ -55,10 +74,23 @@ int wmain(int argc, wchar_t** argv) {
     for (int index = 1; index < argc; ++index) {
         storage.push_back(utf8(argv[index]));
     }
-    return run(storage);
+
+    g_stop_requested.store(false, std::memory_order_relaxed);
+    const auto installed = SetConsoleCtrlHandler(console_control_handler, TRUE) != FALSE;
+    const auto result = run(storage);
+    if (installed) {
+        (void)SetConsoleCtrlHandler(console_control_handler, FALSE);
+    }
+    return result;
 }
 #else
 int main(int argc, char** argv) {
-    return run(std::vector<std::string>(argv + 1, argv + argc));
+    g_stop_requested.store(false, std::memory_order_relaxed);
+    const auto previous_int = std::signal(SIGINT, stop_signal_handler);
+    const auto previous_term = std::signal(SIGTERM, stop_signal_handler);
+    const auto result = run(std::vector<std::string>(argv + 1, argv + argc));
+    (void)std::signal(SIGINT, previous_int);
+    (void)std::signal(SIGTERM, previous_term);
+    return result;
 }
 #endif
