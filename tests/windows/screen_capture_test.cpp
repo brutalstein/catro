@@ -27,3 +27,17 @@ TEST_CASE("stopping an idle Windows screen capture is idempotent") {
     capture.stop();
     CHECK(capture.statistics().state == ScreenCaptureState::idle);
 }
+
+TEST_CASE("capture source descriptors are inert value objects") {
+    const CaptureSource source{
+        .kind = CaptureSourceKind::window,
+        .native_handle = 42,
+        .title = "Example",
+        .width = 1280,
+        .height = 720,
+    };
+    CHECK(source.kind == CaptureSourceKind::window);
+    CHECK(source.native_handle == 42);
+    CHECK(source.width == 1280);
+    CHECK(source.height == 720);
+}

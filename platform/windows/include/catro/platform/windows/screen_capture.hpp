@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace catro::platform::windows {
 
@@ -50,6 +52,28 @@ struct ScreenCaptureError {
     }
     return "screen capture failure";
 }
+
+enum class CaptureSourceKind : std::uint8_t {
+    display,
+    window,
+};
+
+struct CaptureSource {
+    CaptureSourceKind kind = CaptureSourceKind::display;
+    // HMONITOR or HWND encoded as an integer so this public header does not expose Win32 handle
+    // typedefs to portable callers. Handles are validated again immediately before capture starts.
+    std::uintptr_t native_handle = 0;
+    std::string title;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    bool primary = false;
+
+    friend bool operator==(const CaptureSource&, const CaptureSource&) = default;
+};
+
+// Lightweight desktop discovery used only when the user opens the share-source chooser.
+// No D3D device, WGC session, or capture worker is created by enumeration.
+[[nodiscard]] std::vector<CaptureSource> enumerate_capture_sources() noexcept;
 
 struct ScreenCaptureConfig {
     // Packed DXGI LUID (high 32 bits followed by low 32 bits). When present, capture must use
@@ -103,6 +127,9 @@ public:
     WindowsGraphicsCapture& operator=(const WindowsGraphicsCapture&) = delete;
 
     [[nodiscard]] std::optional<ScreenCaptureError> start_primary_display(
+        const ScreenCaptureConfig& config = {});
+    [[nodiscard]] std::optional<ScreenCaptureError> start_source(
+        const CaptureSource& source,
         const ScreenCaptureConfig& config = {});
     void stop() noexcept;
 

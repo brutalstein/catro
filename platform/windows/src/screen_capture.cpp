@@ -21,8 +21,10 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace catro::platform::windows {
 namespace {
@@ -170,8 +172,25 @@ std::variant<DeviceBundle, ScreenCaptureError> create_capture_device(
     };
 }
 
-std::variant<capture::GraphicsCaptureItem, ScreenCaptureError> primary_display_item() {
-    const auto monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+std::string utf8(std::wstring_view wide) {
+    if (wide.empty()) {
+        return {};
+    }
+    const auto required = WideCharToMultiByte(
+        CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()),
+        nullptr, 0, nullptr, nullptr);
+    if (required <= 0) {
+        return {};
+    }
+    std::string output(static_cast<std::size_t>(required), '\0');
+    const auto converted = WideCharToMultiByte(
+        CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()),
+        output.data(), required, nullptr, nullptr);
+    return converted == required ? output : std::string{};
+}
+
+std::variant<capture::GraphicsCaptureItem, ScreenCaptureError> capture_item_for_monitor(
+    HMONITOR monitor) {
     if (monitor == nullptr) {
         return ScreenCaptureError{ScreenCaptureErrorCode::source_unavailable};
     }
@@ -195,6 +214,50 @@ std::variant<capture::GraphicsCaptureItem, ScreenCaptureError> primary_display_i
     return item;
 }
 
+std::variant<capture::GraphicsCaptureItem, ScreenCaptureError> capture_item_for_window(
+    HWND window) {
+    if (window == nullptr || !IsWindow(window)) {
+        return ScreenCaptureError{ScreenCaptureErrorCode::source_unavailable};
+    }
+
+    capture::GraphicsCaptureItem item{nullptr};
+    try {
+        auto interop =
+            winrt::get_activation_factory<capture::GraphicsCaptureItem, IGraphicsCaptureItemInterop>();
+        const auto result = interop->CreateForWindow(
+            window, __uuidof(ABI::Windows::Graphics::Capture::IGraphicsCaptureItem),
+            reinterpret_cast<void**>(winrt::put_abi(item)));
+        if (FAILED(result) || !item) {
+            return ScreenCaptureError{ScreenCaptureErrorCode::source_unavailable, result};
+        }
+    } catch (const winrt::hresult_error& failure) {
+        return ScreenCaptureError{
+            ScreenCaptureErrorCode::source_unavailable,
+            static_cast<std::int64_t>(failure.code().value),
+        };
+    }
+    return item;
+}
+
+std::variant<capture::GraphicsCaptureItem, ScreenCaptureError> capture_item_for_source(
+    const CaptureSource& source) {
+    if (source.native_handle == 0) {
+        return ScreenCaptureError{ScreenCaptureErrorCode::source_unavailable};
+    }
+
+    if (source.kind == CaptureSourceKind::window) {
+        return capture_item_for_window(
+            reinterpret_cast<HWND>(source.native_handle));
+    }
+    return capture_item_for_monitor(
+        reinterpret_cast<HMONITOR>(source.native_handle));
+}
+
+std::variant<capture::GraphicsCaptureItem, ScreenCaptureError> primary_display_item() {
+    const auto monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    return capture_item_for_monitor(monitor);
+}
+
 } // namespace
 
 struct WindowsGraphicsCapture::Impl {
@@ -212,6 +275,20 @@ struct WindowsGraphicsCapture::Impl {
     };
 
     std::optional<ScreenCaptureError> start_primary_display(const ScreenCaptureConfig& config) {
+        auto item_result = primary_display_item();
+        return start_item(std::move(item_result), config);
+    }
+
+    std::optional<ScreenCaptureError> start_source(
+        const CaptureSource& source,
+        const ScreenCaptureConfig& config) {
+        auto item_result = capture_item_for_source(source);
+        return start_item(std::move(item_result), config);
+    }
+
+    std::optional<ScreenCaptureError> start_item(
+        std::variant<capture::GraphicsCaptureItem, ScreenCaptureError> item_result,
+        const ScreenCaptureConfig& config) {
         std::scoped_lock lifecycle_lock(lifecycle_mutex_);
         stop_locked();
 
@@ -232,11 +309,10 @@ struct WindowsGraphicsCapture::Impl {
             }
             auto bundle = std::move(std::get<DeviceBundle>(device_result));
 
-            auto item_result = primary_display_item();
             if (const auto* error = std::get_if<ScreenCaptureError>(&item_result)) {
                 return fail(*error);
             }
-            auto item = std::get<capture::GraphicsCaptureItem>(item_result);
+            auto item = std::get<capture::GraphicsCaptureItem>(std::move(item_result));
             const auto size = item.Size();
             if (size.Width <= 0 || size.Height <= 0) {
                 return fail(ScreenCaptureError{ScreenCaptureErrorCode::source_unavailable});
@@ -528,6 +604,112 @@ struct WindowsGraphicsCapture::Impl {
     std::atomic<std::uint64_t> adapter_luid_{0};
 };
 
+std::vector<CaptureSource> enumerate_capture_sources() noexcept {
+    std::vector<CaptureSource> sources;
+    try {
+        (void)EnumDisplayMonitors(
+            nullptr, nullptr,
+            [](HMONITOR monitor, HDC, LPRECT, LPARAM opaque) -> BOOL {
+                auto& output =
+                    *reinterpret_cast<std::vector<CaptureSource>*>(opaque);
+                MONITORINFOEXW info{};
+                info.cbSize = sizeof(info);
+                if (!GetMonitorInfoW(monitor, &info)) {
+                    return TRUE;
+                }
+
+                const auto width = info.rcMonitor.right - info.rcMonitor.left;
+                const auto height = info.rcMonitor.bottom - info.rcMonitor.top;
+                if (width <= 0 || height <= 0) {
+                    return TRUE;
+                }
+
+                std::string title =
+                    (info.dwFlags & MONITORINFOF_PRIMARY) != 0
+                        ? "Primary display"
+                        : utf8(info.szDevice);
+                output.push_back(CaptureSource{
+                    .kind = CaptureSourceKind::display,
+                    .native_handle = reinterpret_cast<std::uintptr_t>(monitor),
+                    .title = std::move(title),
+                    .width = static_cast<std::uint32_t>(width),
+                    .height = static_cast<std::uint32_t>(height),
+                    .primary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0,
+                });
+                return TRUE;
+            },
+            reinterpret_cast<LPARAM>(&sources));
+
+        (void)EnumWindows(
+            [](HWND window, LPARAM opaque) -> BOOL {
+                if (!IsWindowVisible(window) ||
+                    window == GetShellWindow() ||
+                    (GetWindowLongPtrW(window, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) != 0) {
+                    return TRUE;
+                }
+
+                DWORD process_id = 0;
+                (void)GetWindowThreadProcessId(window, &process_id);
+                if (process_id == GetCurrentProcessId()) {
+                    return TRUE;
+                }
+
+                const auto length = GetWindowTextLengthW(window);
+                if (length <= 0 || length > 1024) {
+                    return TRUE;
+                }
+
+                RECT bounds{};
+                if (!GetWindowRect(window, &bounds)) {
+                    return TRUE;
+                }
+                const auto width = bounds.right - bounds.left;
+                const auto height = bounds.bottom - bounds.top;
+                if (width <= 1 || height <= 1) {
+                    return TRUE;
+                }
+
+                std::wstring title(
+                    static_cast<std::size_t>(length) + 1U, L'\0');
+                const auto written = GetWindowTextW(
+                    window, title.data(), static_cast<int>(title.size()));
+                if (written <= 0) {
+                    return TRUE;
+                }
+                title.resize(static_cast<std::size_t>(written));
+
+                auto& output =
+                    *reinterpret_cast<std::vector<CaptureSource>*>(opaque);
+                output.push_back(CaptureSource{
+                    .kind = CaptureSourceKind::window,
+                    .native_handle = reinterpret_cast<std::uintptr_t>(window),
+                    .title = utf8(title),
+                    .width = static_cast<std::uint32_t>(width),
+                    .height = static_cast<std::uint32_t>(height),
+                    .primary = false,
+                });
+                return TRUE;
+            },
+            reinterpret_cast<LPARAM>(&sources));
+
+        std::stable_sort(
+            sources.begin(), sources.end(),
+            [](const CaptureSource& left, const CaptureSource& right) {
+                if (left.kind != right.kind) {
+                    return left.kind == CaptureSourceKind::display;
+                }
+                if (left.kind == CaptureSourceKind::display &&
+                    left.primary != right.primary) {
+                    return left.primary;
+                }
+                return left.title < right.title;
+            });
+    } catch (...) {
+        sources.clear();
+    }
+    return sources;
+}
+
 WindowsGraphicsCapture::WindowsGraphicsCapture() : impl_(std::make_unique<Impl>()) {}
 
 WindowsGraphicsCapture::~WindowsGraphicsCapture() {
@@ -537,6 +719,12 @@ WindowsGraphicsCapture::~WindowsGraphicsCapture() {
 std::optional<ScreenCaptureError> WindowsGraphicsCapture::start_primary_display(
     const ScreenCaptureConfig& config) {
     return impl_->start_primary_display(config);
+}
+
+std::optional<ScreenCaptureError> WindowsGraphicsCapture::start_source(
+    const CaptureSource& source,
+    const ScreenCaptureConfig& config) {
+    return impl_->start_source(source, config);
 }
 
 void WindowsGraphicsCapture::stop() noexcept {
