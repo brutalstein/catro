@@ -124,6 +124,9 @@ int wmain(int argc, wchar_t** argv) {
         capture.stop();
         return 8;
     }
+    // Release the WGC surface lease immediately; keeping it would unnecessarily occupy half of
+    // the two-buffer capture pool for the rest of the run.
+    first = {};
 
     const auto started = Clock::now();
     const auto deadline = started + options->duration;
