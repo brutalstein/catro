@@ -506,29 +506,46 @@ int run_voice_peer(std::span<const std::string_view> arguments,
                     next_playout = Clock::now() + kFramePeriod;
                 }
             } else {
-                int caught_up = 0;
-                while (now >= next_playout && caught_up < kMaxPlayoutCatchup) {
-                    const auto before = Clock::now();
-                    const auto decoded = pipeline->decode_next();
-                    const auto after = Clock::now();
-                    if (const auto* failure = std::get_if<voice::CodecError>(&decoded)) {
+                const auto resynchronize_live_edge = [&]() {
+                    if (const auto failure = pipeline->resynchronize_receiver()) {
                         codec_failure = *failure;
                         exit_code = voice_peer_codec_failed;
+                        return false;
+                    }
+                    ++network.worker_late_resyncs;
+                    playout_started = false;
+                    next_playout = Clock::now();
+                    return true;
+                };
+
+                if (now - next_playout >= kFramePeriod * kMaxPlayoutCatchup) {
+                    if (!resynchronize_live_edge()) {
                         break;
                     }
-                    if (std::get<voice::DecodeStep>(decoded) != voice::DecodeStep::waiting) {
-                        decode_timing.add(after - before);
+                } else {
+                    int caught_up = 0;
+                    while (now >= next_playout && caught_up < kMaxPlayoutCatchup) {
+                        const auto before = Clock::now();
+                        const auto decoded = pipeline->decode_next();
+                        const auto after = Clock::now();
+                        if (const auto* failure = std::get_if<voice::CodecError>(&decoded)) {
+                            codec_failure = *failure;
+                            exit_code = voice_peer_codec_failed;
+                            break;
+                        }
+                        if (std::get<voice::DecodeStep>(decoded) != voice::DecodeStep::waiting) {
+                            decode_timing.add(after - before);
+                        }
+                        next_playout += kFramePeriod;
+                        ++caught_up;
+                        now = after;
                     }
-                    next_playout += kFramePeriod;
-                    ++caught_up;
-                    now = after;
-                }
-                if (exit_code != voice_peer_ok) {
-                    break;
-                }
-                if (now >= next_playout) {
-                    ++network.worker_late_resyncs;
-                    next_playout = now + kFramePeriod;
+                    if (exit_code != voice_peer_ok) {
+                        break;
+                    }
+                    if (now >= next_playout && !resynchronize_live_edge()) {
+                        break;
+                    }
                 }
             }
         }
