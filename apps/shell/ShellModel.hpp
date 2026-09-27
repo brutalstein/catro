@@ -7,59 +7,71 @@
 
 namespace catro::app {
 
-enum class ShellSection : std::uint8_t {
-    home,
-    voice,
-    share,
+enum class AppDestination : std::uint8_t {
+    server,
     diagnostics,
     settings,
 };
 
-struct ShellSectionSpec {
-    ShellSection section = ShellSection::home;
-    std::string_view id;
-    std::string_view title;
-    std::string_view eyebrow;
-    std::string_view summary;
-    std::string_view empty_title;
-    std::string_view empty_detail;
-
-    friend constexpr bool operator==(const ShellSectionSpec&, const ShellSectionSpec&) = default;
+enum class ChannelKind : std::uint8_t {
+    text,
+    voice,
 };
 
-inline constexpr std::array<ShellSectionSpec, 5> kShellSections{{
-    {ShellSection::home, "home", "Home", "LOCAL WORKSPACE",
-     "A quiet launch surface for rooms, voice, and sharing.",
-     "Nothing pinned yet", "Recent rooms and people will appear here without changing the shell layout."},
-    {ShellSection::voice, "voice", "Voice", "VOICE",
-     "Low-latency rooms backed by the native media core.",
-     "No voice rooms yet", "Room discovery and membership will plug into this pane; media stays in the native core."},
-    {ShellSection::share, "share", "Share", "SCREEN SHARE",
-     "Native capture and hardware encode will live behind this surface.",
-     "No share session", "Window, display, quality, and system-audio sources will connect here later."},
-    {ShellSection::diagnostics, "diagnostics", "System", "DIAGNOSTICS",
-     "Inspect capabilities, devices, and native media health.",
-     "Diagnostics are local", "Capability and audio evidence stays available without crowding the primary workspace."},
-    {ShellSection::settings, "settings", "Settings", "PREFERENCES",
-     "User-facing defaults without exposing implementation detail.",
-     "Defaults first", "Only settings that materially change voice, sharing, or resource use belong here."},
+enum class ServerRole : std::uint8_t {
+    owner,
+    member,
+};
+
+struct ChannelSpec {
+    std::string_view id;
+    std::string_view name;
+    ChannelKind kind = ChannelKind::text;
+
+    friend constexpr bool operator==(const ChannelSpec&, const ChannelSpec&) = default;
+};
+
+// Every identity starts with exactly one personal server. The persistence/account layer will replace
+// names and opaque ids, but these two channels are the stable first-run contract.
+inline constexpr std::array<ChannelSpec, 2> kDefaultChannels{{
+    {"general", "general", ChannelKind::text},
+    {"voice", "Voice", ChannelKind::voice},
 }};
 
-[[nodiscard]] const ShellSectionSpec& shell_section_spec(ShellSection section) noexcept;
-[[nodiscard]] std::optional<ShellSection> shell_section_from_id(std::string_view id) noexcept;
+struct PersonalServerContract {
+    bool identity_owns_server = true;
+    bool owner_is_only_elevated_role = true;
+    bool invite_code_required_to_join = true;
+    std::size_t default_text_channels = 1;
+    std::size_t default_voice_channels = 1;
+
+    friend constexpr bool operator==(const PersonalServerContract&, const PersonalServerContract&) = default;
+};
+
+inline constexpr PersonalServerContract kPersonalServerContract{};
+
+[[nodiscard]] const ChannelSpec& channel_spec(std::string_view id) noexcept;
+[[nodiscard]] std::optional<ChannelKind> channel_kind(std::string_view id) noexcept;
+[[nodiscard]] constexpr bool can_manage_server(ServerRole role) noexcept {
+    return role == ServerRole::owner;
+}
 
 class ShellState {
 public:
-    [[nodiscard]] ShellSection active() const noexcept { return active_; }
-    [[nodiscard]] const ShellSectionSpec& active_spec() const noexcept {
-        return shell_section_spec(active_);
+    [[nodiscard]] AppDestination destination() const noexcept { return destination_; }
+    [[nodiscard]] std::string_view channel_id() const noexcept { return channel_id_; }
+    [[nodiscard]] ChannelKind active_channel_kind() const noexcept {
+        return channel_spec(channel_id_).kind;
     }
 
-    bool activate(ShellSection section) noexcept;
-    bool activate(std::string_view id) noexcept;
+    bool open_server() noexcept;
+    bool open_diagnostics() noexcept;
+    bool open_settings() noexcept;
+    bool select_channel(std::string_view id) noexcept;
 
 private:
-    ShellSection active_ = ShellSection::home;
+    AppDestination destination_ = AppDestination::server;
+    std::string_view channel_id_ = kDefaultChannels.front().id;
 };
 
 } // namespace catro::app
