@@ -166,6 +166,35 @@ TEST_CASE("capture overflow creates a packet-clock gap instead of time-compressi
     CHECK(stats.timeline_frames_skipped == 5);
 }
 
+TEST_CASE("mute preserves packet cadence while encoding silence") {
+    auto sender = make_pipeline(0x14141414U, 1);
+    auto receiver = make_pipeline(0x15151515U, 1);
+    double phase = 0.0;
+
+    sender->set_muted(true);
+    CHECK(sender->muted());
+    const auto packet = encode(*sender, tone_frame(phase, 0.8F));
+    REQUIRE(std::get<JitterPushResult>(receiver->receive(packet.view())) == JitterPushResult::accepted);
+    REQUIRE(std::get<DecodeStep>(receiver->decode_next()) == DecodeStep::queued_packet);
+
+    PcmFrame rendered{};
+    receiver->render().on_render(rendered);
+    double energy = 0.0;
+    for (const auto sample : rendered) {
+        energy += static_cast<double>(sample) * sample;
+    }
+    CHECK(energy < 1e-6);
+    CHECK(sender->statistics().muted_frames == 1);
+
+    sender->set_muted(false);
+    CHECK_FALSE(sender->muted());
+    const auto audible = encode(*sender, tone_frame(phase, 0.2F));
+    REQUIRE(std::get<JitterPushResult>(receiver->receive(audible.view())) == JitterPushResult::accepted);
+    REQUIRE(std::get<DecodeStep>(receiver->decode_next()) == DecodeStep::queued_packet);
+    receiver->render().on_render(rendered);
+    CHECK(finite_nonzero(rendered));
+}
+
 TEST_CASE("two pipelines restore reordered datagrams and queue decoded audio") {
     auto sender = make_pipeline(0x11111111U, 1);
     auto receiver = make_pipeline(0x22222222U, 3);
