@@ -22,6 +22,7 @@ Fetched by CMake `FetchContent` at configure time and pinned by commit in
 | --- | --- | --- |
 | nlohmann/json | `65ee68451d8eb2b5f3a30b410476ab83deb3289b` | `core/reporting` only (private link). |
 | Catch2 | `95d8a61b089317bec800c7cc4c64064cbcb3802d` | Tests only. |
+| libopus | `1.6.1` source archive, SHA256 `6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1` | `core/voice` codec only. |
 
 ## Windows shell NuGet packages
 
