@@ -10,19 +10,17 @@ struct MainWindow : MainWindowT<MainWindow> {
     MainWindow() = default;
 
     void InitializeComponent();
-    void OnNavigationClick(IInspectable const& sender, Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnShellSizeChanged(IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
+    void OnServer(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnDiagnostics(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnSettings(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
 
 private:
-    Microsoft::UI::Xaml::UIElement PageFor(catro::app::ShellSection section);
-    void Activate(catro::app::ShellSection section);
-    void UpdateNavigationVisuals(catro::app::ShellSection section);
-    void UpdateResponsiveLayout(double width);
+    Microsoft::UI::Xaml::UIElement PageFor(catro::app::AppDestination destination);
+    void Activate(catro::app::AppDestination destination);
+    void UpdateRail();
 
     catro::app::ShellState shell_state_;
-    Microsoft::UI::Xaml::UIElement home_page_{nullptr};
-    Microsoft::UI::Xaml::UIElement voice_page_{nullptr};
-    Microsoft::UI::Xaml::UIElement share_page_{nullptr};
+    Microsoft::UI::Xaml::UIElement server_page_{nullptr};
     Microsoft::UI::Xaml::UIElement diagnostics_page_{nullptr};
     Microsoft::UI::Xaml::UIElement settings_page_{nullptr};
 };
