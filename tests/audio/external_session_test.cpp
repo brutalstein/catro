@@ -265,6 +265,7 @@ TEST_CASE("external session stop waits for an in-flight start and leaves no nati
     Source source;
     ExternalAudioSession session(platform);
     std::atomic_bool stop_returned = false;
+    std::latch stop_attempted{1};
 
     std::thread starter([&] {
         (void)session.start({.mode = ExternalSessionMode::capture_only}, sink, source);
@@ -272,10 +273,12 @@ TEST_CASE("external session stop waits for an in-flight start and leaves no nati
     platform.capture_opened.wait();
 
     std::thread stopper([&] {
+        stop_attempted.count_down();
         session.stop();
         stop_returned.store(true, std::memory_order_release);
     });
 
+    stop_attempted.wait();
     std::this_thread::yield();
     CHECK_FALSE(stop_returned.load(std::memory_order_acquire));
 
