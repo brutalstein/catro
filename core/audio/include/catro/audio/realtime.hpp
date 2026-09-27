@@ -119,14 +119,16 @@ private:
         }
     }
 
-    // Explicit padding keeps the two indices on separate cache lines without alignas padding
-    // warnings.
-    struct alignas(64) Index {
+    // Keep producer and consumer ownership on distinct cache lines. 128 bytes is conservative
+    // across the x86 machines and Apple Silicon machines Catro targets; this costs only 256 bytes
+    // per ring and avoids callback/worker cache-line ping-pong.
+    static_assert(sizeof(std::atomic<std::size_t>) <= 128);
+    struct alignas(128) Index {
         std::atomic<std::size_t> value{0};
-        char padding[64 - sizeof(std::atomic<std::size_t>)]{};
+        char padding[128 - sizeof(std::atomic<std::size_t>)]{};
     };
-    static_assert(sizeof(Index) == 64);
-    static_assert(alignof(Index) == 64);
+    static_assert(sizeof(Index) == 128);
+    static_assert(alignof(Index) >= 128);
 
     std::vector<T> buffer_;
     std::size_t mask_;
