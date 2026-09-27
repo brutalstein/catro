@@ -1,0 +1,812 @@
+{
+  "CMakePresets.json": {
+    "mtime": 1790450903.8870878,
+    "seen": 1790470014.403427,
+    "ast_hash": "95a0c37719939a46230416152a5158da",
+    "semantic_hash": "95a0c37719939a46230416152a5158da"
+  },
+  "core/capabilities/include/catro/capabilities/evidence.hpp": {
+    "mtime": 1790460487.510962,
+    "seen": 1790470014.403427,
+    "ast_hash": "abcb3a8c44da02f40daac4217fa0b075",
+    "semantic_hash": "abcb3a8c44da02f40daac4217fa0b075"
+  },
+  "core/capabilities/include/catro/capabilities/ids.hpp": {
+    "mtime": 1790460087.312589,
+    "seen": 1790470014.403427,
+    "ast_hash": "c111ade456726418e1ff7c25ad93c541",
+    "semantic_hash": "c111ade456726418e1ff7c25ad93c541"
+  },
+  "core/capabilities/include/catro/capabilities/media_plan.hpp": {
+    "mtime": 1790462490.8799672,
+    "seen": 1790470014.403427,
+    "ast_hash": "19f65983475e2b65e25b4baed07a112d",
+    "semantic_hash": "19f65983475e2b65e25b4baed07a112d"
+  },
+  "core/capabilities/include/catro/capabilities/model.hpp": {
+    "mtime": 1790461682.3311832,
+    "seen": 1790470014.403427,
+    "ast_hash": "b342bd6fbe9584ce62a81498bdfda21f",
+    "semantic_hash": "b342bd6fbe9584ce62a81498bdfda21f"
+  },
+  "core/capabilities/include/catro/capabilities/policy.hpp": {
+    "mtime": 1790462492.3268826,
+    "seen": 1790470014.403427,
+    "ast_hash": "a4f2a7d093f1139bf75a2c3ed8defa74",
+    "semantic_hash": "a4f2a7d093f1139bf75a2c3ed8defa74"
+  },
+  "core/capabilities/include/catro/capabilities/rational.hpp": {
+    "mtime": 1790460088.61804,
+    "seen": 1790470014.403427,
+    "ast_hash": "456d49be3c38360b62bd42a09a9f20ee",
+    "semantic_hash": "456d49be3c38360b62bd42a09a9f20ee"
+  },
+  "core/capabilities/include/catro/capabilities/snapshot_diff.hpp": {
+    "mtime": 1790460753.3254344,
+    "seen": 1790470014.403427,
+    "ast_hash": "0dd718387dc8f8c260c50318c992a86d",
+    "semantic_hash": "0dd718387dc8f8c260c50318c992a86d"
+  },
+  "core/capabilities/include/catro/capabilities/validation.hpp": {
+    "mtime": 1790460751.8831458,
+    "seen": 1790470014.403427,
+    "ast_hash": "63e0670b04823dcbd8b6d85a6d493b00",
+    "semantic_hash": "63e0670b04823dcbd8b6d85a6d493b00"
+  },
+  "core/capabilities/include/catro/capabilities/version.hpp": {
+    "mtime": 1790460085.9308643,
+    "seen": 1790470014.403427,
+    "ast_hash": "6429ab2792dec358504a6d47a16ec720",
+    "semantic_hash": "6429ab2792dec358504a6d47a16ec720"
+  },
+  "core/capabilities/src/candidate_ranking.cpp": {
+    "mtime": 1790462893.4727755,
+    "seen": 1790470014.403427,
+    "ast_hash": "8602a99cae7f5c057213801219ef46e9",
+    "semantic_hash": "8602a99cae7f5c057213801219ef46e9"
+  },
+  "core/capabilities/src/local_envelope.cpp": {
+    "mtime": 1790462740.3701942,
+    "seen": 1790470014.403427,
+    "ast_hash": "6f714721142040340613572b92d79a0f",
+    "semantic_hash": "6f714721142040340613572b92d79a0f"
+  },
+  "core/capabilities/src/operating_profile.cpp": {
+    "mtime": 1790461402.6943924,
+    "seen": 1790470014.403427,
+    "ast_hash": "59f94e2ae8f4f0c111e99dcfe0b45f4c",
+    "semantic_hash": "59f94e2ae8f4f0c111e99dcfe0b45f4c"
+  },
+  "core/capabilities/src/policy.cpp": {
+    "mtime": 1790462831.6679475,
+    "seen": 1790470014.403427,
+    "ast_hash": "d0e0b2769cfabcfe8683d2ae6530aedb",
+    "semantic_hash": "d0e0b2769cfabcfe8683d2ae6530aedb"
+  },
+  "core/capabilities/src/policy_internal.hpp": {
+    "mtime": 1790462707.8212662,
+    "seen": 1790470014.403427,
+    "ast_hash": "c5733a56436c9936040f770e0d06b2a5",
+    "semantic_hash": "c5733a56436c9936040f770e0d06b2a5"
+  },
+  "core/capabilities/src/snapshot_diff.cpp": {
+    "mtime": 1790460960.4367478,
+    "seen": 1790470014.403427,
+    "ast_hash": "2725a10b2d50f1a2f315fe87e3f7182c",
+    "semantic_hash": "2725a10b2d50f1a2f315fe87e3f7182c"
+  },
+  "core/capabilities/src/validation.cpp": {
+    "mtime": 1790463229.9376564,
+    "seen": 1790470014.403427,
+    "ast_hash": "2c628efe0218e93948c23209e817aa05",
+    "semantic_hash": "2c628efe0218e93948c23209e817aa05"
+  },
+  "core/reporting/include/catro/reporting/canonical_json.hpp": {
+    "mtime": 1790470569.2278724,
+    "seen": 1790470710.080231,
+    "ast_hash": "e1f1888983cb8d4791d598c7e70d5c44",
+    "semantic_hash": ""
+  },
+  "core/reporting/include/catro/reporting/human_report.hpp": {
+    "mtime": 1790480143.8330672,
+    "seen": 1790503972.257685,
+    "ast_hash": "a50e50a9d50e26d15aaa6a3334e85b2a",
+    "semantic_hash": ""
+  },
+  "core/reporting/include/catro/reporting/report.hpp": {
+    "mtime": 1790480951.567772,
+    "seen": 1790503972.257685,
+    "ast_hash": "8adc3fbeceb96f48eb30c1396f86428f",
+    "semantic_hash": ""
+  },
+  "core/reporting/src/canonical_json.cpp": {
+    "mtime": 1790478795.4763763,
+    "seen": 1790503972.257685,
+    "ast_hash": "d85dcde3074dc52383225f30ba4ac192",
+    "semantic_hash": ""
+  },
+  "core/reporting/src/human_report.cpp": {
+    "mtime": 1790480143.8330672,
+    "seen": 1790503972.257685,
+    "ast_hash": "db10af954230ca104bde0bb342e54b34",
+    "semantic_hash": ""
+  },
+  "core/reporting/src/schema.hpp": {
+    "mtime": 1790478795.4763763,
+    "seen": 1790503972.257685,
+    "ast_hash": "bae57a8c2abe9d8fb34c5eb9cb04f20d",
+    "semantic_hash": ""
+  },
+  "tests/capabilities/canonical_determinism_test.cpp": {
+    "mtime": 1790463448.850906,
+    "seen": 1790470014.403427,
+    "ast_hash": "671609fdba6432370d6f68571045e510",
+    "semantic_hash": "671609fdba6432370d6f68571045e510"
+  },
+  "tests/capabilities/local_envelope_test.cpp": {
+    "mtime": 1790461347.6392083,
+    "seen": 1790470014.403427,
+    "ast_hash": "b0da948a224f5ee2810ec9e0feb5b708",
+    "semantic_hash": "b0da948a224f5ee2810ec9e0feb5b708"
+  },
+  "tests/capabilities/model_test.cpp": {
+    "mtime": 1790460205.4815435,
+    "seen": 1790470014.403427,
+    "ast_hash": "8482822d2157ddfe8cb11690573149b6",
+    "semantic_hash": "8482822d2157ddfe8cb11690573149b6"
+  },
+  "tests/capabilities/operating_profile_test.cpp": {
+    "mtime": 1790461346.2275789,
+    "seen": 1790470014.403427,
+    "ast_hash": "6f26634a6bcd166cba28e8e88c087bbc",
+    "semantic_hash": "6f26634a6bcd166cba28e8e88c087bbc"
+  },
+  "tests/capabilities/policy_pathology_test.cpp": {
+    "mtime": 1790463271.037628,
+    "seen": 1790470014.403427,
+    "ast_hash": "d4edafff7e754715008c69823cc8fee8",
+    "semantic_hash": "d4edafff7e754715008c69823cc8fee8"
+  },
+  "tests/capabilities/policy_test.cpp": {
+    "mtime": 1790462863.6560252,
+    "seen": 1790470014.403427,
+    "ast_hash": "f7bc07f2c7bd214eb6c1f5f36046212f",
+    "semantic_hash": "f7bc07f2c7bd214eb6c1f5f36046212f"
+  },
+  "tests/capabilities/reporting_test.cpp": {
+    "mtime": 1790470386.3781588,
+    "seen": 1790470710.080231,
+    "ast_hash": "caa523b816f1fb35e27077235457d4ed",
+    "semantic_hash": ""
+  },
+  "tests/capabilities/snapshot_diff_test.cpp": {
+    "mtime": 1790460704.5164802,
+    "seen": 1790470014.403427,
+    "ast_hash": "18f01b190a8bab3f061a40bcd9f5cc4c",
+    "semantic_hash": "18f01b190a8bab3f061a40bcd9f5cc4c"
+  },
+  "tests/capabilities/validation_test.cpp": {
+    "mtime": 1790463241.8649824,
+    "seen": 1790470014.403427,
+    "ast_hash": "9f07a7f58e1746cd985d9ed2e53ab051",
+    "semantic_hash": "9f07a7f58e1746cd985d9ed2e53ab051"
+  },
+  "tests/fixtures/apple_silicon_macbook.json": {
+    "mtime": 1790463950.1627848,
+    "seen": 1790470014.403427,
+    "ast_hash": "965a2d92fd2d85bbee53eb7ba80f0d1b",
+    "semantic_hash": "965a2d92fd2d85bbee53eb7ba80f0d1b"
+  },
+  "tests/fixtures/capability_fixtures.cpp": {
+    "mtime": 1790463258.986387,
+    "seen": 1790470014.403427,
+    "ast_hash": "335870a2772b2fbcd7ea1329e5702bee",
+    "semantic_hash": "335870a2772b2fbcd7ea1329e5702bee"
+  },
+  "tests/fixtures/capability_fixtures.hpp": {
+    "mtime": 1790463256.1210518,
+    "seen": 1790470014.403427,
+    "ast_hash": "e8d97df9a9eeeee87a0204ac5c4d5b61",
+    "semantic_hash": "e8d97df9a9eeeee87a0204ac5c4d5b61"
+  },
+  "tests/fixtures/headless_session.json": {
+    "mtime": 1790463950.2353144,
+    "seen": 1790470014.403427,
+    "ast_hash": "dbe5f9ab1ccdc2a4eb86755ca101d8a0",
+    "semantic_hash": "dbe5f9ab1ccdc2a4eb86755ca101d8a0"
+  },
+  "tests/fixtures/high_end_desktop.json": {
+    "mtime": 1790463950.11697,
+    "seen": 1790470014.403427,
+    "ast_hash": "c49d4bc2e78724b5d0395885d11b672b",
+    "semantic_hash": "c49d4bc2e78724b5d0395885d11b672b"
+  },
+  "tests/fixtures/hot_apple_silicon.json": {
+    "mtime": 1790463950.1759322,
+    "seen": 1790470014.403427,
+    "ast_hash": "d7f1ceadc10b753661c435a90326ae0f",
+    "semantic_hash": "d7f1ceadc10b753661c435a90326ae0f"
+  },
+  "tests/fixtures/hybrid_laptop.json": {
+    "mtime": 1790463950.1486797,
+    "seen": 1790470014.403427,
+    "ast_hash": "b9d74b6ab96e0ea960557c8c098f9360",
+    "semantic_hash": "b9d74b6ab96e0ea960557c8c098f9360"
+  },
+  "tests/fixtures/intel_laptop_on_battery.json": {
+    "mtime": 1790463950.1326678,
+    "seen": 1790470014.403427,
+    "ast_hash": "361069d9fd921415d35b42d844df7739",
+    "semantic_hash": "361069d9fd921415d35b42d844df7739"
+  },
+  "tests/fixtures/missing_gpu_driver.json": {
+    "mtime": 1790463950.2250507,
+    "seen": 1790470014.403427,
+    "ast_hash": "c82d8f431765216d0d1dae6a97d400ad",
+    "semantic_hash": "c82d8f431765216d0d1dae6a97d400ad"
+  },
+  "tests/fixtures/mixed_refresh_desktop.json": {
+    "mtime": 1790463950.2743669,
+    "seen": 1790470014.403427,
+    "ast_hash": "ad940980bd65787f484c23947fc53eb8",
+    "semantic_hash": "ad940980bd65787f484c23947fc53eb8"
+  },
+  "tests/fixtures/no_microphone.json": {
+    "mtime": 1790463950.2588503,
+    "seen": 1790470014.403427,
+    "ast_hash": "536e148fc2e2ee9f6c29934de2e91c72",
+    "semantic_hash": "536e148fc2e2ee9f6c29934de2e91c72"
+  },
+  "tests/fixtures/older_intel_mac.json": {
+    "mtime": 1790463950.1897821,
+    "seen": 1790470014.403427,
+    "ast_hash": "944aa9d6f65dc4e7d329cabece1cdfea",
+    "semantic_hash": "944aa9d6f65dc4e7d329cabece1cdfea"
+  },
+  "tests/fixtures/partial_probe_failure.json": {
+    "mtime": 1790463950.281881,
+    "seen": 1790470014.403427,
+    "ast_hash": "5d4b08562c33e1a30863b9a640058984",
+    "semantic_hash": "5d4b08562c33e1a30863b9a640058984"
+  },
+  "tests/fixtures/remote_session.json": {
+    "mtime": 1790463950.2468338,
+    "seen": 1790470014.403427,
+    "ast_hash": "dfc63f2205de8d7269e5b1bf47edebc4",
+    "semantic_hash": "dfc63f2205de8d7269e5b1bf47edebc4"
+  },
+  "tests/fixtures/software_only.json": {
+    "mtime": 1790463950.2002692,
+    "seen": 1790470014.403427,
+    "ast_hash": "9d284e9afe2517038241afaf5c3e11be",
+    "semantic_hash": "9d284e9afe2517038241afaf5c3e11be"
+  },
+  "tests/fixtures/unknown_codec_limits.json": {
+    "mtime": 1790463950.2122927,
+    "seen": 1790470014.403427,
+    "ast_hash": "919828c09a182bd5d63575e501f44d7f",
+    "semantic_hash": "919828c09a182bd5d63575e501f44d7f"
+  },
+  "CMakeLists.txt": {
+    "mtime": 1790503718.0499701,
+    "seen": 1790503972.257685,
+    "ast_hash": "ba2703c50326fc139f17cbe9abf1b19f",
+    "semantic_hash": ""
+  },
+  "core/capabilities/CMakeLists.txt": {
+    "mtime": 1790478043.3297422,
+    "seen": 1790503972.257685,
+    "ast_hash": "383b64ed5e63b51ef969c335a9564a65",
+    "semantic_hash": ""
+  },
+  "core/reporting/CMakeLists.txt": {
+    "mtime": 1790463318.1039276,
+    "seen": 1790470014.403427,
+    "ast_hash": "6098a2a590fd9ea5f9d17d08c02f6033",
+    "semantic_hash": "6098a2a590fd9ea5f9d17d08c02f6033"
+  },
+  "docs/superpowers/plans/2026-09-26-native-foundation-capabilities.md": {
+    "mtime": 1790450750.3779387,
+    "seen": 1790470014.403427,
+    "ast_hash": "1db5e28a106d9cf41c33843afab61aca",
+    "semantic_hash": "1db5e28a106d9cf41c33843afab61aca"
+  },
+  "docs/superpowers/specs/2026-09-26-native-foundation-capabilities-design.md": {
+    "mtime": 1790450750.378939,
+    "seen": 1790470014.403427,
+    "ast_hash": "b015330fba1bd967b3580202ba40e590",
+    "semantic_hash": "b015330fba1bd967b3580202ba40e590"
+  },
+  "tests/CMakeLists.txt": {
+    "mtime": 1790478239.3009875,
+    "seen": 1790503972.257685,
+    "ast_hash": "1ad8c905abec0f5368e8ea0b4df7c04c",
+    "semantic_hash": ""
+  },
+  "core/capabilities/include/catro/capabilities/probe.hpp": {
+    "mtime": 1790478795.4763763,
+    "seen": 1790503972.257685,
+    "ast_hash": "ea0478d31a086a31f2694c854c985ec5",
+    "semantic_hash": ""
+  },
+  "core/capabilities/include/catro/capabilities/probe_coordinator.hpp": {
+    "mtime": 1790478142.6347363,
+    "seen": 1790503972.257685,
+    "ast_hash": "1f2414ff86c4d2054759ac4bdc7604f4",
+    "semantic_hash": ""
+  },
+  "core/capabilities/src/probe_coordinator.cpp": {
+    "mtime": 1790478795.4763763,
+    "seen": 1790503972.257685,
+    "ast_hash": "0e85418000ba635d765a5726244e8110",
+    "semantic_hash": ""
+  },
+  "tests/capabilities/probe_coordinator_test.cpp": {
+    "mtime": 1790478795.4763763,
+    "seen": 1790503972.257685,
+    "ast_hash": "c97bc4046e8fb15fabc4c4b599206f5d",
+    "semantic_hash": ""
+  },
+  "tests/helpers/fake_probe_executor.hpp": {
+    "mtime": 1790470386.3763454,
+    "seen": 1790470710.080231,
+    "ast_hash": "d57b461539d8915c04b105d3ae7f68bc",
+    "semantic_hash": ""
+  },
+  "apps/diagnostics/DiagnosticsViewModel.cpp": {
+    "mtime": 1790481640.9107823,
+    "seen": 1790503972.257685,
+    "ast_hash": "441c35f16a5e2daea41c0dc1358e29e2",
+    "semantic_hash": ""
+  },
+  "apps/diagnostics/DiagnosticsViewModel.hpp": {
+    "mtime": 1790480420.1502702,
+    "seen": 1790503972.257685,
+    "ast_hash": "fda7e0b8d3f948f163213ae8e79652a8",
+    "semantic_hash": ""
+  },
+  "apps/macos/Catro/Bridge/CatroCapabilitiesBridge.h": {
+    "mtime": 1790503331.4271812,
+    "seen": 1790503972.257685,
+    "ast_hash": "be870fd7fd2a85f28ea720e830b756a5",
+    "semantic_hash": ""
+  },
+  "apps/macos/Catro/Bridge/CatroCapabilitiesBridge.mm": {
+    "mtime": 1790503374.2623656,
+    "seen": 1790503972.257685,
+    "ast_hash": "cb095e99ffd4fb33a464a0f33c7defa6",
+    "semantic_hash": ""
+  },
+  "apps/macos/Catro/CatroApp.swift": {
+    "mtime": 1790503488.8799965,
+    "seen": 1790503972.257685,
+    "ast_hash": "6b433e268020dd2c5843c9ce09cf6bda",
+    "semantic_hash": ""
+  },
+  "apps/macos/Catro/Diagnostics/DiagnosticsView.swift": {
+    "mtime": 1790503474.1132295,
+    "seen": 1790503972.257685,
+    "ast_hash": "627c74bcceb1bafbea92d1b2dfd56ec4",
+    "semantic_hash": ""
+  },
+  "apps/macos/Catro/Diagnostics/DiagnosticsViewModel.swift": {
+    "mtime": 1790503428.2956567,
+    "seen": 1790503972.257685,
+    "ast_hash": "23f09172717ddb074481af02b8323a8e",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro.sln": {
+    "mtime": 1790480951.572147,
+    "seen": 1790503972.257685,
+    "ast_hash": "a50ecd08e7671c250b04aa6d2247970c",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/App.xaml": {
+    "mtime": 1790480951.5736837,
+    "seen": 1790503972.257685,
+    "ast_hash": "2d7afcc917d48aba9f3f90dc999652cc",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/App.xaml.cpp": {
+    "mtime": 1790480951.5742044,
+    "seen": 1790503972.257685,
+    "ast_hash": "73db87e3a61e2c3b1508591f189f662c",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/App.xaml.h": {
+    "mtime": 1790480951.5742044,
+    "seen": 1790503972.257685,
+    "ast_hash": "ce6adf30d5399903a23ff037e0feb680",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Diagnostics/DiagnosticsView.xaml": {
+    "mtime": 1790480951.5778425,
+    "seen": 1790503972.257685,
+    "ast_hash": "2e911ba5b89247b61e73df137be03170",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Diagnostics/DiagnosticsView.xaml.cpp": {
+    "mtime": 1790480951.5788727,
+    "seen": 1790503972.257685,
+    "ast_hash": "8dbab92bf16676615009b164574c68aa",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Diagnostics/DiagnosticsView.xaml.h": {
+    "mtime": 1790503103.786474,
+    "seen": 1790503972.257685,
+    "ast_hash": "e2dd692b69537fd70a2fd791beb69ec7",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/MainWindow.xaml": {
+    "mtime": 1790480951.5757787,
+    "seen": 1790503972.257685,
+    "ast_hash": "d636af53ed8345c13fcbfdd0e3424627",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/MainWindow.xaml.cpp": {
+    "mtime": 1790480951.5768096,
+    "seen": 1790503972.257685,
+    "ast_hash": "0cfe0b5437ddabd88165e5ddbc3dd3bc",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/MainWindow.xaml.h": {
+    "mtime": 1790480951.576295,
+    "seen": 1790503972.257685,
+    "ast_hash": "91e94c4b093e8f844d189b57cb799b8d",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/pch.cpp": {
+    "mtime": 1790480951.5731719,
+    "seen": 1790503972.257685,
+    "ast_hash": "5298f1c2ecd1b1f9d600f40f09457014",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/pch.h": {
+    "mtime": 1790480951.572659,
+    "seen": 1790503972.257685,
+    "ast_hash": "e6f1d424411734edd2556665e0f0ecdc",
+    "semantic_hash": ""
+  },
+  "platform/macos/include/catro/platform/macos/capability_service.hpp": {
+    "mtime": 1790481869.7429013,
+    "seen": 1790503972.257685,
+    "ast_hash": "05151364d7daa753134e46d4d0350116",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/capability_service.mm": {
+    "mtime": 1790482230.4801412,
+    "seen": 1790503972.257685,
+    "ast_hash": "c01729f5a69d858f3d5b07be6c796575",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/macos_translation.cpp": {
+    "mtime": 1790502620.1977,
+    "seen": 1790503972.257685,
+    "ast_hash": "0bc869505c0bb2728adceac7e58798ec",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/macos_translation.hpp": {
+    "mtime": 1790502509.650461,
+    "seen": 1790503972.257685,
+    "ast_hash": "01e3344cc5cece1a6fdaae702d990bbd",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/probe_dispatch.mm": {
+    "mtime": 1790482121.7930493,
+    "seen": 1790503972.257685,
+    "ast_hash": "4b2a37f544910a69acded6593fd32313",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/probe_support.hpp": {
+    "mtime": 1790502721.1073973,
+    "seen": 1790503972.257685,
+    "ast_hash": "3a7e5f3df0c71f626d9d3d94b9a0fd36",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/probe_support.mm": {
+    "mtime": 1790502735.2606618,
+    "seen": 1790503972.257685,
+    "ast_hash": "e87e0c9a2730227f8f39bd6357356f83",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/probes/audio_probe.mm": {
+    "mtime": 1790502846.3424318,
+    "seen": 1790503972.257685,
+    "ast_hash": "407d6a3c80aa37bcb9e56f600788aa1d",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/probes/encoder_probe.mm": {
+    "mtime": 1790502799.5397885,
+    "seen": 1790503972.257685,
+    "ast_hash": "6469c68e6bce8aec69947fe104829251",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/probes/gpu_display_probe.mm": {
+    "mtime": 1790502769.207026,
+    "seen": 1790503972.257685,
+    "ast_hash": "04654ea0e55143e286fb6a0d1b55e165",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/probes/runtime_probe.mm": {
+    "mtime": 1790482104.9749627,
+    "seen": 1790503972.257685,
+    "ast_hash": "850adf5d902bbf0c33cd8eb00345f554",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/probes/system_probe.mm": {
+    "mtime": 1790482065.1669953,
+    "seen": 1790503972.257685,
+    "ast_hash": "b0d283a6483c74abdf9cb1e7e0b336f2",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/process_probe_executor.mm": {
+    "mtime": 1790503032.921324,
+    "seen": 1790503972.257685,
+    "ast_hash": "14e8e601c4419a444ecff57c00e41168",
+    "semantic_hash": ""
+  },
+  "platform/windows/include/catro/platform/windows/capability_service.hpp": {
+    "mtime": 1790471118.626076,
+    "seen": 1790503972.257685,
+    "ast_hash": "79a65eeb09b199ca34104d9e743cc0c3",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/capability_service.cpp": {
+    "mtime": 1790479353.9092815,
+    "seen": 1790503972.257685,
+    "ast_hash": "552013afb1ab065b378757d6c26b0802",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/probe_dispatch.cpp": {
+    "mtime": 1790479306.6326807,
+    "seen": 1790503972.257685,
+    "ast_hash": "9441147b6eca0f198bee409bb4353cd1",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/probes/audio_probe.cpp": {
+    "mtime": 1790479376.3016195,
+    "seen": 1790503972.257685,
+    "ast_hash": "f2cb7150ab5c74efaa700c645f85cf60",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/probes/encoder_probe.cpp": {
+    "mtime": 1790479850.6108,
+    "seen": 1790503972.257685,
+    "ast_hash": "1399e783344f25bee6212b75af565fb6",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/probes/gpu_display_probe.cpp": {
+    "mtime": 1790478664.1720638,
+    "seen": 1790503972.257685,
+    "ast_hash": "d06b6579659d6545a11505b372729c6c",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/probes/runtime_probe.cpp": {
+    "mtime": 1790471240.244651,
+    "seen": 1790503972.257685,
+    "ast_hash": "89a9d09ebd484bbb5d0170e8dd528b43",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/probes/system_probe.cpp": {
+    "mtime": 1790471296.5424216,
+    "seen": 1790503972.257685,
+    "ast_hash": "7fc26bfe96fff6cd159e65d27c04f323",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/process_probe_executor.cpp": {
+    "mtime": 1790478186.5475502,
+    "seen": 1790503972.257685,
+    "ast_hash": "c6d88d1e76d56e7ff0f619539317122f",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/windows_translation.cpp": {
+    "mtime": 1790479850.6094632,
+    "seen": 1790503972.257685,
+    "ast_hash": "7ef3ffb0f6de0e6a54038211105cb2ee",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/windows_translation.hpp": {
+    "mtime": 1790479850.6094632,
+    "seen": 1790503972.257685,
+    "ast_hash": "47e5e53e6298a53513af1a9ff86cda96",
+    "semantic_hash": ""
+  },
+  "scripts/bootstrap.ps1": {
+    "mtime": 1790503589.660844,
+    "seen": 1790503972.257685,
+    "ast_hash": "f43fcc50df63c6a47fab3202707eee8b",
+    "semantic_hash": ""
+  },
+  "scripts/bootstrap.sh": {
+    "mtime": 1790503623.2201607,
+    "seen": 1790503972.257685,
+    "ast_hash": "e9bc763b1fc1f9a77f65b7ef181b534e",
+    "semantic_hash": ""
+  },
+  "scripts/build.ps1": {
+    "mtime": 1790503602.1874352,
+    "seen": 1790503972.257685,
+    "ast_hash": "36d2e357acb9441fb009a4730ffec1e6",
+    "semantic_hash": ""
+  },
+  "scripts/build.sh": {
+    "mtime": 1790503628.7914484,
+    "seen": 1790503972.257685,
+    "ast_hash": "96eae4be1d9a1eab1e758659c996e986",
+    "semantic_hash": ""
+  },
+  "scripts/run.ps1": {
+    "mtime": 1790503693.561985,
+    "seen": 1790503972.257685,
+    "ast_hash": "758a83c8cf054a7d77ddcf09199be7e7",
+    "semantic_hash": ""
+  },
+  "scripts/run.sh": {
+    "mtime": 1790503643.15173,
+    "seen": 1790503972.257685,
+    "ast_hash": "2f7004dd8f332f0fb069676b7676bdc6",
+    "semantic_hash": ""
+  },
+  "scripts/test.ps1": {
+    "mtime": 1790503607.8207357,
+    "seen": 1790503972.257685,
+    "ast_hash": "e3ac9391004365ae3a89396e3749c7b8",
+    "semantic_hash": ""
+  },
+  "scripts/test.sh": {
+    "mtime": 1790503634.0449567,
+    "seen": 1790503972.257685,
+    "ast_hash": "1b2d81c78b3c035a1577eabd791e9115",
+    "semantic_hash": ""
+  },
+  "tests/helpers/hanging_probe_helper.cpp": {
+    "mtime": 1790471041.9691074,
+    "seen": 1790503972.257685,
+    "ast_hash": "c9a09f4622876a68e36216fd4f1f9267",
+    "semantic_hash": ""
+  },
+  "tests/windows/process_probe_executor_test.cpp": {
+    "mtime": 1790471041.970108,
+    "seen": 1790503972.257685,
+    "ast_hash": "91e65cb903b42c7b068102d11e978519",
+    "semantic_hash": ""
+  },
+  "tests/windows/system_runtime_probe_test.cpp": {
+    "mtime": 1790479566.9733174,
+    "seen": 1790503972.257685,
+    "ast_hash": "1045939b1293622058407067b061d688",
+    "semantic_hash": ""
+  },
+  "tools/capability-probe/main.cpp": {
+    "mtime": 1790478684.4935184,
+    "seen": 1790503972.257685,
+    "ast_hash": "7137970a09f3fbf227476583716e9158",
+    "semantic_hash": ""
+  },
+  "tools/capability-probe/main_macos.mm": {
+    "mtime": 1790502673.5738108,
+    "seen": 1790503972.257685,
+    "ast_hash": "c0f3dc271f880a6d345750da3ac0d3d5",
+    "semantic_hash": ""
+  },
+  "tools/capability-report/main.cpp": {
+    "mtime": 1790480951.567772,
+    "seen": 1790503972.257685,
+    "ast_hash": "3d354b817af185ed8645ea8aa2d54c75",
+    "semantic_hash": ""
+  },
+  "tools/capability-report/main_macos.mm": {
+    "mtime": 1790502900.8206954,
+    "seen": 1790503972.257685,
+    "ast_hash": "e4b29183503da1ff00ee89d6eb77de1a",
+    "semantic_hash": ""
+  },
+  "tools/capability-report/report_cli.cpp": {
+    "mtime": 1790479687.9883397,
+    "seen": 1790503972.257685,
+    "ast_hash": "da28fd4efc327a5e6ab0696db30b848f",
+    "semantic_hash": ""
+  },
+  "tools/capability-report/report_cli.hpp": {
+    "mtime": 1790480951.567772,
+    "seen": 1790503972.257685,
+    "ast_hash": "645882e928f72c236a627f05b096f7a9",
+    "semantic_hash": ""
+  },
+  ".github/workflows/ci.yml": {
+    "mtime": 1790503733.896787,
+    "seen": 1790503972.257685,
+    "ast_hash": "96d94fd4642d0c64f5158733efbac09a",
+    "semantic_hash": ""
+  },
+  "CONTRIBUTING.md": {
+    "mtime": 1790503819.9712043,
+    "seen": 1790503972.257685,
+    "ast_hash": "93939a9a046d9190699f7605df032c26",
+    "semantic_hash": ""
+  },
+  "DEPENDENCIES.md": {
+    "mtime": 1790503962.4880931,
+    "seen": 1790503972.257685,
+    "ast_hash": "b2a0902a8c9f62ad4a175066d34836cf",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1790503783.4022467,
+    "seen": 1790503972.257685,
+    "ast_hash": "c69c9416e46b5b501e7af215645c2bc8",
+    "semantic_hash": ""
+  },
+  "SECURITY.md": {
+    "mtime": 1790503821.2415154,
+    "seen": 1790503972.257685,
+    "ast_hash": "aab2bab6cdcdd5a8568da25c3a7053f7",
+    "semantic_hash": ""
+  },
+  "apps/diagnostics/CMakeLists.txt": {
+    "mtime": 1790503103.7218795,
+    "seen": 1790503972.257685,
+    "ast_hash": "fd220ae7fdca7ac3a1ee52ee6e182cf7",
+    "semantic_hash": ""
+  },
+  "apps/macos/CMakeLists.txt": {
+    "mtime": 1790503513.2345383,
+    "seen": 1790503972.257685,
+    "ast_hash": "1a0769dbc996e94dd9515d1f91a9fe70",
+    "semantic_hash": ""
+  },
+  "docs/architecture/capability-system.md": {
+    "mtime": 1790503904.8353243,
+    "seen": 1790503972.257685,
+    "ast_hash": "67ad0823c4d56e688f20c7a7779ceaeb",
+    "semantic_hash": ""
+  },
+  "docs/architecture/decisions/0001-split-native-shells.md": {
+    "mtime": 1790503913.6054976,
+    "seen": 1790503972.257685,
+    "ast_hash": "f400674be336c8c130c25231d51bf20d",
+    "semantic_hash": ""
+  },
+  "docs/architecture/decisions/0002-isolated-passive-probes.md": {
+    "mtime": 1790503922.9532547,
+    "seen": 1790503972.257685,
+    "ast_hash": "94b3695d86a33f7427c4e435b17e06a0",
+    "semantic_hash": ""
+  },
+  "docs/building.md": {
+    "mtime": 1790503866.5670047,
+    "seen": 1790503972.257685,
+    "ast_hash": "769043ffbc9a67f0c183c58aa57b822a",
+    "semantic_hash": ""
+  },
+  "docs/troubleshooting.md": {
+    "mtime": 1790503892.5370154,
+    "seen": 1790503972.257685,
+    "ast_hash": "e7889800deb3faeebba266894e1814cf",
+    "semantic_hash": ""
+  },
+  "platform/macos/CMakeLists.txt": {
+    "mtime": 1790502649.7420607,
+    "seen": 1790503972.257685,
+    "ast_hash": "87e830a3567971d7888d7e10b189b8fd",
+    "semantic_hash": ""
+  },
+  "platform/windows/CMakeLists.txt": {
+    "mtime": 1790479306.6331832,
+    "seen": 1790503972.257685,
+    "ast_hash": "0828f714054ff45223bae671340e0619",
+    "semantic_hash": ""
+  },
+  "tools/capability-probe/CMakeLists.txt": {
+    "mtime": 1790502683.646206,
+    "seen": 1790503972.257685,
+    "ast_hash": "6ae941c65a44ae5cf6cd364d17d5fd29",
+    "semantic_hash": ""
+  },
+  "tools/capability-report/CMakeLists.txt": {
+    "mtime": 1790502908.4710982,
+    "seen": 1790503972.257685,
+    "ast_hash": "300a1bf944f05b6f4e9c0a1e742f9194",
+    "semantic_hash": ""
+  }
+}

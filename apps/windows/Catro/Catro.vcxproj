@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <CatroRepoRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..\..\..'))</CatroRepoRoot>
+    <CatroPackagesDir>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..\packages'))</CatroPackagesDir>
+    <!-- The CMake build directory holding the prebuilt core, platform, and view-model libraries. -->
+    <CatroCoreRoot Condition="'$(CatroCoreRoot)' == ''">$(CatroRepoRoot)out\build\windows-msvc</CatroCoreRoot>
+  </PropertyGroup>
+    <Import Project="$(CatroPackagesDir)Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props" Condition="Exists('$(CatroPackagesDir)Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.10.0.26100.4654\build\Microsoft.Windows.SDK.BuildTools.props" Condition="Exists('$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.10.0.26100.4654\build\Microsoft.Windows.SDK.BuildTools.props')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.MSIX.1.7.251221100\build\Microsoft.Windows.SDK.BuildTools.MSIX.props" Condition="Exists('$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.MSIX.1.7.251221100\build\Microsoft.Windows.SDK.BuildTools.MSIX.props')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.Base.2.0.4\build\native\Microsoft.WindowsAppSDK.Base.props" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Base.2.0.4\build\native\Microsoft.WindowsAppSDK.Base.props')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.Foundation.2.3.12\build\native\Microsoft.WindowsAppSDK.Foundation.props" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Foundation.2.3.12\build\native\Microsoft.WindowsAppSDK.Foundation.props')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.InteractiveExperiences.2.1.9\build\native\Microsoft.WindowsAppSDK.InteractiveExperiences.props" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.InteractiveExperiences.2.1.9\build\native\Microsoft.WindowsAppSDK.InteractiveExperiences.props')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.DWrite.2.1.0\build\Microsoft.WindowsAppSDK.DWrite.props" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.DWrite.2.1.0\build\Microsoft.WindowsAppSDK.DWrite.props')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.WinUI.2.3.9\build\native\Microsoft.WindowsAppSDK.WinUI.props" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.WinUI.2.3.9\build\native\Microsoft.WindowsAppSDK.WinUI.props')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.Runtime.2.5.1\build\native\Microsoft.WindowsAppSDK.Runtime.props" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Runtime.2.5.1\build\native\Microsoft.WindowsAppSDK.Runtime.props')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.2.5.1\build\native\Microsoft.WindowsAppSDK.props" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.2.5.1\build\native\Microsoft.WindowsAppSDK.props')" />
+  <PropertyGroup Label="Globals">
+    <CppWinRTOptimized>true</CppWinRTOptimized>
+    <CppWinRTRootNamespaceAutoMerge>true</CppWinRTRootNamespaceAutoMerge>
+    <MinimalCoreWin>true</MinimalCoreWin>
+    <ProjectGuid>{6E8A3C1B-2F4D-4E6A-9B7C-1D2E3F405162}</ProjectGuid>
+    <ProjectName>Catro</ProjectName>
+    <RootNamespace>Catro</RootNamespace>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <MinimumVisualStudioVersion>17.0</MinimumVisualStudioVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformMinVersion>10.0.19041.0</WindowsTargetPlatformMinVersion>
+    <UseWinUI>true</UseWinUI>
+    <!-- Unpackaged and self-contained: the Windows App SDK runtime ships beside the executable, so
+         running the shell needs no package registration, developer mode, or certificate. -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <AppxPackage>false</AppxPackage>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <DesktopCompatible>true</DesktopCompatible>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(CatroRepoRoot)out\apps\windows\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(CatroRepoRoot)out\apps\windows\obj\$(Platform)\$(Configuration)\</IntDir>
+    <!-- Set before C++/WinRT derives its generated source paths from it. -->
+    <GeneratedFilesDir>$(IntDir)Generated Files\</GeneratedFilesDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch.pch</PrecompiledHeaderOutputFile>
+      <WarningLevel>Level4</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/bigobj /permissive- /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>NOMINMAX;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(IntDir);$(IntDir)Diagnostics;$(IntDir)Audio;$(CatroRepoRoot)core\capabilities\include;$(CatroRepoRoot)core\audio\include;$(CatroRepoRoot)core\reporting\include;$(CatroRepoRoot)apps\diagnostics;$(CatroRepoRoot)platform\windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>$(CatroCoreRoot)\apps\diagnostics\$(Configuration)\catro_diagnostics.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_platform_windows.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_windows_translation.lib;$(CatroCoreRoot)\core\reporting\$(Configuration)\catro_reporting.lib;$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib;$(CatroCoreRoot)\core\audio\$(Configuration)\catro_audio.lib;avrt.lib;powrprof.lib;user32.lib;wtsapi32.lib;dxgi.lib;d3d11.lib;d3d12.lib;dxcore.lib;shcore.lib;mfplat.lib;mfuuid.lib;ole32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)' == 'Debug'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)' == 'Release'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <Manifest Include="app.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="App.xaml.h">
+      <DependentUpon>App.xaml</DependentUpon>
+    </ClInclude>
+    <ClInclude Include="MainWindow.xaml.h">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </ClInclude>
+    <ClInclude Include="Diagnostics\DiagnosticsView.xaml.h">
+      <DependentUpon>Diagnostics\DiagnosticsView.xaml</DependentUpon>
+    </ClInclude>
+    <ClInclude Include="Audio\AudioView.xaml.h">
+      <DependentUpon>Audio\AudioView.xaml</DependentUpon>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ApplicationDefinition Include="App.xaml" />
+    <Page Include="MainWindow.xaml" />
+    <Page Include="Diagnostics\DiagnosticsView.xaml" />
+    <Page Include="Audio\AudioView.xaml" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="App.xaml.cpp">
+      <DependentUpon>App.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="MainWindow.xaml.cpp">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="Diagnostics\DiagnosticsView.xaml.cpp">
+      <DependentUpon>Diagnostics\DiagnosticsView.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="Audio\AudioView.xaml.cpp">
+      <DependentUpon>Audio\AudioView.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="$(GeneratedFilesDir)module.g.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Midl Include="MainWindow.idl">
+      <SubType>Code</SubType>
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </Midl>
+    <Midl Include="Diagnostics\DiagnosticsView.idl">
+      <SubType>Code</SubType>
+      <DependentUpon>Diagnostics\DiagnosticsView.xaml</DependentUpon>
+    </Midl>
+    <Midl Include="Audio\AudioView.idl">
+      <SubType>Code</SubType>
+      <DependentUpon>Audio\AudioView.xaml</DependentUpon>
+    </Midl>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(CatroPackagesDir)Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('$(CatroPackagesDir)Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.10.0.26100.4654\build\Microsoft.Windows.SDK.BuildTools.targets" Condition="Exists('$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.10.0.26100.4654\build\Microsoft.Windows.SDK.BuildTools.targets')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.MSIX.1.7.251221100\build\Microsoft.Windows.SDK.BuildTools.MSIX.targets" Condition="Exists('$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.MSIX.1.7.251221100\build\Microsoft.Windows.SDK.BuildTools.MSIX.targets')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.Web.WebView2.1.0.3719.77\build\native\Microsoft.Web.WebView2.targets" Condition="Exists('$(CatroPackagesDir)Microsoft.Web.WebView2.1.0.3719.77\build\native\Microsoft.Web.WebView2.targets')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.Base.2.0.4\build\native\Microsoft.WindowsAppSDK.Base.targets" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Base.2.0.4\build\native\Microsoft.WindowsAppSDK.Base.targets')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.Foundation.2.3.12\build\native\Microsoft.WindowsAppSDK.Foundation.targets" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Foundation.2.3.12\build\native\Microsoft.WindowsAppSDK.Foundation.targets')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.InteractiveExperiences.2.1.9\build\native\Microsoft.WindowsAppSDK.InteractiveExperiences.targets" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.InteractiveExperiences.2.1.9\build\native\Microsoft.WindowsAppSDK.InteractiveExperiences.targets')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.DWrite.2.1.0\build\Microsoft.WindowsAppSDK.DWrite.targets" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.DWrite.2.1.0\build\Microsoft.WindowsAppSDK.DWrite.targets')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.WinUI.2.3.9\build\native\Microsoft.WindowsAppSDK.WinUI.targets" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.WinUI.2.3.9\build\native\Microsoft.WindowsAppSDK.WinUI.targets')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.Runtime.2.5.1\build\native\Microsoft.WindowsAppSDK.Runtime.targets" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Runtime.2.5.1\build\native\Microsoft.WindowsAppSDK.Runtime.targets')" />
+    <Import Project="$(CatroPackagesDir)Microsoft.WindowsAppSDK.2.5.1\build\native\Microsoft.WindowsAppSDK.targets" Condition="Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.2.5.1\build\native\Microsoft.WindowsAppSDK.targets')" />
+  </ImportGroup>
+  <!-- Visual Studio's Windows app workload normally schedules the markup compiler for C++. Without
+       it, run both passes from the WinUI package: pass 1 before MIDL, pass 2 once the project
+       metadata exists and before C++ compilation. -->
+  <PropertyGroup>
+    <BeforeMidlCompileTargets>MarkupCompilePass1;$(BeforeMidlCompileTargets)</BeforeMidlCompileTargets>
+    <BeforeClCompileTargets>MarkupCompilePass2;$(BeforeClCompileTargets)</BeforeClCompileTargets>
+    <!-- The markup compiler reads WinUI metadata from resolved references. -->
+    <MarkupCompilePass1DependsOn>ResolveAssemblyReferences;$(MarkupCompilePass1DependsOn)</MarkupCompilePass1DependsOn>
+    <MarkupCompilePass2DependsOn>CatroXamlWinMDReferences;$(MarkupCompilePass2DependsOn)</MarkupCompilePass2DependsOn>
+  </PropertyGroup>
+  <!-- Pass 2 resolves types against WinMDReferenceToCompile, which only the workload's rules fill. -->
+  <Target Name="CatroXamlWinMDReferences" DependsOnTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <WinMDReferenceToCompile Include="@(ReferencePath)" Condition="'%(Extension)' == '.winmd'" />
+    </ItemGroup>
+  </Target>
+  <!-- Sources from both markup passes and C++/WinRT's metadata provider, which the workload's
+       rules would otherwise add to compilation. -->
+  <!-- After C++/WinRT drops its provider source from unoptimized builds. -->
+  <Target Name="CatroXamlCompileInputs" AfterTargets="CppWinRTComputeXamlGeneratedCompileInputs">
+    <ItemGroup>
+      <CatroXamlSource Include="@(_GeneratedCodeFiles)" Condition="'%(Extension)' == '.cpp'" />
+      <CatroXamlSource Include="$(XamlMetaDataProviderCpp)" Condition="Exists('$(XamlMetaDataProviderCpp)')" />
+      <!-- Incremental builds may already list a generated source; add each one exactly once. -->
+      <ClCompile Remove="@(CatroXamlSource->'%(FullPath)')" />
+      <ClCompile Remove="@(CatroXamlSource)" />
+      <ClCompile Include="@(CatroXamlSource->'%(FullPath)'->Distinct())" />
+    </ItemGroup>
+  </Target>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Restore them with msbuild /restore /p:RestorePackagesConfig=true. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.10.0.26100.4654\build\Microsoft.Windows.SDK.BuildTools.props')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.10.0.26100.4654\build\Microsoft.Windows.SDK.BuildTools.props'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.MSIX.1.7.251221100\build\Microsoft.Windows.SDK.BuildTools.MSIX.props')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.MSIX.1.7.251221100\build\Microsoft.Windows.SDK.BuildTools.MSIX.props'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Base.2.0.4\build\native\Microsoft.WindowsAppSDK.Base.props')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.Base.2.0.4\build\native\Microsoft.WindowsAppSDK.Base.props'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Foundation.2.3.12\build\native\Microsoft.WindowsAppSDK.Foundation.props')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.Foundation.2.3.12\build\native\Microsoft.WindowsAppSDK.Foundation.props'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.InteractiveExperiences.2.1.9\build\native\Microsoft.WindowsAppSDK.InteractiveExperiences.props')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.InteractiveExperiences.2.1.9\build\native\Microsoft.WindowsAppSDK.InteractiveExperiences.props'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.DWrite.2.1.0\build\Microsoft.WindowsAppSDK.DWrite.props')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.DWrite.2.1.0\build\Microsoft.WindowsAppSDK.DWrite.props'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.WinUI.2.3.9\build\native\Microsoft.WindowsAppSDK.WinUI.props')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.WinUI.2.3.9\build\native\Microsoft.WindowsAppSDK.WinUI.props'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Runtime.2.5.1\build\native\Microsoft.WindowsAppSDK.Runtime.props')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.Runtime.2.5.1\build\native\Microsoft.WindowsAppSDK.Runtime.props'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.2.5.1\build\native\Microsoft.WindowsAppSDK.props')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.2.5.1\build\native\Microsoft.WindowsAppSDK.props'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.10.0.26100.4654\build\Microsoft.Windows.SDK.BuildTools.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.10.0.26100.4654\build\Microsoft.Windows.SDK.BuildTools.targets'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.MSIX.1.7.251221100\build\Microsoft.Windows.SDK.BuildTools.MSIX.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.Windows.SDK.BuildTools.MSIX.1.7.251221100\build\Microsoft.Windows.SDK.BuildTools.MSIX.targets'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.Web.WebView2.1.0.3719.77\build\native\Microsoft.Web.WebView2.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.Web.WebView2.1.0.3719.77\build\native\Microsoft.Web.WebView2.targets'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Base.2.0.4\build\native\Microsoft.WindowsAppSDK.Base.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.Base.2.0.4\build\native\Microsoft.WindowsAppSDK.Base.targets'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Foundation.2.3.12\build\native\Microsoft.WindowsAppSDK.Foundation.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.Foundation.2.3.12\build\native\Microsoft.WindowsAppSDK.Foundation.targets'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.InteractiveExperiences.2.1.9\build\native\Microsoft.WindowsAppSDK.InteractiveExperiences.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.InteractiveExperiences.2.1.9\build\native\Microsoft.WindowsAppSDK.InteractiveExperiences.targets'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.DWrite.2.1.0\build\Microsoft.WindowsAppSDK.DWrite.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.DWrite.2.1.0\build\Microsoft.WindowsAppSDK.DWrite.targets'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.WinUI.2.3.9\build\native\Microsoft.WindowsAppSDK.WinUI.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.WinUI.2.3.9\build\native\Microsoft.WindowsAppSDK.WinUI.targets'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.Runtime.2.5.1\build\native\Microsoft.WindowsAppSDK.Runtime.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.Runtime.2.5.1\build\native\Microsoft.WindowsAppSDK.Runtime.targets'))" />
+    <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.2.5.1\build\native\Microsoft.WindowsAppSDK.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.2.5.1\build\native\Microsoft.WindowsAppSDK.targets'))" />
+  </Target>
+  <!-- The core libraries come from CMake; fail early with the command that builds them. -->
+  <Target Name="EnsureCatroCore" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib')" Text="Catro core libraries were not found under $(CatroCoreRoot). Build them first with cmake --build --preset windows-debug, or pass /p:CatroCoreRoot=&lt;CMake build directory&gt;." />
+  </Target>
+  <!-- The capability service starts its probe helper from the application directory. -->
+  <Target Name="CopyCatroProbeHelper" AfterTargets="Build">
+    <Copy SourceFiles="$(CatroCoreRoot)\$(Configuration)\catro-capability-probe.exe" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

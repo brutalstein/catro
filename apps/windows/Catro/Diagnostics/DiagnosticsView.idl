@@ -1,0 +1,8 @@
+namespace Catro
+{
+    [default_interface]
+    runtimeclass DiagnosticsView : Microsoft.UI.Xaml.Controls.UserControl
+    {
+        DiagnosticsView();
+    }
+}

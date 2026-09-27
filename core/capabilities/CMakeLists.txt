@@ -1,0 +1,14 @@
+add_library(catro_capabilities STATIC
+    src/validation.cpp
+    src/snapshot_diff.cpp
+    src/operating_profile.cpp
+    src/local_envelope.cpp
+    src/candidate_ranking.cpp
+    src/policy.cpp
+    src/probe_coordinator.cpp
+)
+add_library(Catro::Capabilities ALIAS catro_capabilities)
+
+target_include_directories(catro_capabilities PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_features(catro_capabilities PUBLIC cxx_std_20)
+catro_enable_warnings(catro_capabilities)

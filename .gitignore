@@ -1,1 +1,4 @@
 .worktrees/
+/out/
+/apps/windows/packages/
+/compile_flags.txt
