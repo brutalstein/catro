@@ -133,9 +133,24 @@ bool RenderBridge::try_push(const PcmFrame& frame) noexcept {
     return true;
 }
 
+void RenderBridge::request_resync() noexcept {
+    resync_requests_.fetch_add(1, std::memory_order_relaxed);
+    resync_requested_.store(true, std::memory_order_release);
+}
+
 void RenderBridge::on_render(std::span<float> frames) noexcept {
     callbacks_.fetch_add(1, std::memory_order_relaxed);
     requested_samples_.fetch_add(frames.size(), std::memory_order_relaxed);
+
+    if (resync_requested_.exchange(false, std::memory_order_acq_rel)) {
+        // Consumer-owned operation: flush audio that became stale while the render callback was
+        // not keeping up. A producer racing after this point sees the newly freed space and its
+        // fresh frame is not part of this already-bounded discard request.
+        const auto stale = ring_.discard(ring_.size());
+        stale_samples_discarded_.fetch_add(stale, std::memory_order_relaxed);
+        resync_events_.fetch_add(1, std::memory_order_relaxed);
+    }
+
     if (frames.empty()) {
         return;
     }
@@ -163,6 +178,9 @@ RenderBridgeStatistics RenderBridge::statistics() const noexcept {
         .underrun_callbacks = underrun_callbacks_.load(std::memory_order_relaxed),
         .frames_enqueued = frames_enqueued_.load(std::memory_order_relaxed),
         .push_rejections = push_rejections_.load(std::memory_order_relaxed),
+        .resync_requests = resync_requests_.load(std::memory_order_relaxed),
+        .resync_events = resync_events_.load(std::memory_order_relaxed),
+        .stale_samples_discarded = stale_samples_discarded_.load(std::memory_order_relaxed),
         .buffered_samples = ring_.size(),
         .peak_buffered_samples = peak_buffered_samples_.load(std::memory_order_relaxed),
     };
