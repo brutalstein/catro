@@ -82,6 +82,7 @@ public:
 
     [[nodiscard]] std::variant<EncodeStep, CodecError> encode_next(OutboundDatagram& datagram) noexcept;
     [[nodiscard]] ReceiveResult receive(std::span<const std::byte> datagram) noexcept;
+    [[nodiscard]] PlayoutKind next_playout_kind() const noexcept { return jitter_.peek(); }
     [[nodiscard]] std::variant<DecodeStep, CodecError> decode_next() noexcept;
 
     [[nodiscard]] VoicePipelineStatistics statistics() const noexcept;
