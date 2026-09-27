@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <numbers>
 #include <span>
 #include <type_traits>
@@ -42,9 +43,7 @@ public:
         const auto head = head_.value.load(std::memory_order_relaxed);
         const auto tail = tail_.value.load(std::memory_order_acquire);
         const auto count = std::min(items.size(), capacity() - (head - tail));
-        for (std::size_t index = 0; index < count; ++index) {
-            buffer_[(head + index) & mask_] = items[index];
-        }
+        copy_into(head, items.first(count));
         head_.value.store(head + count, std::memory_order_release);
         return count;
     }
@@ -57,9 +56,7 @@ public:
         if (items.size() > capacity() - (head - tail)) {
             return false;
         }
-        for (std::size_t index = 0; index < items.size(); ++index) {
-            buffer_[(head + index) & mask_] = items[index];
-        }
+        copy_into(head, items);
         head_.value.store(head + items.size(), std::memory_order_release);
         return true;
     }
@@ -69,9 +66,7 @@ public:
         const auto tail = tail_.value.load(std::memory_order_relaxed);
         const auto head = head_.value.load(std::memory_order_acquire);
         const auto count = std::min(out.size(), head - tail);
-        for (std::size_t index = 0; index < count; ++index) {
-            out[index] = buffer_[(tail + index) & mask_];
-        }
+        copy_out(tail, out.first(count));
         tail_.value.store(tail + count, std::memory_order_release);
         return count;
     }
@@ -83,9 +78,7 @@ public:
         if (out.size() > head - tail) {
             return false;
         }
-        for (std::size_t index = 0; index < out.size(); ++index) {
-            out[index] = buffer_[(tail + index) & mask_];
-        }
+        copy_out(tail, out);
         tail_.value.store(tail + out.size(), std::memory_order_release);
         return true;
     }
@@ -100,6 +93,32 @@ public:
     }
 
 private:
+    void copy_into(std::size_t position, std::span<const T> items) noexcept {
+        if (items.empty()) {
+            return;
+        }
+        const auto offset = position & mask_;
+        const auto first = std::min(items.size(), capacity() - offset);
+        std::memcpy(buffer_.data() + offset, items.data(), first * sizeof(T));
+        const auto remaining = items.size() - first;
+        if (remaining > 0) {
+            std::memcpy(buffer_.data(), items.data() + first, remaining * sizeof(T));
+        }
+    }
+
+    void copy_out(std::size_t position, std::span<T> out) noexcept {
+        if (out.empty()) {
+            return;
+        }
+        const auto offset = position & mask_;
+        const auto first = std::min(out.size(), capacity() - offset);
+        std::memcpy(out.data(), buffer_.data() + offset, first * sizeof(T));
+        const auto remaining = out.size() - first;
+        if (remaining > 0) {
+            std::memcpy(out.data() + first, buffer_.data(), remaining * sizeof(T));
+        }
+    }
+
     // Explicit padding keeps the two indices on separate cache lines without alignas padding
     // warnings.
     struct Index {
