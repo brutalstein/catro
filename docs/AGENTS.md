@@ -1825,9 +1825,9 @@ planning-only state described in the historical sections above.
 
 The active sequence is now:
 
-1. Windows Graphics Capture into bounded GPU-resident D3D11 frames.
-2. Real Windows machine capture validation with explicit counters.
-3. Hardware video encoder activation on the selected adapter.
+1. Windows Graphics Capture into bounded GPU-resident D3D11 frames. **Validated on real Windows hardware.**
+2. Same-adapter BGRA -> NV12 GPU conversion and H.264 hardware encoder activation. **Current slice.**
+3. Real Windows machine hardware-encode validation with explicit latency/failure counters.
 4. Two-client screen stream.
 5. Game/system audio integration.
 
