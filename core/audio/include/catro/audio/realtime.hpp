@@ -21,6 +21,12 @@ inline constexpr std::uint32_t kSampleRate = 48000;
 
 // Wait-free single-producer single-consumer ring. Indices grow monotonically; the capacity is a
 // power of two so positions wrap with a mask.
+#if defined(_MSC_VER)
+#pragma warning(push)
+// Intentional over-alignment isolates the audio and worker-owned indices. MSVC warning C4324
+// otherwise turns that deliberate padding into an error under /W4 /WX.
+#pragma warning(disable : 4324)
+#endif
 template <class T>
     requires std::is_trivially_copyable_v<T>
 class SpscRing {
@@ -143,6 +149,9 @@ private:
     Index head_;
     Index tail_;
 };
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 // Peak and RMS of the most recent block, written by the audio thread and read by any thread.
 // ponytail: last-block values; a UI polling slower than the block rate can miss a short peak.
