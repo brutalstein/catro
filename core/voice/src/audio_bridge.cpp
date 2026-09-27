@@ -6,7 +6,7 @@ namespace catro::voice {
 namespace {
 
 std::size_t requested_samples(std::size_t queue_frames) noexcept {
-    const auto frames = std::max<std::size_t>(queue_frames, 2);
+    const auto frames = std::clamp<std::size_t>(queue_frames, 2, kMaxRealtimeQueueFrames);
     return frames * static_cast<std::size_t>(kFrameSamples);
 }
 
