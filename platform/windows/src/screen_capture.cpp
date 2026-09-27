@@ -409,7 +409,8 @@ struct WindowsGraphicsCapture::Impl {
                 return;
             }
 
-            auto access = frame.Surface().as<IDirect3DDxgiInterfaceAccess>();
+            auto access =
+                frame.Surface().as<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
             ComPtr<ID3D11Texture2D> texture;
             const auto result = access->GetInterface(IID_PPV_ARGS(&texture));
             if (FAILED(result) || !texture) {
