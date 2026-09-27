@@ -274,7 +274,8 @@ std::optional<VoicePeerOptions> parse_voice_peer_arguments(
 int run_voice_peer(std::span<const std::string_view> arguments,
                    audio::AudioPlatform& platform,
                    std::ostream& out,
-                   std::ostream& error) {
+                   std::ostream& error,
+                   const std::atomic_bool* stop_requested) {
     const auto options = parse_voice_peer_arguments(arguments);
     if (!options) {
         error << kVoicePeerUsage;
@@ -355,7 +356,8 @@ int run_voice_peer(std::span<const std::string_view> arguments,
     std::optional<voice::CodecError> codec_failure;
     std::optional<audio::AudioError> audio_failure;
 
-    while (Clock::now() < deadline) {
+    while (Clock::now() < deadline &&
+           (stop_requested == nullptr || !stop_requested->load(std::memory_order_acquire))) {
         if (audio_failed.load(std::memory_order_acquire)) {
             const auto audio_stats = audio_session.statistics();
             audio_failure = audio_stats.error.value_or(audio::AudioError{audio::AudioErrorCode::os_failure});
