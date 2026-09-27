@@ -1,5 +1,6 @@
 #include <catro/voice/pipeline.hpp>
 
+#include <algorithm>
 #include <new>
 #include <utility>
 
@@ -54,6 +55,13 @@ std::variant<EncodeStep, CodecError> VoicePipeline::encode_next(OutboundDatagram
     }
     if (!capture_.try_pop(capture_frame_)) {
         return EncodeStep::no_frame;
+    }
+    if (muted_.load(std::memory_order_acquire)) {
+        // Preserve the media clock and packet cadence while guaranteeing microphone samples are
+        // not encoded. Opus compresses silence cheaply, and the receiver avoids long-gap jitter
+        // resynchronization when the user unmutes.
+        std::fill(capture_frame_.begin(), capture_frame_.end(), 0.0F);
+        muted_frames_.fetch_add(1, std::memory_order_relaxed);
     }
 
     auto output = std::span<std::byte>(datagram.bytes);
@@ -166,6 +174,7 @@ VoicePipelineStatistics VoicePipeline::statistics() const noexcept {
         .encoded_frames = encoded_frames_.load(std::memory_order_relaxed),
         .encode_errors = encode_errors_.load(std::memory_order_relaxed),
         .outbound_bytes = outbound_bytes_.load(std::memory_order_relaxed),
+        .muted_frames = muted_frames_.load(std::memory_order_relaxed),
         .received_datagrams = received_datagrams_.load(std::memory_order_relaxed),
         .malformed_datagrams = malformed_datagrams_.load(std::memory_order_relaxed),
         .decoded_frames = decoded_frames_.load(std::memory_order_relaxed),
