@@ -485,26 +485,26 @@ int run_receiver(
 
     while (Clock::now() < deadline && !stop_requested(control)) {
         const auto ready = socket.wait_readable(10ms);
-        if (const auto* failure = std::get_if<UdpError>(&ready)) {
-            if (failure->code == UdpErrorCode::peer_unreachable) {
+        if (const auto* wait_failure = std::get_if<UdpError>(&ready)) {
+            if (wait_failure->code == UdpErrorCode::peer_unreachable) {
                 ++peer_unreachable_events;
             } else {
-                report_udp_error(error, *failure);
+                report_udp_error(error, *wait_failure);
                 return video_peer_network_failed;
             }
         } else if (std::get<bool>(ready)) {
             for (std::size_t drained = 0; drained < kMaxReceiveDrain; ++drained) {
                 const auto received = socket.receive(datagram);
-                if (const auto* failure = std::get_if<UdpError>(&received)) {
-                    if (failure->code == UdpErrorCode::peer_unreachable) {
+                if (const auto* receive_failure = std::get_if<UdpError>(&received)) {
+                    if (receive_failure->code == UdpErrorCode::peer_unreachable) {
                         ++peer_unreachable_events;
                         break;
                     }
-                    if (failure->code == UdpErrorCode::datagram_too_large) {
+                    if (receive_failure->code == UdpErrorCode::datagram_too_large) {
                         ++rejected_packets;
                         continue;
                     }
-                    report_udp_error(error, *failure);
+                    report_udp_error(error, *receive_failure);
                     return video_peer_network_failed;
                 }
 
