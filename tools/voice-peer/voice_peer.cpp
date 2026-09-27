@@ -37,6 +37,7 @@ struct NetworkStatistics {
     std::uint64_t received_bytes = 0;
     std::uint64_t oversized_packets = 0;
     std::uint64_t peer_unreachable_events = 0;
+    std::uint64_t stale_network_packets_discarded = 0;
     std::uint64_t startup_prime_frames = 0;
     std::uint64_t worker_late_resyncs = 0;
 };
@@ -157,6 +158,7 @@ void print_progress(std::ostream& out, std::int64_t elapsed_seconds,
         << " net-drop " << network.send_backpressure_drops
         << " oversize " << network.oversized_packets
         << " peer-miss " << network.peer_unreachable_events
+        << " net-stale " << network.stale_network_packets_discarded
         << " malformed " << media.malformed_datagrams
         << " dup " << media.jitter.duplicates
         << " reorder " << media.jitter.reordered
@@ -351,6 +353,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
     auto next_report = started_at + 1s;
     auto next_playout = started_at;
     bool playout_started = false;
+    bool discard_network_backlog = false;
     int exit_code = voice_peer_ok;
     std::optional<UdpError> network_failure;
     std::optional<voice::CodecError> codec_failure;
@@ -363,6 +366,23 @@ int run_voice_peer(std::span<const std::string_view> arguments,
             audio_failure = audio_stats.error.value_or(audio::AudioError{audio::AudioErrorCode::os_failure});
             exit_code = voice_peer_audio_failed;
             break;
+        }
+
+        // If the worker was descheduled long enough to miss the bounded catch-up window, do not
+        // feed seconds of queued UDP speech back into the jitter buffer. Reset codec/jitter state
+        // and drain the kernel socket to its live edge first.
+        const auto loop_now = Clock::now();
+        if (receives(options->mode) && playout_started &&
+            loop_now - next_playout >= kFramePeriod * kMaxPlayoutCatchup) {
+            if (const auto failure = pipeline->resynchronize_receiver()) {
+                codec_failure = *failure;
+                exit_code = voice_peer_codec_failed;
+                break;
+            }
+            ++network.worker_late_resyncs;
+            playout_started = false;
+            discard_network_backlog = true;
+            next_playout = loop_now;
         }
 
         if (sends(options->mode)) {
@@ -445,10 +465,15 @@ int run_voice_peer(std::span<const std::string_view> arguments,
                     }
                     const auto bytes = std::get<std::size_t>(received);
                     if (bytes == 0) {
+                        discard_network_backlog = false;
                         break;
                     }
                     ++network.received_packets;
                     network.received_bytes += bytes;
+                    if (discard_network_backlog) {
+                        ++network.stale_network_packets_discarded;
+                        continue;
+                    }
                     (void)pipeline->receive(std::span<const std::byte>(receive_buffer).first(bytes));
                 }
                 if (exit_code != voice_peer_ok) {
@@ -514,6 +539,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
                     }
                     ++network.worker_late_resyncs;
                     playout_started = false;
+                    discard_network_backlog = true;
                     next_playout = Clock::now();
                     return true;
                 };
@@ -572,6 +598,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         << ", net-drop " << network.send_backpressure_drops
         << ", oversize " << network.oversized_packets
         << ", peer-miss " << network.peer_unreachable_events
+        << ", net-stale " << network.stale_network_packets_discarded
         << ", malformed " << final_media.malformed_datagrams
         << ", duplicate " << final_media.jitter.duplicates
         << ", reordered " << final_media.jitter.reordered
