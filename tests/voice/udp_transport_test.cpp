@@ -89,6 +89,26 @@ TEST_CASE("connected UDP sockets exchange one bounded datagram on loopback") {
     CHECK(std::get<std::size_t>(empty) == 0);
 }
 
+TEST_CASE("oversized UDP datagrams are rejected instead of silently truncated") {
+    auto first = bind_loopback();
+    auto second = bind_loopback();
+    connect_pair(*first, *second);
+
+    std::array<std::byte, kMaxVoiceDatagramBytes + 64> oversized{};
+    const auto sent = first->send(oversized);
+    REQUIRE(std::holds_alternative<std::size_t>(sent));
+    REQUIRE(std::get<std::size_t>(sent) == oversized.size());
+
+    const auto ready = second->wait_readable(500ms);
+    REQUIRE(std::holds_alternative<bool>(ready));
+    REQUIRE(std::get<bool>(ready));
+
+    std::array<std::byte, kMaxVoiceDatagramBytes + 1> received{};
+    const auto result = second->receive(received);
+    REQUIRE(std::holds_alternative<UdpError>(result));
+    CHECK(std::get<UdpError>(result).code == UdpErrorCode::datagram_too_large);
+}
+
 TEST_CASE("actual UDP loopback carries Opus packets into the jitter decoder") {
     auto tx = bind_loopback();
     auto rx = bind_loopback();
