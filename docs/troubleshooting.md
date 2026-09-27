@@ -64,7 +64,7 @@ For validation, choose an active 48 kHz input endpoint from the capability repor
 **Voice peer cannot bind** Another process already owns the requested UDP port. Give the two peers
 different local ports. Loopback examples use 50000 and 50001.
 
-**LAN voice peer sends but receives nothing** Confirm both peers use each other's numeric IPv4
+**LAN voice peer sends but receives nothing** Confirm both peers use each other's numeric private/link-local IPv4
 address and opposite ports. The development transport is connected UDP, so packets from any other
 source address/port are ignored by the OS. A host firewall may also need to allow the executable.
 Do not open these ports to the public Internet; this harness is unencrypted.
