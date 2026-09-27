@@ -121,10 +121,12 @@ private:
 
     // Explicit padding keeps the two indices on separate cache lines without alignas padding
     // warnings.
-    struct Index {
+    struct alignas(64) Index {
         std::atomic<std::size_t> value{0};
         char padding[64 - sizeof(std::atomic<std::size_t>)]{};
     };
+    static_assert(sizeof(Index) == 64);
+    static_assert(alignof(Index) == 64);
 
     std::vector<T> buffer_;
     std::size_t mask_;
