@@ -18,6 +18,7 @@ enum class H264DecoderErrorCode : std::uint8_t {
     media_foundation_startup_failed,
     decoder_activation_failed,
     decoder_not_d3d11,
+    input_retention_unsupported,
     media_type_failed,
     stream_start_failed,
     input_too_large,
@@ -45,6 +46,8 @@ struct H264DecoderError {
         return "Microsoft H.264 decoder activation failed";
     case H264DecoderErrorCode::decoder_not_d3d11:
         return "H.264 decoder is not D3D11-aware";
+    case H264DecoderErrorCode::input_retention_unsupported:
+        return "H.264 decoder retains compressed input beyond ProcessOutput";
     case H264DecoderErrorCode::media_type_failed:
         return "H.264 decoder media-type negotiation failed";
     case H264DecoderErrorCode::stream_start_failed:
@@ -87,6 +90,8 @@ struct H264DecoderStatistics {
     bool low_latency_applied = false;
     bool hardware_acceleration_requested = false;
     bool hardware_acceleration_applied = false;
+    bool input_does_not_addref = false;
+    bool input_holds_buffers = false;
 
     std::uint64_t frames_submitted = 0;
     std::uint64_t frames_decoded = 0;
