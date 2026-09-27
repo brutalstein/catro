@@ -9,6 +9,7 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <string_view>
 #include <variant>
 
 namespace catro::audio {
@@ -127,6 +128,37 @@ struct AudioStatistics {
     // Monitor only. Sum of device latencies, periods, and the monitor cushion; never measured.
     std::optional<std::chrono::microseconds> estimated_latency;
 };
+
+// Stable lowercase names for tools, logs, and view models.
+[[nodiscard]] constexpr std::string_view name(AudioErrorCode code) noexcept {
+    switch (code) {
+    case AudioErrorCode::device_not_found:
+        return "device not found";
+    case AudioErrorCode::device_in_use:
+        return "device in use";
+    case AudioErrorCode::permission_denied:
+        return "microphone access denied";
+    case AudioErrorCode::format_unsupported:
+        return "format unsupported";
+    case AudioErrorCode::device_lost:
+        return "device lost";
+    case AudioErrorCode::os_failure:
+        break;
+    }
+    return "OS failure";
+}
+
+[[nodiscard]] constexpr std::string_view name(SessionMode mode) noexcept {
+    switch (mode) {
+    case SessionMode::tone:
+        return "tone";
+    case SessionMode::monitor:
+        return "monitor";
+    case SessionMode::meter:
+        break;
+    }
+    return "meter";
+}
 
 // Runs one session at a time. start, stop, and statistics may be called from any non-audio
 // thread; the failure handler runs on a platform thread.

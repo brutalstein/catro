@@ -45,6 +45,7 @@ elseif(APPLE)
     endif()
 endif()
 add_subdirectory(tools/capability-report)
+add_subdirectory(tools/audio-check)
 
 if(CATRO_BUILD_TESTS)
     enable_testing()

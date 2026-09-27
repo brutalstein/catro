@@ -81,6 +81,8 @@ Windows:
   event. `AUDCLNT_E_DEVICE_INVALIDATED` ends the stream with `device_lost`. `E_ACCESSDENIED` on activation is
   `permission_denied` (Windows microphone privacy setting).
 - Capture honours `AUDCLNT_BUFFERFLAGS_SILENT` (zeros) and counts `DATA_DISCONTINUITY` as a glitch.
+- A session opened on the default endpoint stays on that endpoint. Following default-device changes
+  (`IMMNotificationClient`) is deferred; a removed endpoint surfaces as `device_lost` and the user restarts.
 
 macOS:
 
