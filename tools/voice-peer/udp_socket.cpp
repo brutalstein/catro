@@ -12,6 +12,12 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <mstcpip.h>
+
+// Some Windows SDK / toolset combinations do not expose this vendor IOCTL from mstcpip.h even
+// though Winsock supports it. This is the value used by the Windows SDK and Microsoft samples.
+#ifndef SIO_UDP_CONNRESET
+#define SIO_UDP_CONNRESET _WSAIOW(IOC_VENDOR, 12)
+#endif
 #else
 #include <arpa/inet.h>
 #include <cerrno>
