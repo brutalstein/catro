@@ -7,6 +7,18 @@
     <Filter Include="Audio">
       <UniqueIdentifier>{5C6D7E8F-90A1-4B2C-8D3E-4F5061728394}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Home">
+      <UniqueIdentifier>{A4E3A53A-184A-4F20-902B-927532F49455}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Voice">
+      <UniqueIdentifier>{BBA45AD0-D30D-4D5B-A0D9-4B63AE3265B5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Share">
+      <UniqueIdentifier>{32E11128-2464-431C-A3A4-3A61FD8A7AA2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Settings">
+      <UniqueIdentifier>{505DD325-EC8E-485C-9C90-59D704812C65}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml" />
@@ -17,6 +29,10 @@
     <Page Include="Audio\AudioView.xaml">
       <Filter>Audio</Filter>
     </Page>
+    <Page Include="Home\HomeView.xaml"><Filter>Home</Filter></Page>
+    <Page Include="Voice\VoiceView.xaml"><Filter>Voice</Filter></Page>
+    <Page Include="Share\ShareView.xaml"><Filter>Share</Filter></Page>
+    <Page Include="Settings\SettingsView.xaml"><Filter>Settings</Filter></Page>
   </ItemGroup>
   <ItemGroup>
     <Midl Include="MainWindow.idl" />
@@ -26,13 +42,31 @@
     <Midl Include="Audio\AudioView.idl">
       <Filter>Audio</Filter>
     </Midl>
+    <Midl Include="Home\HomeView.idl"><Filter>Home</Filter></Midl>
+    <Midl Include="Voice\VoiceView.idl"><Filter>Voice</Filter></Midl>
+    <Midl Include="Share\ShareView.idl"><Filter>Share</Filter></Midl>
+    <Midl Include="Settings\SettingsView.idl"><Filter>Settings</Filter></Midl>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="$(GeneratedFilesDir)module.g.cpp" />
+    <ClCompile Include="MainWindow.xaml.cpp" />
+    <ClCompile Include="Diagnostics\DiagnosticsView.xaml.cpp"><Filter>Diagnostics</Filter></ClCompile>
+    <ClCompile Include="Audio\AudioView.xaml.cpp"><Filter>Audio</Filter></ClCompile>
+    <ClCompile Include="Home\HomeView.xaml.cpp"><Filter>Home</Filter></ClCompile>
+    <ClCompile Include="Voice\VoiceView.xaml.cpp"><Filter>Voice</Filter></ClCompile>
+    <ClCompile Include="Share\ShareView.xaml.cpp"><Filter>Share</Filter></ClCompile>
+    <ClCompile Include="Settings\SettingsView.xaml.cpp"><Filter>Settings</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="MainWindow.xaml.h" />
+    <ClInclude Include="Diagnostics\DiagnosticsView.xaml.h"><Filter>Diagnostics</Filter></ClInclude>
+    <ClInclude Include="Audio\AudioView.xaml.h"><Filter>Audio</Filter></ClInclude>
+    <ClInclude Include="Home\HomeView.xaml.h"><Filter>Home</Filter></ClInclude>
+    <ClInclude Include="Voice\VoiceView.xaml.h"><Filter>Voice</Filter></ClInclude>
+    <ClInclude Include="Share\ShareView.xaml.h"><Filter>Share</Filter></ClInclude>
+    <ClInclude Include="Settings\SettingsView.xaml.h"><Filter>Settings</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="app.manifest" />
