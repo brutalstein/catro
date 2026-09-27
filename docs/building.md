@@ -27,6 +27,7 @@ What `build.ps1` runs:
 | Shell | `out/apps/windows/x64/<Configuration>/Catro.exe` |
 | Report tool | `out/build/windows-msvc/<Configuration>/catro-capability-report.exe` |
 | Audio check | `out/build/windows-msvc/<Configuration>/catro-audio-check.exe` |
+| Voice peer | `out/build/windows-msvc/<Configuration>/catro-voice-peer.exe` |
 | Probe helper | `out/build/windows-msvc/<Configuration>/catro-capability-probe.exe` |
 
 ## macOS
@@ -49,6 +50,7 @@ file is checked in. The post-build step copies the probe helper into
 | Shell | `out/build/<preset>/<Configuration>/Catro.app` |
 | Report tool | `out/build/<preset>/<Configuration>/catro-capability-report` |
 | Audio check | `out/build/<preset>/<Configuration>/catro-audio-check` |
+| Voice peer | `out/build/<preset>/<Configuration>/catro-voice-peer` |
 
 The Swift shell needs the Xcode or Ninja generator. With another generator, CMake builds
 everything except the shell.
@@ -80,6 +82,30 @@ latency is an estimate from device and buffer sizes, not a measurement. Exit cod
 The Windows integration test (`catro_windows_audio`) opens the default endpoints for about a
 second and reports skipped on a machine without them. On macOS, `catro-audio-check` runs from a
 terminal, so the terminal app receives the microphone permission.
+
+
+## Voice peer
+
+```
+catro-voice-peer --bind <numeric-ipv4:port> --peer <numeric-ipv4:port>
+                 [--mode send|receive|duplex] [--seconds 1-300]
+                 [--input <id>] [--output <id>] [--stream-id <n>]
+                 [--jitter 1-10] [--bitrate 12000-128000]
+```
+
+This is an engineering harness for localhost or an explicitly selected LAN peer. It uses connected,
+non-blocking UDP and has **no encryption or authentication**. It must not be exposed to the public
+Internet. Each datagram is bounded to one Catro voice packet (maximum 1291 bytes), keeping it below
+a conservative Ethernet MTU once IP/UDP headers are included.
+
+The media worker sleeps in `select` with a 2 ms maximum poll interval instead of busy-spinning.
+Audio callbacks only copy through bounded SPSC queues. Encoding, socket I/O, packet parsing,
+jitter/FEC/PLC, and decoding remain on the worker thread. Once per second the tool prints packet,
+loss/backpressure, jitter, audio glitch/underrun, and encode/decode timing counters.
+
+For a first same-machine test, use separate ports and one-way modes so only one process captures
+and one renders. After that succeeds, use `duplex` on both sides. See
+[voice peer validation](voice-peer.md).
 
 ## Probe budgets
 
