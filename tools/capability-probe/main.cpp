@@ -2,6 +2,7 @@
 #include <catro/platform/windows/capability_service.hpp>
 #include <catro/reporting/canonical_json.hpp>
 
+#include <Windows.h>
 #include <fcntl.h>
 #include <io.h>
 
@@ -23,6 +24,9 @@ int wmain(int argc, wchar_t** argv) {
         }
         requested.push_back(static_cast<char>(value));
     }
+
+    // Effective per-monitor DPI and physical display sizes are only reported to aware processes.
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     const auto schedule = caps::make_initial_probe_schedule(caps::OperatingSystem::windows, 1, {});
     const auto found = std::ranges::find(schedule.probes, requested, &caps::ProbeSpec::probe_id);

@@ -91,6 +91,15 @@ struct CapabilityService::Impl {
                 self->queue(caps::RefreshReason::power);
             }
             return TRUE;
+        case WM_DISPLAYCHANGE:
+            self->queue(caps::RefreshReason::display);
+            return 0;
+        case WM_DEVICECHANGE:
+            // Adapter arrival and removal surface only as a device-tree change.
+            if (wparam == DBT_DEVNODES_CHANGED) {
+                self->queue(caps::RefreshReason::display);
+            }
+            return TRUE;
         case WM_WTSSESSION_CHANGE:
             self->queue(caps::RefreshReason::session);
             return 0;
@@ -125,7 +134,9 @@ struct CapabilityService::Impl {
             return;
         }
 
-        const auto hwnd = CreateWindowExW(0, kWindowClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, instance, this);
+        // A never-shown top-level window: message-only windows miss the WM_DISPLAYCHANGE and
+        // WM_DEVICECHANGE broadcasts.
+        const auto hwnd = CreateWindowExW(0, kWindowClass, L"", 0, 0, 0, 0, 0, nullptr, nullptr, instance, this);
         if (hwnd == nullptr) {
             signal_ready(nullptr, false);
             return;

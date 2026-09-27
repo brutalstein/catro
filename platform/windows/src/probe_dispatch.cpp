@@ -8,6 +8,7 @@ namespace caps = catro::capabilities;
 
 caps::ProbeFragment run_system_probe(const caps::ProbeSpec& spec);
 caps::ProbeFragment run_runtime_probe(const caps::ProbeSpec& spec);
+caps::ProbeFragment run_gpu_display_probe(const caps::ProbeSpec& spec);
 
 caps::ProbeFragment run_passive_probe(const caps::ProbeSpec& spec) {
     if (spec.access != caps::ProbeAccess::passive) {
@@ -26,6 +27,7 @@ caps::ProbeFragment run_passive_probe(const caps::ProbeSpec& spec) {
     case caps::ProbeFamily::runtime:
         return run_runtime_probe(spec);
     case caps::ProbeFamily::gpu_display:
+        return run_gpu_display_probe(spec);
     case caps::ProbeFamily::encoders:
     case caps::ProbeFamily::audio:
         return {
