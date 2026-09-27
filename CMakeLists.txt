@@ -7,6 +7,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 # Catro uses headers, not C++20 modules; skip per-source module dependency scanning.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+# The macOS platform layer is Objective-C++ at its native boundary.
+if(APPLE)
+    enable_language(OBJCXX)
+    set(CMAKE_OBJCXX_STANDARD 20)
+    set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+    set(CMAKE_OBJCXX_EXTENSIONS OFF)
+    set(CMAKE_OBJCXX_SCAN_FOR_MODULES OFF)
+endif()
 
 # Tools run side by side: the report tool starts the probe helper from its own directory.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
@@ -20,12 +28,16 @@ catro_enable_reporting_dependency()
 
 add_subdirectory(core/capabilities)
 add_subdirectory(core/reporting)
+# Its portable translation builds everywhere; the Objective-C++ layer only on Apple platforms.
+add_subdirectory(platform/macos)
 
 # Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.
 if(WIN32 AND MSVC)
     add_subdirectory(platform/windows)
     add_subdirectory(tools/capability-probe)
     add_subdirectory(apps/windows)
+elseif(APPLE)
+    add_subdirectory(tools/capability-probe)
 endif()
 add_subdirectory(tools/capability-report)
 
