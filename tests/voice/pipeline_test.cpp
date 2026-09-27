@@ -227,6 +227,6 @@ TEST_CASE("decoded audio never grows memory and reports bounded render backpress
     const auto stats = receiver->statistics();
     CHECK(stats.decoded_frames == 3);
     CHECK(stats.render_queue_full == 1);
-    CHECK(stats.render.frames_dropped == 1);
+    CHECK(stats.render.push_rejections == 1);
     CHECK(stats.render.buffered_samples == 2U * kFrameSamples);
 }
