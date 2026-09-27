@@ -16,6 +16,7 @@ private:
     Microsoft::UI::Xaml::UIElement PageFor(catro::app::ShellSection section);
     void Activate(catro::app::ShellSection section);
     void UpdateNavigationVisuals(catro::app::ShellSection section);
+    void UpdateResponsiveLayout(double width);
 
     catro::app::ShellState shell_state_;
     Microsoft::UI::Xaml::UIElement home_page_{nullptr};
