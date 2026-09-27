@@ -42,7 +42,7 @@ void CaptureBridge::on_captured(std::span<const float> frames) noexcept {
 }
 
 std::size_t CaptureBridge::trim_backlog(std::size_t keep_frames) noexcept {
-    keep_frames = std::max<std::size_t>(keep_frames, 1);
+    keep_frames = std::clamp<std::size_t>(keep_frames, 1, kMaxRealtimeQueueFrames);
     const auto buffered = ring_.size();
     const auto keep_samples = keep_frames * static_cast<std::size_t>(kFrameSamples);
     if (buffered <= keep_samples) {
