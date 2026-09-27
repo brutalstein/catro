@@ -6,6 +6,7 @@
 #include <catro/capabilities/ids.hpp>
 
 #include <chrono>
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <ostream>
@@ -57,6 +58,7 @@ inline constexpr std::string_view kVoicePeerUsage =
 [[nodiscard]] int run_voice_peer(std::span<const std::string_view> arguments,
                                  audio::AudioPlatform& platform,
                                  std::ostream& out,
-                                 std::ostream& error);
+                                 std::ostream& error,
+                                 const std::atomic_bool* stop_requested = nullptr);
 
 } // namespace catro::tools
