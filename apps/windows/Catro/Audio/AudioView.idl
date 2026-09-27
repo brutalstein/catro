@@ -1,0 +1,8 @@
+namespace Catro
+{
+    [default_interface]
+    runtimeclass AudioView : Microsoft.UI.Xaml.Controls.UserControl
+    {
+        AudioView();
+    }
+}

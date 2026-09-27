@@ -5,6 +5,8 @@
 #include "DiagnosticsView.g.cpp"
 #endif
 
+#include "Audio/AudioView.xaml.h"
+
 #include <ShObjIdl_core.h>
 
 #include <algorithm>
@@ -199,6 +201,7 @@ void DiagnosticsView::Stop() {
 void DiagnosticsView::Apply(catro::reporting::CapabilityReport report, catro::app::DiagnosticsModel model) {
     report_ = std::move(report);
     model_ = std::move(model);
+    get_self<AudioView>(AudioPanel())->SetEndpoints(report_->snapshot);
     if (!navigation_built_) {
         BuildNavigation();
     }
@@ -263,6 +266,15 @@ void DiagnosticsView::OnSelectionChanged(controls::NavigationView const&,
 }
 
 void DiagnosticsView::Show(std::string const& section) {
+    // The audio page stops its session when hidden, so no device stays open out of view.
+    const bool audio = section == "audio";
+    AudioPanel().Visibility(audio ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
+    Rows().Visibility(audio ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
+    if (audio) {
+        SectionTitle().Text(L"Audio test");
+        return;
+    }
+    get_self<AudioView>(AudioPanel())->StopSession();
     auto rows = Rows().Items();
     rows.Clear();
     if (!report_) {

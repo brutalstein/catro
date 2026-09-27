@@ -40,6 +40,24 @@ non-prompting preflight check. Catro never asks for the permission in this miles
 **Remote session is `unknown` on macOS** macOS has no passive API that reports it, so the runtime
 probe is always `partial` there.
 
+**The Windows shell closes when a screen reader or UI Automation tool walks it (known issue)**
+Walking the UI Automation tree below the XAML island root causes an access violation in
+`Microsoft.UI.Xaml.dll`. This happens with Narrator-style clients, `System.Windows.Automation`,
+and the native `IUIAutomation` client. It reproduces with a window that holds only a `Grid` and a
+`TextBlock`, so it is not caused by Catro's views. Removing the custom title bar, Mica, or
+`XamlControlsResources` does not help, and neither does removing the app's `.pri`. The build here
+is unpackaged, self-contained Windows App SDK 2.5.1 (WinUI 2.3.9), without the Visual Studio Windows
+app workload. Other WinUI 3 apps on the same machine walk cleanly. Until this is resolved, the
+Windows shell is not usable with a screen reader.
+
+**`microphone access denied`** Windows blocks desktop apps from the microphone. Turn on
+*Settings > Privacy & security > Microphone > Let desktop apps access your microphone*.
+
+**`device in use`** Another application holds the endpoint in exclusive mode. Close it, or turn off
+*Allow applications to take exclusive control* for that device in the Sound control panel.
+
+**Live monitor howls** The monitor plays the microphone back live. Use headphones.
+
 ## Collecting a report for a bug
 
 ```powershell

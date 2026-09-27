@@ -4,6 +4,9 @@
     <Filter Include="Diagnostics">
       <UniqueIdentifier>{4B5C6D7E-8F90-4A1B-9C2D-3E4F50617283}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Audio">
+      <UniqueIdentifier>{5C6D7E8F-90A1-4B2C-8D3E-4F5061728394}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml" />
@@ -11,11 +14,17 @@
     <Page Include="Diagnostics\DiagnosticsView.xaml">
       <Filter>Diagnostics</Filter>
     </Page>
+    <Page Include="Audio\AudioView.xaml">
+      <Filter>Audio</Filter>
+    </Page>
   </ItemGroup>
   <ItemGroup>
     <Midl Include="MainWindow.idl" />
     <Midl Include="Diagnostics\DiagnosticsView.idl">
       <Filter>Diagnostics</Filter>
+    </Midl>
+    <Midl Include="Audio\AudioView.idl">
+      <Filter>Audio</Filter>
     </Midl>
   </ItemGroup>
   <ItemGroup>
