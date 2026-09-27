@@ -50,18 +50,32 @@ constexpr std::uint32_t kPreviewMaxFps = 30;
 constexpr std::size_t kReceiveDatagramBytes = 1500;
 constexpr std::size_t kReceiveDrainLimit = 512;
 
+[[nodiscard]] bool valid_transport_fields(
+    const transport::UdpEndpoint& bind,
+    const transport::UdpEndpoint& peer,
+    std::uint8_t payload_type,
+    std::uint16_t mtu_bytes,
+    std::size_t max_access_unit_bytes) noexcept {
+    return !bind.address.empty() &&
+           !peer.address.empty() &&
+           bind.port != 0 &&
+           peer.port != 0 &&
+           payload_type >= 96 &&
+           payload_type <= 127 &&
+           mtu_bytes >= 576 &&
+           mtu_bytes <= 1400 &&
+           max_access_unit_bytes >= 262'144 &&
+           max_access_unit_bytes <= 16U * 1024U * 1024U;
+}
+
 [[nodiscard]] bool valid_transport(
     const ScreenTransportConfig& config) noexcept {
-    return !config.bind.address.empty() &&
-           !config.peer.address.empty() &&
-           config.bind.port != 0 &&
-           config.peer.port != 0 &&
-           config.payload_type >= 96 &&
-           config.payload_type <= 127 &&
-           config.mtu_bytes >= 576 &&
-           config.mtu_bytes <= 1400 &&
-           config.max_access_unit_bytes >= 262'144 &&
-           config.max_access_unit_bytes <= 16U * 1024U * 1024U;
+    return valid_transport_fields(
+        config.bind,
+        config.peer,
+        config.payload_type,
+        config.mtu_bytes,
+        config.max_access_unit_bytes);
 }
 
 [[nodiscard]] ScreenTransportConfig transport_from_share(
@@ -78,7 +92,12 @@ constexpr std::size_t kReceiveDrainLimit = 512;
 [[nodiscard]] bool valid_share(
     const ScreenShareConfig& config) noexcept {
     return config.source.native_handle != 0 &&
-           valid_transport(transport_from_share(config)) &&
+           valid_transport_fields(
+               config.bind,
+               config.peer,
+               config.payload_type,
+               config.mtu_bytes,
+               config.max_access_unit_bytes) &&
            config.max_width >= 320 &&
            config.max_width <= 7680 &&
            config.max_height >= 180 &&
@@ -218,7 +237,15 @@ struct WindowsScreenShareRuntime::Impl {
                 "invalid screen-share configuration"};
         }
 
-        const auto transport = transport_from_share(config);
+        ScreenTransportConfig transport;
+        try {
+            transport = transport_from_share(config);
+        } catch (...) {
+            return ScreenShareError{
+                ScreenShareErrorCode::memory_failed,
+                "screen transport configuration allocation failed"};
+        }
+
         const bool reuse_transport =
             socket_ &&
             receiver_worker_.joinable() &&
