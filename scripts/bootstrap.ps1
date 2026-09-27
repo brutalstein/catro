@@ -54,4 +54,10 @@ Write-Host "[catro] CMake: $cmakeVersion"
 Write-Host "[catro] Visual Studio: $($vs.displayName) $($vs.installationVersion)"
 Write-Host "[catro] MSBuild: $msbuild"
 Write-Host "[catro] Windows SDK: $sdkVersion"
+$winapp = Get-Command winapp -ErrorAction SilentlyContinue
+if ($winapp) {
+    Write-Host "[catro] WinApp CLI: $($winapp.Source)"
+} else {
+    Write-Host '[catro] Optional WinApp CLI not found: app runs normally, but borderless WGC consent needs package identity.'
+}
 Write-Host 'Prerequisites present. NuGet packages for the shell are restored into apps/windows/packages by build.ps1.'
