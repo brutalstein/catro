@@ -49,7 +49,7 @@ inline constexpr std::string_view kVoicePeerUsage =
     "  --stream-id 1-4294967295     packet stream id (default 1)\n"
     "  --jitter 1-10                target 20 ms packets (default 3 = 60 ms)\n"
     "  --bitrate 12000-128000       Opus bitrate in bit/s (default 48000)\n"
-    "  numeric IPv4 only; UDP is an unencrypted localhost/LAN engineering transport\n";
+    "  numeric loopback/private IPv4 only; UDP is an unencrypted engineering transport\n";
 
 [[nodiscard]] std::optional<VoicePeerOptions> parse_voice_peer_arguments(
     std::span<const std::string_view> arguments);
