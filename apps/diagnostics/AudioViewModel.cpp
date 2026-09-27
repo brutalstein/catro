@@ -48,10 +48,16 @@ std::vector<AudioDeviceChoice> audio_choices(const capabilities::CapabilitySnaps
             continue;
         }
         auto label = endpoint.name.value().value_or(endpoint.id.value);
+        if (endpoint.sample_rate_hz.value()) {
+            label += " — " + std::to_string(*endpoint.sample_rate_hz.value() / 1000) + " kHz";
+            if (direction == capabilities::AudioDirection::input && *endpoint.sample_rate_hz.value() < 32000) {
+                label += " (narrowband)";
+            }
+        }
         if (found && state->default_roles.value() &&
             std::ranges::find(*state->default_roles.value(), AudioRole::communications) !=
                 state->default_roles.value()->end()) {
-            label += " (default)";
+            label += " (default communications)";
         }
         choices.push_back({endpoint.id, std::move(label)});
     }
@@ -98,9 +104,13 @@ AudioSessionView describe_audio(const audio::AudioStatistics& statistics) {
         add(view.rows, "Drift corrections", std::to_string(statistics.drift_corrections));
         add(view.rows, "Glitches", std::to_string(statistics.glitches));
     }
-    // Glitches stay informational: WASAPI routinely flags a discontinuity on the first packet.
-    if (view.running && statistics.underruns + statistics.overruns > 0) {
+    // One initial discontinuity is common on some shared-mode endpoints. Repeated discontinuities
+    // are not healthy for voice and must be visible instead of looking like a successful session.
+    if (view.running && (statistics.underruns + statistics.overruns > 0 || statistics.glitches > 3)) {
         view.tone = Tone::caution;
+    }
+    if (statistics.glitches > 3) {
+        add(view.rows, "Audio health", "Repeated device discontinuities; try another active endpoint");
     }
     return view;
 }
