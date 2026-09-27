@@ -413,7 +413,7 @@ void ServerView::UpdateVoiceUi() {
 }
 
 winrt::fire_and_forget ServerView::BeginScreenShare() {
-    auto lifetime = get_strong();
+    [[maybe_unused]] auto lifetime = get_strong();
     share_dialog_open_ = true;
     UpdateVoiceUi();
 
@@ -439,7 +439,6 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
 
         controls::TextBlock source_label;
         source_label.Text(L"Source");
-        source_label.FontWeight(Windows::UI::Text::FontWeights::SemiBold());
         form.Children().Append(source_label);
 
         controls::ComboBox source_box;
@@ -453,7 +452,6 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
 
         controls::TextBlock resolution_label;
         resolution_label.Text(L"Stream resolution ceiling");
-        resolution_label.FontWeight(Windows::UI::Text::FontWeights::SemiBold());
         form.Children().Append(resolution_label);
 
         controls::ComboBox preset_box;
@@ -519,10 +517,6 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
             L"to the even dimensions required by NV12/H.264. Your actual outgoing size is shown "
             L"under the preview after the stream starts.");
         note.TextWrapping(xaml::TextWrapping::Wrap);
-        note.Foreground(
-            Application::Current().Resources().Lookup(
-                box_value(hstring{L"CatroTextTertiaryBrush"}))
-                .as<Microsoft::UI::Xaml::Media::Brush>());
         form.Children().Append(note);
 
         dialog.Content(form);
@@ -602,9 +596,9 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         UpdateVoiceUi();
     } catch (const winrt::hresult_error& failure) {
         share_dialog_open_ = false;
-        VoiceStateText().Text(
-            hstring{L"Screen share UI error: "} +
-            failure.message());
+        std::wstring message = L"Screen share UI error: ";
+        message += failure.message().c_str();
+        VoiceStateText().Text(hstring{message});
         UpdateVoiceUi();
     } catch (...) {
         share_dialog_open_ = false;
@@ -623,7 +617,7 @@ void ServerView::DetachPreviewSwapChain() noexcept {
     attached_preview_swap_chain_.Reset();
 }
 
-void ServerView::StopScreenShare() noexcept {
+void ServerView::StopScreenShare() {
     if (screen_timer_) {
         screen_timer_.Stop();
     }
