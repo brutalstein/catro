@@ -1,7 +1,8 @@
 #pragma once
 
+#include <catro/community/model.hpp>
+
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -14,54 +15,29 @@ enum class AppDestination : std::uint8_t {
     settings,
 };
 
-enum class ChannelKind : std::uint8_t {
-    text,
-    voice,
-};
-
-enum class ServerRole : std::uint8_t {
-    owner,
-    member,
-};
-
 struct ChannelSpec {
     std::string_view id;
     std::string_view name;
-    ChannelKind kind = ChannelKind::text;
+    community::ChannelKind kind = community::ChannelKind::text;
 
     friend constexpr bool operator==(const ChannelSpec&, const ChannelSpec&) = default;
 };
 
-// Every identity starts with exactly one personal server. The persistence/account layer will replace
-// names and opaque ids, but these two channels are the stable first-run contract.
+// Presentation ids stay stable while real ChannelId values come from LocalState. Names and kinds
+// come from the community contract so UI defaults cannot drift from bootstrap state.
 inline constexpr std::array<ChannelSpec, 2> kDefaultChannels{{
-    {"general", "general", ChannelKind::text},
-    {"voice", "Voice", ChannelKind::voice},
+    {"general", community::kDefaultChannels[0].name, community::kDefaultChannels[0].kind},
+    {"voice", community::kDefaultChannels[1].name, community::kDefaultChannels[1].kind},
 }};
 
-struct PersonalServerContract {
-    bool identity_owns_server = true;
-    bool owner_is_only_elevated_role = true;
-    bool invite_code_required_to_join = true;
-    std::size_t default_text_channels = 1;
-    std::size_t default_voice_channels = 1;
-
-    friend constexpr bool operator==(const PersonalServerContract&, const PersonalServerContract&) = default;
-};
-
-inline constexpr PersonalServerContract kPersonalServerContract{};
-
 [[nodiscard]] const ChannelSpec& channel_spec(std::string_view id) noexcept;
-[[nodiscard]] std::optional<ChannelKind> channel_kind(std::string_view id) noexcept;
-[[nodiscard]] constexpr bool can_manage_server(ServerRole role) noexcept {
-    return role == ServerRole::owner;
-}
+[[nodiscard]] std::optional<community::ChannelKind> channel_kind(std::string_view id) noexcept;
 
 class ShellState {
 public:
     [[nodiscard]] AppDestination destination() const noexcept { return destination_; }
     [[nodiscard]] std::string_view channel_id() const noexcept { return channel_id_; }
-    [[nodiscard]] ChannelKind active_channel_kind() const noexcept {
+    [[nodiscard]] community::ChannelKind active_channel_kind() const noexcept {
         return channel_spec(channel_id_).kind;
     }
 
