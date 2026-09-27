@@ -34,15 +34,18 @@ std::uint32_t get_u32(std::span<const std::byte> in, std::size_t offset) noexcep
 
 } // namespace
 
-std::variant<std::size_t, PacketError> serialize_packet(const VoicePacketView& packet,
-                                                         std::span<std::byte> output) noexcept {
-    if (packet.payload.empty()) {
+std::variant<std::size_t, PacketError> write_packet_header(std::uint32_t stream_id,
+                                                               std::uint16_t sequence,
+                                                               std::uint32_t timestamp,
+                                                               std::size_t payload_size,
+                                                               std::span<std::byte> output) noexcept {
+    if (payload_size == 0) {
         return PacketError::empty_payload;
     }
-    if (packet.payload.size() > kVoiceMaxPayloadBytes) {
+    if (payload_size > kVoiceMaxPayloadBytes) {
         return PacketError::payload_too_large;
     }
-    const auto total = kVoiceHeaderBytes + packet.payload.size();
+    const auto total = kVoiceHeaderBytes + payload_size;
     if (output.size() < total) {
         return PacketError::output_too_small;
     }
@@ -51,12 +54,22 @@ std::variant<std::size_t, PacketError> serialize_packet(const VoicePacketView& p
     output[1] = kMagic1;
     output[2] = std::byte{kVoicePacketVersion};
     output[3] = std::byte{0};
-    put_u32(output, 4, packet.stream_id);
-    put_u16(output, 8, packet.sequence);
+    put_u32(output, 4, stream_id);
+    put_u16(output, 8, sequence);
     put_u16(output, 10, 0);
-    put_u32(output, 12, packet.timestamp);
-    std::ranges::copy(packet.payload, output.begin() + static_cast<std::ptrdiff_t>(kVoiceHeaderBytes));
+    put_u32(output, 12, timestamp);
     return total;
+}
+
+std::variant<std::size_t, PacketError> serialize_packet(const VoicePacketView& packet,
+                                                         std::span<std::byte> output) noexcept {
+    const auto header = write_packet_header(packet.stream_id, packet.sequence, packet.timestamp,
+                                            packet.payload.size(), output);
+    if (const auto* error = std::get_if<PacketError>(&header)) {
+        return *error;
+    }
+    std::ranges::copy(packet.payload, output.begin() + static_cast<std::ptrdiff_t>(kVoiceHeaderBytes));
+    return std::get<std::size_t>(header);
 }
 
 std::variant<VoicePacketView, PacketError> parse_packet(std::span<const std::byte> datagram) noexcept {
