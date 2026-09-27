@@ -16,4 +16,19 @@ if ($Report) {
 }
 $shell = Join-Path $root "out\apps\windows\x64\$Configuration\Catro.exe"
 if (-not (Test-Path $shell)) { throw "Shell not built: $shell. Run scripts/build.ps1." }
+
+# Borderless WGC is consent-gated and requires package identity. If Microsoft's optional WinApp CLI
+# is available, attach the checked-in sparse debug identity to this exact executable. A failure here
+# must never block normal Catro startup; Windows simply keeps its standard capture border.
+$winapp = Get-Command winapp -ErrorAction SilentlyContinue
+$identityManifest = Join-Path $root 'apps\windows\Catro\sparse.appxmanifest.xml'
+if ($winapp -and (Test-Path $identityManifest)) {
+    & $winapp.Source create-debug-identity $shell --manifest $identityManifest
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning 'Debug identity registration failed; borderless capture may be unavailable.'
+    }
+} else {
+    Write-Warning 'WinApp CLI not found; Catro will run normally, but Windows may keep the capture border.'
+}
+
 Start-Process $shell
