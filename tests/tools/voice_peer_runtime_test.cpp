@@ -262,3 +262,33 @@ TEST_CASE("voice peer full duplex exchanges audible media in both directions") {
     CHECK(first_error.str().empty());
     CHECK(second_error.str().empty());
 }
+
+TEST_CASE("voice peer cooperative stop releases audio and UDP resources for immediate restart") {
+    const auto [local_port, peer_port] = reserve_ports();
+    auto args = arguments(local_port, peer_port, "send", 4001);
+    args[7] = "300";
+
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        FakeAudioPlatform audio(0.10F + 0.01F * static_cast<float>(attempt));
+        std::ostringstream out;
+        std::ostringstream error;
+        std::atomic_bool stop_requested{false};
+        int exit_code = -1;
+
+        const auto started = std::chrono::steady_clock::now();
+        std::thread peer([&] {
+            const auto current = views(args);
+            exit_code = run_voice_peer(current, audio, out, error, &stop_requested);
+        });
+
+        std::this_thread::sleep_for(50ms);
+        stop_requested.store(true, std::memory_order_release);
+        peer.join();
+        const auto elapsed = std::chrono::steady_clock::now() - started;
+
+        CHECK(exit_code == voice_peer_ok);
+        CHECK(elapsed < 2s);
+        CHECK(out.str().find("final:") != std::string::npos);
+        CHECK(error.str().empty());
+    }
+}
