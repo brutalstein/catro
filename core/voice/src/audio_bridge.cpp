@@ -36,12 +36,28 @@ void CaptureBridge::on_captured(std::span<const float> frames) noexcept {
     if (!ring_.write_exact(frames)) {
         dropped_callbacks_.fetch_add(1, std::memory_order_relaxed);
         dropped_samples_.fetch_add(frames.size(), std::memory_order_relaxed);
+        // Never splice pre-gap and post-gap PCM into one Opus frame. The worker will flush the
+        // stale queued prefix at its next opportunity and restart framing on fresh capture data.
+        resync_requested_.store(true, std::memory_order_release);
         return;
     }
     update_peak(ring_.size());
 }
 
+bool CaptureBridge::resynchronize_if_needed() noexcept {
+    if (!resync_requested_.exchange(false, std::memory_order_acq_rel)) {
+        return false;
+    }
+    const auto discarded = ring_.discard(ring_.size());
+    resync_events_.fetch_add(1, std::memory_order_relaxed);
+    resync_samples_.fetch_add(discarded, std::memory_order_relaxed);
+    return true;
+}
+
 std::size_t CaptureBridge::trim_backlog(std::size_t keep_frames) noexcept {
+    if (resynchronize_if_needed()) {
+        return 0;
+    }
     keep_frames = std::clamp<std::size_t>(keep_frames, 1, kMaxRealtimeQueueFrames);
     const auto buffered = ring_.size();
     const auto keep_samples = keep_frames * static_cast<std::size_t>(kFrameSamples);
@@ -62,6 +78,9 @@ std::size_t CaptureBridge::trim_backlog(std::size_t keep_frames) noexcept {
 }
 
 bool CaptureBridge::try_pop(PcmFrame& frame) noexcept {
+    if (resynchronize_if_needed()) {
+        return false;
+    }
     if (!ring_.read_exact(std::span<float>(frame))) {
         return false;
     }
@@ -77,6 +96,8 @@ CaptureBridgeStatistics CaptureBridge::statistics() const noexcept {
         .dropped_samples = dropped_samples_.load(std::memory_order_relaxed),
         .frames_dequeued = frames_dequeued_.load(std::memory_order_relaxed),
         .stale_frames_discarded = stale_frames_discarded_.load(std::memory_order_relaxed),
+        .resync_events = resync_events_.load(std::memory_order_relaxed),
+        .resync_samples = resync_samples_.load(std::memory_order_relaxed),
         .buffered_samples = ring_.size(),
         .peak_buffered_samples = peak_buffered_samples_.load(std::memory_order_relaxed),
     };
