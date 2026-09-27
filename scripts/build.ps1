@@ -8,6 +8,42 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $buildDir = Join-Path $root 'out\build\windows-msvc'
 
+# Materialize the generated old-school mascot as a normal native Windows icon before MSBuild.
+# Source control keeps the bytes as base64 text because the GitHub automation path is text-safe.
+$assetDir = Join-Path $root 'apps\windows\Catro\Assets'
+$iconBase64 = Join-Path $assetDir 'Catro.ico.b64'
+$iconPath = Join-Path $assetDir 'Catro.ico'
+if (Test-Path $iconBase64) {
+    New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
+    [IO.File]::WriteAllBytes(
+        $iconPath,
+        [Convert]::FromBase64String((Get-Content -Raw $iconBase64).Trim()))
+
+    # Sparse identity requires PNG visual assets. Derive them from the same icon so taskbar,
+    # package identity, and in-app branding stay visually consistent.
+    Add-Type -AssemblyName System.Drawing
+    $sourceIcon = New-Object System.Drawing.Icon($iconPath)
+    $sourceBitmap = $sourceIcon.ToBitmap()
+    foreach ($size in @(44, 150)) {
+        $bitmap = New-Object System.Drawing.Bitmap($size, $size)
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        try {
+            $graphics.Clear([System.Drawing.Color]::Transparent)
+            $graphics.InterpolationMode =
+                [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $graphics.DrawImage($sourceBitmap, 0, 0, $size, $size)
+            $bitmap.Save(
+                (Join-Path $assetDir "Catro$size.png"),
+                [System.Drawing.Imaging.ImageFormat]::Png)
+        } finally {
+            $graphics.Dispose()
+            $bitmap.Dispose()
+        }
+    }
+    $sourceBitmap.Dispose()
+    $sourceIcon.Dispose()
+}
+
 function Resolve-CatroVisualStudioGenerator {
     $help = (cmake --help 2>&1 | Out-String)
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
