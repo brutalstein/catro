@@ -27,9 +27,9 @@ VoicePipeline::CreateResult VoicePipeline::create(const VoicePipelineConfig& con
     }
 
     try {
-        return std::make_unique<VoicePipeline>(
+        return std::unique_ptr<VoicePipeline>(new VoicePipeline(
             config, std::move(std::get<std::unique_ptr<Encoder>>(encoder_result)),
-            std::move(std::get<std::unique_ptr<Decoder>>(decoder_result)));
+            std::move(std::get<std::unique_ptr<Decoder>>(decoder_result))));
     } catch (const std::bad_alloc&) {
         return CodecError{CodecErrorCode::allocation_failed};
     }
