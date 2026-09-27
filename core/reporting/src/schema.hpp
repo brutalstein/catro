@@ -321,11 +321,11 @@ template <> struct Schema<caps::RuntimeProbeFacts> { static constexpr auto field
 template <> struct Schema<caps::GpuDisplayProbeFacts> { static constexpr auto fields = std::tuple{
     field("gpus", &caps::GpuDisplayProbeFacts::gpus), field("displays", &caps::GpuDisplayProbeFacts::displays),
     field("capture_paths", &caps::GpuDisplayProbeFacts::capture_paths),
-    field("transfer_paths", &caps::GpuDisplayProbeFacts::transfer_paths),
     field("display_states", &caps::GpuDisplayProbeFacts::display_states),
     field("capture_permissions", &caps::GpuDisplayProbeFacts::capture_permissions)}; };
 template <> struct Schema<caps::EncoderProbeFacts> { static constexpr auto fields = std::tuple{
-    field("encoders", &caps::EncoderProbeFacts::encoders)}; };
+    field("encoders", &caps::EncoderProbeFacts::encoders),
+    field("transfer_paths", &caps::EncoderProbeFacts::transfer_paths)}; };
 template <> struct Schema<caps::AudioProbeFacts> { static constexpr auto fields = std::tuple{
     field("endpoints", &caps::AudioProbeFacts::endpoints), field("states", &caps::AudioProbeFacts::states)}; };
 template <> struct Schema<caps::ProbeFragment> { static constexpr auto fields = std::tuple{

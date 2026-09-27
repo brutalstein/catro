@@ -77,6 +77,44 @@ struct NativeGpuDisplay {
     NativeCaptureApis capture;
 };
 
+struct NativeEncoder {
+    caps::Codec codec = caps::Codec::h264;
+    // Registered transform CLSID in registry form, e.g. "{6ca50344-051a-4ded-9779-a43305165e35}".
+    std::string clsid;
+    bool hardware = false;
+    // Adapter the transform was enumerated for; absent when enumeration could not filter by adapter.
+    std::optional<NativeLuid> adapter;
+    // UTF-8 friendly name.
+    std::string name;
+    // Registered input subtypes Catro can describe, in registration order.
+    std::vector<caps::PixelFormat> inputs;
+};
+
+enum class NativeEndpointState {
+    active,
+    disabled,
+    unplugged,
+};
+
+struct NativeAudioEndpoint {
+    // MMDevice endpoint identifier, printable ASCII.
+    std::string id;
+    caps::AudioDirection direction = caps::AudioDirection::output;
+    std::string name;
+    NativeEndpointState state = NativeEndpointState::active;
+    // Engine device format from the property store; absent when not reported.
+    std::optional<std::uint32_t> channels;
+    std::optional<std::uint32_t> sample_rate_hz;
+    std::optional<caps::SampleFormat> sample_format;
+    // Roles for which this endpoint is the current default; absent when a default query failed.
+    std::optional<std::vector<caps::AudioRole>> default_roles;
+};
+
+// Capture paths every gpu_display fragment publishes; encoder transfers start from these.
+inline constexpr std::string_view kGraphicsCaptureDisplay = "wgc:display";
+inline constexpr std::string_view kGraphicsCaptureWindow = "wgc:window";
+inline constexpr std::string_view kDesktopDuplicationDisplay = "dxgi-duplication:display";
+
 // Stable identifiers: adapter LUIDs are valid for the OS session; capture paths are constant.
 [[nodiscard]] caps::GpuId gpu_id(NativeLuid luid);
 [[nodiscard]] caps::DisplayId display_id(NativeLuid adapter, std::uint32_t target_id);
@@ -87,5 +125,18 @@ struct NativeGpuDisplay {
 [[nodiscard]] caps::GpuDisplayProbeFacts translate_gpu_display(const NativeGpuDisplay& native,
                                                                std::string_view probe_id,
                                                                std::vector<caps::ProbeIssue>& issues);
+
+[[nodiscard]] caps::EncoderId encoder_id(const NativeEncoder& encoder);
+
+// Encoders are advertised, never runtime-validated. Transfers claim only what is certain: a
+// software encoder always takes CPU-staged frames; a hardware encoder's transfer cost stays
+// unknown because passive discovery cannot prove capture and encoder share a resource.
+[[nodiscard]] caps::EncoderProbeFacts translate_encoders(const std::vector<NativeEncoder>& encoders,
+                                                         std::string_view probe_id,
+                                                         std::vector<caps::ProbeIssue>& issues);
+
+[[nodiscard]] caps::AudioProbeFacts translate_audio(const std::vector<NativeAudioEndpoint>& endpoints,
+                                                    std::string_view probe_id,
+                                                    std::vector<caps::ProbeIssue>& issues);
 
 } // namespace catro::platform::windows

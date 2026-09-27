@@ -64,15 +64,16 @@ struct GpuDisplayProbeFacts {
     std::vector<GpuCapability> gpus;
     std::vector<DisplayCapability> displays;
     std::vector<CapturePathCapability> capture_paths;
-    std::vector<TransferPathCapability> transfer_paths;
     std::vector<DisplayState> display_states;
     std::vector<CapturePermissionState> capture_permissions;
 
     friend bool operator==(const GpuDisplayProbeFacts&, const GpuDisplayProbeFacts&) = default;
 };
 
+// Transfers belong with encoders: each one ends at an encoder this probe enumerated.
 struct EncoderProbeFacts {
     std::vector<EncoderCapability> encoders;
+    std::vector<TransferPathCapability> transfer_paths;
 
     friend bool operator==(const EncoderProbeFacts&, const EncoderProbeFacts&) = default;
 };

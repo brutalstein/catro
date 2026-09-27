@@ -179,11 +179,12 @@ std::uint32_t fact_count(const ProbeFragment& fragment) {
     if (fragment.gpu_display) {
         const auto& facts = *fragment.gpu_display;
         return static_cast<std::uint32_t>(facts.gpus.size() + facts.displays.size() + facts.capture_paths.size() +
-                                          facts.transfer_paths.size() + facts.display_states.size() +
+                                          facts.display_states.size() +
                                           facts.capture_permissions.size());
     }
     if (fragment.encoders) {
-        return static_cast<std::uint32_t>(fragment.encoders->encoders.size());
+        return static_cast<std::uint32_t>(fragment.encoders->encoders.size() +
+                                          fragment.encoders->transfer_paths.size());
     }
     if (fragment.audio) {
         return static_cast<std::uint32_t>(fragment.audio->endpoints.size() + fragment.audio->states.size());
@@ -269,20 +270,24 @@ CapabilitySnapshot build_snapshot(const ProbeSchedule& schedule, const std::vect
                 snapshot.devices.gpus = fragment.gpu_display->gpus;
                 snapshot.devices.displays = fragment.gpu_display->displays;
                 snapshot.devices.capture_paths = fragment.gpu_display->capture_paths;
-                snapshot.devices.transfer_paths = fragment.gpu_display->transfer_paths;
                 snapshot.runtime.displays = fragment.gpu_display->display_states;
                 snapshot.runtime.capture_permissions = fragment.gpu_display->capture_permissions;
             } else {
                 snapshot.devices.gpus.clear();
                 snapshot.devices.displays.clear();
                 snapshot.devices.capture_paths.clear();
-                snapshot.devices.transfer_paths.clear();
                 snapshot.runtime.displays.clear();
                 snapshot.runtime.capture_permissions.clear();
             }
             break;
         case ProbeFamily::encoders:
-            snapshot.devices.encoders = fragment.encoders ? fragment.encoders->encoders : std::vector<EncoderCapability>{};
+            if (fragment.encoders) {
+                snapshot.devices.encoders = fragment.encoders->encoders;
+                snapshot.devices.transfer_paths = fragment.encoders->transfer_paths;
+            } else {
+                snapshot.devices.encoders.clear();
+                snapshot.devices.transfer_paths.clear();
+            }
             break;
         case ProbeFamily::audio:
             if (fragment.audio) {
@@ -302,14 +307,14 @@ std::optional<ProbeFamily> family_for_path(std::string_view path) {
     if (path.starts_with("platform") || path.starts_with("hardware")) {
         return ProbeFamily::system;
     }
-    if (path.starts_with("devices.encoders")) {
+    if (path.starts_with("devices.encoders") || path.starts_with("devices.transfer_paths")) {
         return ProbeFamily::encoders;
     }
     if (path.starts_with("devices.audio_endpoints") || path.starts_with("runtime.audio_endpoints")) {
         return ProbeFamily::audio;
     }
     if (path.starts_with("devices.gpus") || path.starts_with("devices.displays") ||
-        path.starts_with("devices.capture_paths") || path.starts_with("devices.transfer_paths") ||
+        path.starts_with("devices.capture_paths") ||
         path.starts_with("runtime.displays") || path.starts_with("runtime.capture_permissions")) {
         return ProbeFamily::gpu_display;
     }

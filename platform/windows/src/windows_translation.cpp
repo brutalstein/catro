@@ -3,6 +3,7 @@
 #include <catro/capabilities/validation.hpp>
 
 #include <algorithm>
+#include <iterator>
 #include <cstdio>
 #include <set>
 #include <utility>
@@ -62,11 +63,11 @@ public:
             duplication_formats.push_back(caps::PixelFormat::rgba16f);
         }
         facts.capture_paths = {
-            capture("wgc:display", caps::CaptureApi::windows_graphics_capture, caps::SourceKind::display,
+            capture(std::string(kGraphicsCaptureDisplay), caps::CaptureApi::windows_graphics_capture, caps::SourceKind::display,
                     apis.graphics_capture, caps::IssueCode::api_unavailable, graphics_capture_formats, true),
-            capture("wgc:window", caps::CaptureApi::windows_graphics_capture, caps::SourceKind::window,
+            capture(std::string(kGraphicsCaptureWindow), caps::CaptureApi::windows_graphics_capture, caps::SourceKind::window,
                     apis.graphics_capture, caps::IssueCode::api_unavailable, graphics_capture_formats, true),
-            capture("dxgi-duplication:display", caps::CaptureApi::desktop_duplication, caps::SourceKind::display,
+            capture(std::string(kDesktopDuplicationDisplay), caps::CaptureApi::desktop_duplication, caps::SourceKind::display,
                     apis.desktop_duplication, caps::IssueCode::not_applicable, duplication_formats,
                     apis.desktop_duplication_hdr),
         };
@@ -83,7 +84,72 @@ public:
         return facts;
     }
 
+    caps::EncoderProbeFacts encoders(const std::vector<NativeEncoder>& native) {
+        caps::EncoderProbeFacts facts;
+        std::set<std::string> seen;
+        for (const auto& encoder : native) {
+            auto id = encoder_id(encoder);
+            // A transform registered for several matching types is listed more than once.
+            if (!seen.insert(id.value).second) {
+                continue;
+            }
+            for (const auto path : {kGraphicsCaptureDisplay, kGraphicsCaptureWindow, kDesktopDuplicationDisplay}) {
+                facts.transfer_paths.push_back(transfer(path, encoder, id));
+            }
+            facts.encoders.push_back(capability(encoder, std::move(id)));
+        }
+        return facts;
+    }
+
+    caps::AudioProbeFacts audio(const std::vector<NativeAudioEndpoint>& native) {
+        caps::AudioProbeFacts facts;
+        std::set<std::string> seen;
+        for (const auto& endpoint : native) {
+            caps::AudioEndpointId id{"mmdevice:" + endpoint.id, caps::IdentityScope::persistent};
+            if (!identifier(id.value) || !seen.insert(id.value).second) {
+                continue;
+            }
+            auto name = bounded_text(endpoint.name);
+            std::optional<std::uint32_t> channels;
+            if (endpoint.channels.value_or(0) > 0) {
+                channels = endpoint.channels;
+            }
+            std::optional<std::uint32_t> sample_rate;
+            if (endpoint.sample_rate_hz.value_or(0) > 0) {
+                sample_rate = endpoint.sample_rate_hz;
+            }
+            std::optional<std::vector<caps::SampleFormat>> formats;
+            if (endpoint.sample_format) {
+                formats = std::vector{*endpoint.sample_format};
+            }
+            facts.endpoints.push_back(caps::AudioEndpointCapability{
+                .id = id,
+                .direction = endpoint.direction,
+                .name = name.empty() ? unknown<std::string>(caps::IssueCode::not_reported)
+                                     : caps::Observed<std::string>::known(std::move(name), advertised()),
+                .channels = reported(channels, advertised(), caps::IssueCode::not_reported),
+                .sample_rate_hz = reported(sample_rate, advertised(), caps::IssueCode::not_reported),
+                .sample_formats = reported(formats, advertised(), caps::IssueCode::not_reported),
+            });
+            auto roles = endpoint.default_roles;
+            if (roles) {
+                std::ranges::sort(*roles);
+                roles->erase(std::ranges::unique(*roles).begin(), roles->end());
+            }
+            facts.states.push_back(caps::AudioEndpointState{
+                .endpoint = std::move(id),
+                .active = caps::Observed<bool>::known(endpoint.state == NativeEndpointState::active, measured()),
+                .default_roles = reported(roles, measured(), caps::IssueCode::os_failure),
+            });
+        }
+        return facts;
+    }
+
 private:
+    [[nodiscard]] caps::Provenance inferred() const {
+        return {.probe_id = std::string(probe_id_), .method = caps::EvidenceMethod::inferred};
+    }
+
     [[nodiscard]] caps::Provenance advertised() const {
         return {.probe_id = std::string(probe_id_), .method = caps::EvidenceMethod::advertised};
     }
@@ -228,9 +294,97 @@ private:
         };
     }
 
+    caps::EncoderCapability capability(const NativeEncoder& encoder, caps::EncoderId id) {
+        auto gpu = unknown<caps::GpuId>(caps::IssueCode::relationship_unprovable);
+        if (!encoder.hardware) {
+            gpu = caps::Observed<caps::GpuId>::unavailable(absent(caps::IssueCode::not_applicable));
+        } else if (encoder.adapter) {
+            gpu = caps::Observed<caps::GpuId>::known(gpu_id(*encoder.adapter), advertised());
+        }
+        auto name = bounded_text(encoder.name);
+        caps::EncoderCapability result{
+            .id = std::move(id),
+            .codec = encoder.codec,
+            .backend = caps::EncoderBackend::media_foundation,
+            .implementation = encoder.hardware ? caps::ImplementationClass::hardware : caps::ImplementationClass::software,
+            .gpu = std::move(gpu),
+            .name = name.empty() ? unknown<std::string>(caps::IssueCode::not_reported)
+                                 : caps::Observed<std::string>::known(std::move(name), advertised()),
+            .support = {caps::Support::supported, advertised()},
+        };
+        std::set<caps::PixelFormat> described;
+        for (const auto format : encoder.inputs) {
+            // RGB inputs fix no encoded chroma layout, so only planar YUV inputs become modes.
+            if ((format == caps::PixelFormat::nv12 || format == caps::PixelFormat::p010) &&
+                described.insert(format).second) {
+                result.modes.push_back(mode(encoder.codec, format));
+            }
+        }
+        return result;
+    }
+
+    // Profiles, limits, color signalling, and low-latency support need an activated transform;
+    // passive discovery leaves them unreported.
+    caps::EncoderModeCapability mode(caps::Codec codec, caps::PixelFormat format) {
+        const bool ten_bit = format == caps::PixelFormat::p010;
+        return caps::EncoderModeCapability{
+            .codec = codec,
+            .profile = unknown<caps::CodecProfile>(caps::IssueCode::not_reported),
+            .dimensions = unknown<caps::DimensionRange>(caps::IssueCode::not_reported),
+            .frame_rates = unknown<caps::RationalRange>(caps::IssueCode::not_reported),
+            .input_format = format,
+            .chroma = caps::ChromaSubsampling::yuv420,
+            .bit_depth = caps::Observed<std::uint8_t>::known(static_cast<std::uint8_t>(ten_bit ? 10 : 8), advertised()),
+            .color_range = unknown<caps::ColorRange>(caps::IssueCode::not_reported),
+            .transfer_function = unknown<caps::TransferFunction>(caps::IssueCode::not_reported),
+            // Eight-bit input cannot carry HDR10 or HLG; ten-bit input may carry either.
+            .hdr = ten_bit ? unknown<caps::HdrMode>(caps::IssueCode::not_reported)
+                           : caps::Observed<caps::HdrMode>::known(caps::HdrMode::sdr, inferred()),
+            .low_latency = {caps::Support::unknown, absent(caps::IssueCode::not_reported)},
+            .support = {caps::Support::supported, advertised()},
+        };
+    }
+
+    caps::TransferPathCapability transfer(std::string_view path, const NativeEncoder& encoder,
+                                          const caps::EncoderId& id) {
+        caps::TransferPathCapability result{
+            .source = {std::string(path), caps::IdentityScope::persistent},
+            .destination = id,
+            .conversions = unknown<std::vector<caps::Conversion>>(caps::IssueCode::relationship_unprovable),
+        };
+        if (!encoder.hardware) {
+            result.transfer = caps::TransferKind::cpu_staging;
+            result.evidence = {caps::Support::supported, inferred()};
+            return result;
+        }
+        if (encoder.adapter) {
+            result.destination_gpu = gpu_id(*encoder.adapter);
+        }
+        result.transfer = caps::TransferKind::unknown;
+        result.evidence = {caps::Support::unknown, absent(caps::IssueCode::relationship_unprovable)};
+        return result;
+    }
+
+    static bool identifier(std::string_view value) {
+        return !value.empty() && value.size() <= caps::kMaxIdentifierBytes &&
+               std::ranges::all_of(value, [](char c) { return c > ' ' && c <= '~'; });
+    }
+
     std::string_view probe_id_;
     std::vector<caps::ProbeIssue>& issues_;
 };
+
+std::string_view codec_name(caps::Codec codec) {
+    switch (codec) {
+    case caps::Codec::h264:
+        return "h264";
+    case caps::Codec::hevc:
+        return "hevc";
+    case caps::Codec::av1:
+        return "av1";
+    }
+    return "h264";
+}
 
 } // namespace
 
@@ -241,6 +395,28 @@ caps::GpuId gpu_id(NativeLuid luid) {
 caps::DisplayId display_id(NativeLuid adapter, std::uint32_t target_id) {
     return {"display:" + hex8(adapter.high) + ":" + hex8(adapter.low) + ":" + std::to_string(target_id),
             caps::IdentityScope::os_session};
+}
+
+caps::EncoderId encoder_id(const NativeEncoder& encoder) {
+    std::string value = "mft:" + std::string(codec_name(encoder.codec)) +
+                        (encoder.hardware ? ":hardware:" : ":software:");
+    std::ranges::transform(encoder.clsid, std::back_inserter(value),
+                           [](char c) { return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c; });
+    if (encoder.adapter) {
+        value += ":" + hex8(encoder.adapter->high) + ":" + hex8(encoder.adapter->low);
+    }
+    // Hardware transforms are tied to adapters whose LUIDs last one OS session.
+    return {std::move(value), encoder.hardware ? caps::IdentityScope::os_session : caps::IdentityScope::persistent};
+}
+
+caps::EncoderProbeFacts translate_encoders(const std::vector<NativeEncoder>& encoders, std::string_view probe_id,
+                                           std::vector<caps::ProbeIssue>& issues) {
+    return Translator(probe_id, issues).encoders(encoders);
+}
+
+caps::AudioProbeFacts translate_audio(const std::vector<NativeAudioEndpoint>& endpoints, std::string_view probe_id,
+                                      std::vector<caps::ProbeIssue>& issues) {
+    return Translator(probe_id, issues).audio(endpoints);
 }
 
 caps::GpuDisplayProbeFacts translate_gpu_display(const NativeGpuDisplay& native, std::string_view probe_id,

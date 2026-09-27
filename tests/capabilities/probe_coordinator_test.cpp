@@ -51,13 +51,12 @@ ProbeFragment fragment_for(const CapabilitySnapshot& snapshot, ProbeFamily famil
             snapshot.devices.gpus,
             snapshot.devices.displays,
             snapshot.devices.capture_paths,
-            snapshot.devices.transfer_paths,
             snapshot.runtime.displays,
             snapshot.runtime.capture_permissions,
         };
         break;
     case ProbeFamily::encoders:
-        fragment.encoders = EncoderProbeFacts{snapshot.devices.encoders};
+        fragment.encoders = EncoderProbeFacts{snapshot.devices.encoders, snapshot.devices.transfer_paths};
         break;
     case ProbeFamily::audio:
         fragment.audio = AudioProbeFacts{snapshot.devices.audio_endpoints, snapshot.runtime.audio_endpoints};
@@ -230,7 +229,6 @@ TEST_CASE("a cross-fragment dangling reference rejects the referencing fragment"
     test::FakeProbeExecutor executor;
     complete_all(executor, source);
     auto gpu_display = fragment_for(source, ProbeFamily::gpu_display);
-    gpu_display.gpu_display->transfer_paths.clear();
     const auto gpu_display_id = gpu_display.probe_id;
     executor.set(gpu_display_id, {.fragment = std::move(gpu_display)});
     auto encoders = fragment_for(source, ProbeFamily::encoders);

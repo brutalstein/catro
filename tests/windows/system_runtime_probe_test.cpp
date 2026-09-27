@@ -111,6 +111,11 @@ TEST_CASE("the Windows capability service publishes generations and stops cleanl
         REQUIRE(changed.wait_for(lock, 5s, [&] { return !updates.empty(); }));
         REQUIRE(updates.front().snapshot.header.generation == 1);
         REQUIRE(validate(updates.front().snapshot).ok());
+        // The coordinator records a family whose real-hardware facts failed validation as malformed.
+        for (const auto& record : updates.front().snapshot.probes) {
+            INFO(record.probe_id);
+            CHECK(record.outcome != ProbeOutcome::malformed_output);
+        }
     }
 
     service.refresh(RefreshReason::power);

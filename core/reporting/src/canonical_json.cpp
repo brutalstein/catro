@@ -105,14 +105,6 @@ caps::ProbeFragment canonical_order(caps::ProbeFragment fragment) {
         for (auto& capture : facts.capture_paths) {
             sort_set(capture.output_formats);
         }
-        std::ranges::sort(facts.transfer_paths, [](const caps::TransferPathCapability& lhs,
-                                                   const caps::TransferPathCapability& rhs) {
-            return std::tie(lhs.source, lhs.destination, lhs.source_gpu, lhs.destination_gpu) <
-                   std::tie(rhs.source, rhs.destination, rhs.source_gpu, rhs.destination_gpu);
-        });
-        for (auto& transfer : facts.transfer_paths) {
-            sort_set(transfer.conversions);
-        }
         std::ranges::sort(facts.display_states, {}, &caps::DisplayState::display);
         std::ranges::sort(facts.capture_permissions, {}, &caps::CapturePermissionState::path);
     }
@@ -120,6 +112,14 @@ caps::ProbeFragment canonical_order(caps::ProbeFragment fragment) {
         std::ranges::sort(fragment.encoders->encoders, {}, &caps::EncoderCapability::id);
         for (auto& encoder : fragment.encoders->encoders) {
             std::ranges::sort(encoder.modes, {}, caps::mode_key);
+        }
+        std::ranges::sort(fragment.encoders->transfer_paths, [](const caps::TransferPathCapability& lhs,
+                                                   const caps::TransferPathCapability& rhs) {
+            return std::tie(lhs.source, lhs.destination, lhs.source_gpu, lhs.destination_gpu) <
+                   std::tie(rhs.source, rhs.destination, rhs.source_gpu, rhs.destination_gpu);
+        });
+        for (auto& transfer : fragment.encoders->transfer_paths) {
+            sort_set(transfer.conversions);
         }
     }
     if (fragment.audio) {

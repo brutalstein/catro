@@ -4,8 +4,15 @@
 #include <WtsApi32.h>
 #include <dbt.h>
 #include <powersetting.h>
+// Defines the audio property keys below in this translation unit.
+#include <initguid.h>
+#include <mmdeviceapi.h>
+// Needs the property key macros mmdeviceapi.h brings in.
+#include <functiondiscoverykeys_devpkey.h>
+#include <wrl/client.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
@@ -25,6 +32,67 @@ constexpr UINT kRefreshMessage = WM_APP + 1;
 constexpr UINT_PTR kDebounceTimer = 1;
 constexpr UINT kDebounceMilliseconds = 100;
 constexpr wchar_t kWindowClass[] = L"CatroCapabilityServiceWindow";
+
+bool same_key(const PROPERTYKEY& left, const PROPERTYKEY& right) {
+    return left.fmtid == right.fmtid && left.pid == right.pid;
+}
+
+// Forwards endpoint changes from MMDevice callback threads to the service window as audio
+// refreshes; the window debounces bursts.
+class AudioNotifications final : public IMMNotificationClient {
+public:
+    explicit AudioNotifications(HWND window) : window_(window) {}
+
+    // Called on window destruction so late callbacks never post to a stale handle.
+    void detach() { window_.store(nullptr); }
+
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++references_; }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        const auto remaining = --references_;
+        if (remaining == 0) {
+            delete this;
+        }
+        return remaining;
+    }
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
+        if (object == nullptr) {
+            return E_POINTER;
+        }
+        if (iid == __uuidof(IUnknown) || iid == __uuidof(IMMNotificationClient)) {
+            *object = static_cast<IMMNotificationClient*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *object = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override { return post(); }
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override { return post(); }
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override { return post(); }
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow, ERole, LPCWSTR) override { return post(); }
+
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY key) override {
+        // Only the name and engine format are reported facts; other properties change often.
+        if (same_key(key, PKEY_Device_FriendlyName) || same_key(key, PKEY_AudioEngine_DeviceFormat)) {
+            return post();
+        }
+        return S_OK;
+    }
+
+private:
+    HRESULT post() {
+        if (const auto window = window_.load(); window != nullptr) {
+            PostMessageW(window, kRefreshMessage, static_cast<WPARAM>(caps::RefreshReason::audio), 0);
+        }
+        return S_OK;
+    }
+
+    std::atomic<HWND> window_;
+    std::atomic<ULONG> references_{1};
+};
 
 } // namespace
 
@@ -114,6 +182,9 @@ struct CapabilityService::Impl {
             DestroyWindow(hwnd);
             return 0;
         case WM_DESTROY:
+            if (self->audio_notifications) {
+                self->audio_notifications->detach();
+            }
             PostQuitMessage(0);
             return 0;
         default:
@@ -146,6 +217,15 @@ struct CapabilityService::Impl {
         const auto saver_notification = RegisterPowerSettingNotification(hwnd, &GUID_POWER_SAVING_STATUS,
                                                                          DEVICE_NOTIFY_WINDOW_HANDLE);
         const auto session_registered = WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION) != FALSE;
+        const auto apartment = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        Microsoft::WRL::ComPtr<IMMDeviceEnumerator> audio_devices;
+        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC_SERVER,
+                                       IID_PPV_ARGS(&audio_devices)))) {
+            audio_notifications.Attach(new AudioNotifications(hwnd));
+            if (FAILED(audio_devices->RegisterEndpointNotificationCallback(audio_notifications.Get()))) {
+                audio_notifications.Reset();
+            }
+        }
         signal_ready(hwnd, true);
         queue(caps::RefreshReason::startup);
 
@@ -155,6 +235,14 @@ struct CapabilityService::Impl {
             DispatchMessageW(&message);
         }
 
+        if (audio_notifications) {
+            audio_devices->UnregisterEndpointNotificationCallback(audio_notifications.Get());
+            audio_notifications.Reset();
+        }
+        audio_devices.Reset();
+        if (SUCCEEDED(apartment)) {
+            CoUninitialize();
+        }
         if (session_registered) {
             WTSUnRegisterSessionNotification(hwnd);
         }
@@ -231,6 +319,7 @@ struct CapabilityService::Impl {
     UpdateCallback callback;
     std::optional<caps::CapabilitySnapshot> current;
     std::set<caps::RefreshReason> pending;
+    Microsoft::WRL::ComPtr<AudioNotifications> audio_notifications;
 };
 
 CapabilityService::CapabilityService(std::filesystem::path helper_path)
