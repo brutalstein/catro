@@ -17,7 +17,7 @@ Include the affected platform, the commit, and steps to reproduce.
 - **Imported reports are untrusted.** Report parsing rejects inputs over 1 MiB before it parses
   them.
 - **The voice peer is an engineering transport, not a security boundary.** `catro-voice-peer`
-  uses connected UDP with a fixed maximum voice datagram and strict packet parsing, but it has no
+  uses connected UDP with a fixed maximum voice datagram, strict packet parsing, and a code-enforced loopback/private-IPv4 address boundary, but it has no
   encryption, authentication, ICE, DTLS-SRTP, or identity layer. Its default documentation uses
   loopback; LAN use must be explicit. Do not expose it to the public Internet.
 
