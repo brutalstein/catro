@@ -45,14 +45,30 @@ struct DeviceBundle {
     std::uint64_t adapter_luid = 0;
 };
 
-std::variant<DeviceBundle, ScreenCaptureError> create_capture_device() {
+std::variant<DeviceBundle, ScreenCaptureError> create_capture_device(
+    const std::optional<std::uint64_t>& requested_luid) {
     ComPtr<IDXGIFactory6> factory;
     if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
         return ScreenCaptureError{ScreenCaptureErrorCode::device_creation_failed};
     }
 
     ComPtr<IDXGIAdapter1> chosen;
-    for (UINT index = 0;; ++index) {
+    if (requested_luid) {
+        LUID luid{};
+        luid.LowPart = static_cast<DWORD>(*requested_luid & 0xffffffffULL);
+        luid.HighPart = static_cast<LONG>((*requested_luid >> 32U) & 0xffffffffULL);
+        const auto result = factory->EnumAdapterByLuid(luid, IID_PPV_ARGS(&chosen));
+        if (FAILED(result) || !chosen) {
+            return ScreenCaptureError{ScreenCaptureErrorCode::device_creation_failed, result};
+        }
+        DXGI_ADAPTER_DESC1 description{};
+        if (FAILED(chosen->GetDesc1(&description)) ||
+            (description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0) {
+            return ScreenCaptureError{ScreenCaptureErrorCode::device_creation_failed};
+        }
+    }
+
+    for (UINT index = 0; !chosen; ++index) {
         ComPtr<IDXGIAdapter1> candidate;
         const auto result = factory->EnumAdapterByGpuPreference(
             index, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&candidate));
@@ -81,7 +97,7 @@ std::variant<DeviceBundle, ScreenCaptureError> create_capture_device() {
 
     // IDXGIFactory6 exists on supported Windows builds, but keep a hardware fallback for unusual
     // drivers where the preference enumeration cannot produce a usable adapter.
-    if (!chosen) {
+    if (!chosen && !requested_luid) {
         ComPtr<IDXGIFactory1> fallback_factory;
         if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&fallback_factory)))) {
             return ScreenCaptureError{ScreenCaptureErrorCode::device_creation_failed};
@@ -195,7 +211,7 @@ struct WindowsGraphicsCapture::Impl {
         Impl& owner_;
     };
 
-    std::optional<ScreenCaptureError> start_primary_display() {
+    std::optional<ScreenCaptureError> start_primary_display(const ScreenCaptureConfig& config) {
         std::scoped_lock lifecycle_lock(lifecycle_mutex_);
         stop_locked();
 
@@ -210,7 +226,7 @@ struct WindowsGraphicsCapture::Impl {
                 return fail(ScreenCaptureError{ScreenCaptureErrorCode::unsupported});
             }
 
-            auto device_result = create_capture_device();
+            auto device_result = create_capture_device(config.adapter_luid);
             if (const auto* error = std::get_if<ScreenCaptureError>(&device_result)) {
                 return fail(*error);
             }
@@ -517,8 +533,9 @@ WindowsGraphicsCapture::~WindowsGraphicsCapture() {
     stop();
 }
 
-std::optional<ScreenCaptureError> WindowsGraphicsCapture::start_primary_display() {
-    return impl_->start_primary_display();
+std::optional<ScreenCaptureError> WindowsGraphicsCapture::start_primary_display(
+    const ScreenCaptureConfig& config) {
+    return impl_->start_primary_display(config);
 }
 
 void WindowsGraphicsCapture::stop() noexcept {
