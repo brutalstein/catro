@@ -169,6 +169,7 @@ void print_progress(std::ostream& out, std::int64_t elapsed_seconds,
         << " cap-q " << media.capture.buffered_samples
         << " cap-drop " << media.capture.dropped_callbacks
         << " cap-stale " << media.capture.stale_frames_discarded
+        << " cap-resync " << media.capture.resync_events
         << " render-q " << media.render.buffered_samples
         << " render-full " << media.render_queue_full
         << " prime " << network.startup_prime_frames
@@ -560,6 +561,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         << ", plc " << final_media.jitter.plc
         << ", capture-drop " << final_media.capture.dropped_callbacks
         << ", capture-stale " << final_media.capture.stale_frames_discarded
+        << ", capture-resync " << final_media.capture.resync_events
         << ", render-full " << final_media.render_queue_full
         << ", startup-prime " << network.startup_prime_frames
         << ", underrun " << final_media.render.underrun_callbacks
