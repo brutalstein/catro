@@ -118,6 +118,11 @@ int run_audio_check(std::span<const std::string_view> arguments, audio::AudioPla
         if (statistics.output) {
             out << " output " << dbfs(statistics.output_peak);
         }
+        out << " | glitches " << statistics.glitches;
+        if (mode == audio::SessionMode::monitor) {
+            out << ", underruns " << statistics.underruns << ", overruns " << statistics.overruns
+                << ", drift " << statistics.drift_corrections;
+        }
         out << '\n';
     }
     statistics = engine.statistics();
