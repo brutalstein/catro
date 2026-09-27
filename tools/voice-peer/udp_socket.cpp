@@ -84,15 +84,15 @@ void tune_socket(NativeSocket socket) noexcept {
     const int send_bytes = 128 * 1024;
 #if defined(_WIN32)
     (void)setsockopt(socket, SOL_SOCKET, SO_RCVBUF,
-                     reinterpret_cast<const char*>(&receive_bytes), sizeof(receive_bytes));
+                     reinterpret_cast<const char*>(&receive_bytes), static_cast<int>(sizeof(receive_bytes)));
     (void)setsockopt(socket, SOL_SOCKET, SO_SNDBUF,
-                     reinterpret_cast<const char*>(&send_bytes), sizeof(send_bytes));
+                     reinterpret_cast<const char*>(&send_bytes), static_cast<int>(sizeof(send_bytes)));
 
     // Windows otherwise turns an ICMP port-unreachable into WSAECONNRESET on a later recv. A
     // development peer may legitimately start before its partner, so keep the UDP socket alive.
     BOOL behavior = FALSE;
     DWORD bytes = 0;
-    (void)WSAIoctl(socket, SIO_UDP_CONNRESET, &behavior, sizeof(behavior), nullptr, 0, &bytes,
+    (void)WSAIoctl(socket, SIO_UDP_CONNRESET, &behavior, static_cast<DWORD>(sizeof(behavior)), nullptr, 0, &bytes,
                    nullptr, nullptr);
 #else
     (void)setsockopt(socket, SOL_SOCKET, SO_RCVBUF, &receive_bytes, sizeof(receive_bytes));
@@ -107,21 +107,20 @@ struct UdpPeerSocket::Impl {
 #if defined(_WIN32)
     bool winsock_started = false;
 #endif
+
+    ~Impl() {
+        close_socket(socket);
+#if defined(_WIN32)
+        if (winsock_started) {
+            WSACleanup();
+        }
+#endif
+    }
 };
 
 UdpPeerSocket::UdpPeerSocket(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
 
-UdpPeerSocket::~UdpPeerSocket() {
-    if (!impl_) {
-        return;
-    }
-    close_socket(impl_->socket);
-#if defined(_WIN32)
-    if (impl_->winsock_started) {
-        WSACleanup();
-    }
-#endif
-}
+UdpPeerSocket::~UdpPeerSocket() = default;
 
 UdpPeerSocket::OpenResult UdpPeerSocket::bind(const UdpEndpoint& local) noexcept {
     sockaddr_in address{};
@@ -244,7 +243,7 @@ UdpPeerSocket::SizeResult UdpPeerSocket::receive(std::span<std::byte> buffer) no
 std::uint16_t UdpPeerSocket::local_port() const noexcept {
     sockaddr_in address{};
 #if defined(_WIN32)
-    int size = sizeof(address);
+    int size = static_cast<int>(sizeof(address));
 #else
     socklen_t size = sizeof(address);
 #endif
