@@ -87,14 +87,16 @@ TEST_CASE("capture backlog trimming preserves partial native callback phase") {
     CHECK(bridge.statistics().buffered_samples == half.size());
 }
 
-TEST_CASE("capture overload drops whole callback blocks without corrupting queued frames") {
+TEST_CASE("capture overload resynchronizes instead of splicing stale and fresh PCM") {
     CaptureBridge bridge(2);
     PcmFrame one{};
     PcmFrame two{};
     PcmFrame three{};
+    PcmFrame four{};
     std::fill(one.begin(), one.end(), 1.0F);
     std::fill(two.begin(), two.end(), 2.0F);
     std::fill(three.begin(), three.end(), 3.0F);
+    std::fill(four.begin(), four.end(), 4.0F);
 
     bridge.on_captured(one);
     bridge.on_captured(two);
@@ -106,11 +108,42 @@ TEST_CASE("capture overload drops whole callback blocks without corrupting queue
     CHECK(stats.buffered_samples == 2U * kFrameSamples);
 
     PcmFrame out{};
-    REQUIRE(bridge.try_pop(out));
-    CHECK(out == one);
-    REQUIRE(bridge.try_pop(out));
-    CHECK(out == two);
     CHECK_FALSE(bridge.try_pop(out));
+    stats = bridge.statistics();
+    CHECK(stats.resync_events == 1);
+    CHECK(stats.resync_samples == 2U * kFrameSamples);
+    CHECK(stats.buffered_samples == 0);
+
+    bridge.on_captured(four);
+    REQUIRE(bridge.try_pop(out));
+    CHECK(out == four);
+}
+
+TEST_CASE("capture overflow flushes a partial pre-gap frame before fresh callbacks arrive") {
+    CaptureBridge bridge(2);
+    std::array<float, 480> first{};
+    std::array<float, 480> second{};
+    std::array<float, 480> third{};
+    PcmFrame oversized{};
+    std::fill(first.begin(), first.end(), 1.0F);
+    std::fill(second.begin(), second.end(), 2.0F);
+    std::fill(third.begin(), third.end(), 3.0F);
+    std::fill(oversized.begin(), oversized.end(), 9.0F);
+
+    bridge.on_captured(first);
+    bridge.on_captured(second);
+    bridge.on_captured(third);
+    bridge.on_captured(oversized); // only 608 samples remain, so this callback is rejected
+
+    PcmFrame out{};
+    CHECK_FALSE(bridge.try_pop(out));
+    CHECK(bridge.statistics().resync_samples == 1440);
+
+    bridge.on_captured(first);
+    bridge.on_captured(second);
+    REQUIRE(bridge.try_pop(out));
+    CHECK(std::ranges::all_of(std::span(out).first(480), [](float sample) { return sample == 1.0F; }));
+    CHECK(std::ranges::all_of(std::span(out).last(480), [](float sample) { return sample == 2.0F; }));
 }
 
 TEST_CASE("render bridge startup silence is not reported as an underrun") {
