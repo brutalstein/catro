@@ -215,7 +215,8 @@ PlayoutKind JitterBuffer::pull(PlayoutFrame& frame) noexcept {
     return frame.kind;
 }
 
-void JitterBuffer::reset() noexcept {
+void JitterBuffer::resynchronize() noexcept {
+    const auto discarded = buffered_.exchange(0, std::memory_order_relaxed);
     for (auto& slot : slots_) {
         slot.occupied = false;
         slot.payload_size = 0;
@@ -227,7 +228,12 @@ void JitterBuffer::reset() noexcept {
     started_.store(false, std::memory_order_relaxed);
     next_sequence_ = 0;
     next_timestamp_ = 0;
-    buffered_.store(0, std::memory_order_relaxed);
+    resyncs_.fetch_add(1, std::memory_order_relaxed);
+    resync_discarded_packets_.fetch_add(discarded, std::memory_order_relaxed);
+}
+
+void JitterBuffer::reset() noexcept {
+    resynchronize();
     accepted_.store(0, std::memory_order_relaxed);
     duplicates_.store(0, std::memory_order_relaxed);
     late_.store(0, std::memory_order_relaxed);
@@ -238,6 +244,8 @@ void JitterBuffer::reset() noexcept {
     played_.store(0, std::memory_order_relaxed);
     fec_.store(0, std::memory_order_relaxed);
     plc_.store(0, std::memory_order_relaxed);
+    resyncs_.store(0, std::memory_order_relaxed);
+    resync_discarded_packets_.store(0, std::memory_order_relaxed);
     peak_buffered_.store(0, std::memory_order_relaxed);
 }
 
@@ -253,6 +261,8 @@ JitterStatistics JitterBuffer::statistics() const noexcept {
         .played = played_.load(std::memory_order_relaxed),
         .fec = fec_.load(std::memory_order_relaxed),
         .plc = plc_.load(std::memory_order_relaxed),
+        .resyncs = resyncs_.load(std::memory_order_relaxed),
+        .resync_discarded_packets = resync_discarded_packets_.load(std::memory_order_relaxed),
         .buffered = buffered_.load(std::memory_order_relaxed),
         .peak_buffered = peak_buffered_.load(std::memory_order_relaxed),
     };
