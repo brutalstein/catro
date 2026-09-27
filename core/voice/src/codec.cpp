@@ -16,7 +16,8 @@ CodecError opus_error(int code) noexcept {
 } // namespace
 
 struct Encoder::Impl {
-    explicit Impl(OpusEncoder* value) noexcept : handle(value) {}
+    Impl(OpusEncoder* value, EncoderConfig settings) noexcept
+        : handle(value), config(settings) {}
     ~Impl() {
         if (handle != nullptr) {
             opus_encoder_destroy(handle);
@@ -24,6 +25,7 @@ struct Encoder::Impl {
     }
 
     OpusEncoder* handle = nullptr;
+    EncoderConfig config;
 };
 
 Encoder::Encoder(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
@@ -62,7 +64,7 @@ Encoder::CreateResult Encoder::create(const EncoderConfig& config) noexcept {
         return destroy_on_error(result);
     }
 
-    auto impl = std::unique_ptr<Impl>(new (std::nothrow) Impl(handle));
+    auto impl = std::unique_ptr<Impl>(new (std::nothrow) Impl(handle, config));
     if (!impl) {
         opus_encoder_destroy(handle);
         return CodecError{CodecErrorCode::allocation_failed, OPUS_ALLOC_FAIL};
@@ -94,8 +96,23 @@ std::variant<std::size_t, CodecError> Encoder::encode(std::span<const float> pcm
 }
 
 std::optional<CodecError> Encoder::reset() noexcept {
-    const auto result = opus_encoder_ctl(impl_->handle, OPUS_RESET_STATE);
-    return result == OPUS_OK ? std::nullopt : std::optional{opus_error(result)};
+    auto result = opus_encoder_ctl(impl_->handle, OPUS_RESET_STATE);
+    if (result != OPUS_OK) {
+        return opus_error(result);
+    }
+
+    // Reapply every user-visible setting so reset semantics cannot silently drift across libopus
+    // versions. This path runs only after a capture discontinuity and never on the audio callback.
+    const auto& config = impl_->config;
+    if ((result = opus_encoder_ctl(impl_->handle, OPUS_SET_BITRATE(config.bitrate))) != OPUS_OK ||
+        (result = opus_encoder_ctl(impl_->handle, OPUS_SET_COMPLEXITY(config.complexity))) != OPUS_OK ||
+        (result = opus_encoder_ctl(impl_->handle, OPUS_SET_VBR(config.vbr ? 1 : 0))) != OPUS_OK ||
+        (result = opus_encoder_ctl(impl_->handle, OPUS_SET_INBAND_FEC(config.inband_fec ? 1 : 0))) != OPUS_OK ||
+        (result = opus_encoder_ctl(impl_->handle,
+                                   OPUS_SET_PACKET_LOSS_PERC(config.expected_packet_loss_percent))) != OPUS_OK) {
+        return opus_error(result);
+    }
+    return std::nullopt;
 }
 
 struct Decoder::Impl {
