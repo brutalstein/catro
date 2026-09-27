@@ -47,6 +47,7 @@ elseif(APPLE)
 endif()
 add_subdirectory(tools/capability-report)
 add_subdirectory(tools/audio-check)
+add_subdirectory(tools/voice-peer)
 
 if(CATRO_BUILD_TESTS)
     enable_testing()
