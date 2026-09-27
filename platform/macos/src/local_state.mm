@@ -5,13 +5,16 @@
 #import <Foundation/Foundation.h>
 #import <Security/Security.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <fcntl.h>
 #include <filesystem>
 #include <limits>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <pthread.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/types.h>
