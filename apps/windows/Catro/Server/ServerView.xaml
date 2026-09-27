@@ -156,15 +156,19 @@
                                 Orientation="Horizontal"
                                 Spacing="0"
                                 VerticalAlignment="Center">
-                        <Button Width="28" Height="28" Padding="0"
+                        <Button x:Name="ProfileMuteButton"
+                                Width="28" Height="28" Padding="0"
                                 Background="Transparent" BorderThickness="0"
                                 IsEnabled="False"
+                                Click="OnMuteVoice"
                                 ToolTipService.ToolTip="Mute">
                             <FontIcon Glyph="&#xE720;" FontSize="12" />
                         </Button>
-                        <Button Width="28" Height="28" Padding="0"
+                        <Button x:Name="ProfileDeafenButton"
+                                Width="28" Height="28" Padding="0"
                                 Background="Transparent" BorderThickness="0"
                                 IsEnabled="False"
+                                Click="OnDeafenVoice"
                                 ToolTipService.ToolTip="Deafen">
                             <FontIcon Glyph="&#xE7F6;" FontSize="12" />
                         </Button>
@@ -218,11 +222,13 @@
                             Spacing="6"
                             Visibility="Collapsed"
                             VerticalAlignment="Center">
-                    <Button Content="Share screen"
+                    <Button x:Name="ShareScreenButton"
+                            Content="Share screen"
                             IsEnabled="False"
                             Style="{StaticResource CatroSecondaryButtonStyle}" />
-                    <Button Content="Join"
-                            IsEnabled="False"
+                    <Button x:Name="JoinVoiceButton"
+                            Content="Join"
+                            Click="OnJoinVoice"
                             Style="{StaticResource CatroPrimaryButtonStyle}" />
                 </StackPanel>
             </Grid>
@@ -313,6 +319,11 @@
                                        CharacterSpacing="70"
                                        Foreground="{ThemeResource CatroAccentBrush}" />
                         </Border>
+                        <TextBlock x:Name="VoiceStateText"
+                                   Text="Not joined"
+                                   FontSize="11"
+                                   Foreground="{ThemeResource CatroTextTertiaryBrush}"
+                                   HorizontalAlignment="Center" />
                     </StackPanel>
 
                     <Border Grid.Row="1"
@@ -325,19 +336,24 @@
                         <StackPanel Orientation="Horizontal"
                                     HorizontalAlignment="Center"
                                     Spacing="8">
-                            <Button Width="38" Height="38" Padding="0"
+                            <Button x:Name="MuteVoiceButton"
+                                    Width="38" Height="38" Padding="0"
                                     IsEnabled="False"
+                                    Click="OnMuteVoice"
                                     Style="{StaticResource CatroSecondaryButtonStyle}"
                                     ToolTipService.ToolTip="Mute">
                                 <FontIcon Glyph="&#xE720;" FontSize="14" />
                             </Button>
-                            <Button Width="38" Height="38" Padding="0"
+                            <Button x:Name="DeafenVoiceButton"
+                                    Width="38" Height="38" Padding="0"
                                     IsEnabled="False"
+                                    Click="OnDeafenVoice"
                                     Style="{StaticResource CatroSecondaryButtonStyle}"
                                     ToolTipService.ToolTip="Deafen">
                                 <FontIcon Glyph="&#xE7F6;" FontSize="14" />
                             </Button>
-                            <Button Width="38" Height="38" Padding="0"
+                            <Button x:Name="ShareScreenIconButton"
+                                    Width="38" Height="38" Padding="0"
                                     IsEnabled="False"
                                     Style="{StaticResource CatroSecondaryButtonStyle}"
                                     ToolTipService.ToolTip="Share screen">
