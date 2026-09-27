@@ -30,6 +30,7 @@ add_subdirectory(core/capabilities)
 add_subdirectory(core/reporting)
 add_subdirectory(core/audio)
 add_subdirectory(core/voice)
+add_subdirectory(core/community)
 add_subdirectory(apps/diagnostics)
 add_subdirectory(apps/shell)
 # Portable translations build everywhere; native layers only with their platform toolchain.
