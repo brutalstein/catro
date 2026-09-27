@@ -30,8 +30,9 @@ immutable CapabilitySnapshot (generation N) + ChangeSet against generation N-1
 
 ## Boundaries
 
-- `core/capabilities` and `core/reporting` are portable C++20. They use only the standard library
-  and never include a platform header.
+- `core/capabilities` and `core/reporting` are portable C++20 and never include a platform
+  header. The capability core uses only the standard library. Reporting adds nlohmann/json as a
+  private dependency.
 - A platform layer turns native results into core values at its edge. Both translations
   (`platform/windows/src/windows_translation.*`, `platform/macos/src/macos_translation.*`) are
   plain C++ records and rules. They build on every platform, so their tests run anywhere.
