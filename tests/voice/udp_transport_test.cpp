@@ -68,6 +68,10 @@ TEST_CASE("UDP transport rejects non-numeric endpoints and releases bound ports"
     REQUIRE(std::holds_alternative<UdpError>(invalid));
     CHECK(std::get<UdpError>(invalid).code == UdpErrorCode::invalid_endpoint);
 
+    const auto public_address = UdpPeerSocket::bind({"8.8.8.8", 0});
+    REQUIRE(std::holds_alternative<UdpError>(public_address));
+    CHECK(std::get<UdpError>(public_address).code == UdpErrorCode::invalid_endpoint);
+
     std::uint16_t port = 0;
     {
         auto socket = bind_loopback();
