@@ -265,4 +265,13 @@
   <Target Name="CopyCatroVoiceRuntime" AfterTargets="Build">
     <Copy SourceFiles="$(CatroCoreRoot)\$(Configuration)\catro-voice-runtime.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
+  <!-- Sparse package logos are resolved from the executable's external location, not from the
+       identity-only package. Keep them beside the built shell for borderless-capture debug identity. -->
+  <Target Name="CopyCatroIdentityAssets" AfterTargets="Build">
+    <MakeDir Directories="$(OutDir)Assets" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Assets\Catro44.png;$(MSBuildThisFileDirectory)Assets\Catro150.png"
+          DestinationFolder="$(OutDir)Assets"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(MSBuildThisFileDirectory)Assets\Catro44.png') And Exists('$(MSBuildThisFileDirectory)Assets\Catro150.png')" />
+  </Target>
 </Project>
