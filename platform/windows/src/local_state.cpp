@@ -2,9 +2,9 @@
 
 #include <catro/community/state_codec.hpp>
 
+#include <windows.h>
 #include <bcrypt.h>
 #include <shlobj.h>
-#include <windows.h>
 
 #include <algorithm>
 #include <array>
