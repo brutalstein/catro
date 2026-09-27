@@ -45,6 +45,24 @@ TEST_CASE("the ring rounds its capacity and keeps order across wrap-around") {
     CHECK(ring.discard(1) == 0);
 }
 
+TEST_CASE("the ring exact operations never publish partial blocks") {
+    SpscRing<int> ring(8);
+    const std::array first{1, 2, 3, 4, 5, 6};
+    const std::array too_many{7, 8, 9};
+    CHECK(ring.write_exact(first));
+    CHECK_FALSE(ring.write_exact(too_many));
+    CHECK(ring.size() == first.size());
+
+    std::array<int, 7> oversized_read{};
+    CHECK_FALSE(ring.read_exact(oversized_read));
+    CHECK(ring.size() == first.size());
+
+    std::array<int, 6> exact{};
+    CHECK(ring.read_exact(exact));
+    CHECK(exact == first);
+    CHECK(ring.size() == 0);
+}
+
 TEST_CASE("the ring delivers every item in order between two threads") {
     constexpr std::uint32_t kItems = 1'000'000;
     SpscRing<std::uint32_t> ring(1024);
