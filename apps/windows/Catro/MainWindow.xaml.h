@@ -11,6 +11,7 @@ struct MainWindow : MainWindowT<MainWindow> {
 
     void InitializeComponent();
     void OnNavigationClick(IInspectable const& sender, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnShellSizeChanged(IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
 
 private:
     Microsoft::UI::Xaml::UIElement PageFor(catro::app::ShellSection section);
