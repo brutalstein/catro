@@ -151,8 +151,12 @@ std::optional<InviteCode> parse_invite_code(std::string_view value) noexcept {
         if (digit < 0 || (index == 0 && digit > 7)) {
             return std::nullopt;
         }
-        accumulator = (accumulator << 5U) | static_cast<std::uint32_t>(digit);
-        bits += 5;
+
+        // The first Crockford digit carries only three data bits; the two canonical high bits are
+        // implicit zeros and must not be fed into the decoded byte stream.
+        const auto digit_bits = index == 0 ? 3 : 5;
+        accumulator = (accumulator << digit_bits) | static_cast<std::uint32_t>(digit);
+        bits += digit_bits;
         if (bits >= 8) {
             bits -= 8;
             if (output >= bytes.size()) {
@@ -163,7 +167,7 @@ std::optional<InviteCode> parse_invite_code(std::string_view value) noexcept {
         }
     }
 
-    if (output != bytes.size() || bits != 2 || accumulator != 0) {
+    if (output != bytes.size() || bits != 0 || accumulator != 0) {
         return std::nullopt;
     }
     InviteCode code{bytes};
@@ -205,9 +209,9 @@ std::optional<StateError> validate(const LocalState& state) {
         text_channels += channel.kind == ChannelKind::text ? 1U : 0U;
         voice_channels += channel.kind == ChannelKind::voice ? 1U : 0U;
     }
-    if (text_channels != 1 || voice_channels != 1 || state.personal_server.channels.size() != 2) {
+    if (text_channels == 0 || voice_channels == 0) {
         return StateError{StateErrorCode::invalid_channel_layout,
-                          "personal server must start with one text and one voice channel"};
+                          "server must retain at least one text and one voice channel"};
     }
 
     std::set<std::string> member_ids;
