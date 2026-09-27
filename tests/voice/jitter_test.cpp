@@ -96,8 +96,8 @@ TEST_CASE("duplicates late packets wrong streams and far-ahead packets are bound
     PlayoutFrame frame;
     REQUIRE(buffer.pull(frame) == PlayoutKind::packet);
     CHECK(push(buffer, 10, kTimestamp, std::byte{1}) == JitterPushResult::late);
-    CHECK(push(buffer, 10U + static_cast<std::uint16_t>(kJitterCapacityPackets),
-               kTimestamp + static_cast<std::uint32_t>(kJitterCapacityPackets) * kFrameSamples,
+    CHECK(push(buffer, 11U + static_cast<std::uint16_t>(kJitterCapacityPackets),
+               kTimestamp + (1U + static_cast<std::uint32_t>(kJitterCapacityPackets)) * kFrameSamples,
                std::byte{3}) == JitterPushResult::outside_window);
 
     const auto stats = buffer.statistics();
