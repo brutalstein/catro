@@ -11,6 +11,9 @@
 
 #include <microsoft.ui.xaml.media.dxinterop.h>
 
+#include <winrt/Windows.Graphics.Capture.h>
+#include <winrt/Windows.Security.Authorization.AppCapabilityAccess.h>
+
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -129,11 +132,28 @@ std::wstring capture_source_label(
             ? L"Display — "
             : L"Window — ";
     label += to_hstring(source.title).c_str();
+    if (!source.process_name.empty()) {
+        label += L"  ·  ";
+        label += to_hstring(source.process_name).c_str();
+    }
     label += L"  ·  ";
     label += std::to_wstring(source.width);
     label += L"×";
     label += std::to_wstring(source.height);
     return label;
+}
+
+bool chromium_window(
+    const catro::platform::windows::CaptureSource& source) noexcept {
+    if (source.kind != catro::platform::windows::CaptureSourceKind::window) {
+        return false;
+    }
+    return source.process_name == "brave.exe" ||
+           source.process_name == "chrome.exe" ||
+           source.process_name == "msedge.exe" ||
+           source.process_name == "chromium.exe" ||
+           source.process_name == "opera.exe" ||
+           source.process_name == "vivaldi.exe";
 }
 
 } // namespace
@@ -450,6 +470,39 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         source_box.SelectedIndex(0);
         form.Children().Append(source_box);
 
+        controls::TextBlock browser_note;
+        browser_note.Text(
+            L"Browser video compatibility: Brave/Chrome/Edge may stop rendering a hardware video "
+            L"surface when the selected window is completely covered. If only the video region "
+            L"turns black, restart the browser with native window occlusion disabled. "
+            L"Protected/DRM video can remain unavailable to capture by design.");
+        browser_note.TextWrapping(xaml::TextWrapping::Wrap);
+        browser_note.Visibility(
+            chromium_window(sources.front())
+                ? xaml::Visibility::Visible
+                : xaml::Visibility::Collapsed);
+        form.Children().Append(browser_note);
+
+        source_box.SelectionChanged(
+            [&sources, browser_note](auto const& sender, auto const&) {
+                const auto selected =
+                    sender.as<controls::ComboBox>().SelectedIndex();
+                const bool visible =
+                    selected >= 0 &&
+                    static_cast<std::size_t>(selected) < sources.size() &&
+                    chromium_window(sources[static_cast<std::size_t>(selected)]);
+                browser_note.Visibility(
+                    visible ? xaml::Visibility::Visible
+                            : xaml::Visibility::Collapsed);
+            });
+
+        controls::ToggleSwitch borderless_box;
+        borderless_box.Header(box_value(hstring{L"Hide Windows capture border"}));
+        borderless_box.OnContent(box_value(hstring{L"On"}));
+        borderless_box.OffContent(box_value(hstring{L"Off"}));
+        borderless_box.IsOn(true);
+        form.Children().Append(borderless_box);
+
         controls::TextBlock resolution_label;
         resolution_label.Text(L"Stream resolution ceiling");
         form.Children().Append(resolution_label);
@@ -533,6 +586,7 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         const auto height_value = height_box.Value();
         const auto fps_value = fps_box.Value();
         const auto bitrate_value = bitrate_box.Value();
+        const bool request_borderless = borderless_box.IsOn();
 
         if (selected < 0 ||
             static_cast<std::size_t>(selected) >= sources.size() ||
@@ -566,10 +620,32 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
             co_return;
         }
 
+        bool borderless_allowed = false;
+        if (request_borderless) {
+            try {
+                namespace graphics = Windows::Graphics::Capture;
+                namespace capability =
+                    Windows::Security::Authorization::AppCapabilityAccess;
+                const auto access = co_await
+                    graphics::GraphicsCaptureAccess::RequestAccessAsync(
+                        graphics::GraphicsCaptureAccessKind::Borderless);
+                borderless_allowed =
+                    access == capability::AppCapabilityAccessStatus::Allowed;
+                if (!borderless_allowed) {
+                    VoiceStateText().Text(
+                        L"Windows kept the capture border; streaming continues");
+                }
+            } catch (const winrt::hresult_error&) {
+                VoiceStateText().Text(
+                    L"Borderless capture unavailable in this launch; streaming continues");
+            }
+        }
+
         const auto direct = direct_video_config();
         catro::screen::ScreenShareConfig config;
         config.source =
             sources[static_cast<std::size_t>(selected)];
+        config.borderless = borderless_allowed;
         config.bind = direct.bind;
         config.peer = direct.peer;
         config.max_width = width;
