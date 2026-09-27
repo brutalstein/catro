@@ -52,9 +52,13 @@ bool CaptureBridge::resynchronize_if_needed() noexcept {
     const auto discarded = ring_.discard(ring_.size());
     const auto dropped = pending_gap_samples_.exchange(0, std::memory_order_acq_rel);
     const auto lost_samples = static_cast<std::uint64_t>(discarded) + dropped;
-    const auto skipped_frames =
-        (lost_samples + static_cast<std::uint64_t>(kFrameSamples) - 1U) /
-        static_cast<std::uint64_t>(kFrameSamples);
+    const auto remainder =
+        static_cast<std::size_t>(lost_samples % static_cast<std::uint64_t>(kFrameSamples));
+    alignment_samples_pending_ =
+        remainder == 0 ? 0 : static_cast<std::size_t>(kFrameSamples) - remainder;
+    const auto skipped_samples =
+        lost_samples + static_cast<std::uint64_t>(alignment_samples_pending_);
+    const auto skipped_frames = skipped_samples / static_cast<std::uint64_t>(kFrameSamples);
 
     resync_events_.fetch_add(1, std::memory_order_relaxed);
     resync_samples_.fetch_add(discarded, std::memory_order_relaxed);
@@ -63,8 +67,28 @@ bool CaptureBridge::resynchronize_if_needed() noexcept {
     return true;
 }
 
+bool CaptureBridge::finish_alignment_discard() noexcept {
+    if (alignment_samples_pending_ == 0) {
+        return true;
+    }
+    const auto available = ring_.size();
+    if (available == 0) {
+        return false;
+    }
+    const auto requested = std::min(alignment_samples_pending_, available);
+    const auto discarded = ring_.discard(requested);
+    alignment_samples_pending_ -= discarded;
+    resync_samples_.fetch_add(discarded, std::memory_order_relaxed);
+    return alignment_samples_pending_ == 0;
+}
+
 std::uint64_t CaptureBridge::trim_backlog(std::size_t keep_frames) noexcept {
     (void)resynchronize_if_needed();
+    if (!finish_alignment_discard()) {
+        const auto skipped = unreported_timeline_frames_;
+        unreported_timeline_frames_ = 0;
+        return skipped;
+    }
     keep_frames = std::clamp<std::size_t>(keep_frames, 1, kMaxRealtimeQueueFrames);
     const auto buffered = ring_.size();
     const auto keep_samples = keep_frames * static_cast<std::size_t>(kFrameSamples);
@@ -91,6 +115,9 @@ std::uint64_t CaptureBridge::trim_backlog(std::size_t keep_frames) noexcept {
 
 bool CaptureBridge::try_pop(PcmFrame& frame) noexcept {
     if (resynchronize_if_needed()) {
+        return false;
+    }
+    if (!finish_alignment_discard()) {
         return false;
     }
     if (!ring_.read_exact(std::span<float>(frame))) {
