@@ -2,7 +2,7 @@
 
 #include "DiagnosticsView.g.h"
 
-#include "Diagnostics/DiagnosticsViewModel.hpp"
+#include <DiagnosticsViewModel.hpp>
 
 #include <catro/platform/windows/capability_service.hpp>
 

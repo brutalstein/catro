@@ -74,11 +74,11 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/bigobj /permissive- /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>NOMINMAX;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(IntDir);$(IntDir)Diagnostics;$(CatroRepoRoot)core\capabilities\include;$(CatroRepoRoot)core\reporting\include;$(CatroRepoRoot)platform\windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(IntDir);$(IntDir)Diagnostics;$(CatroRepoRoot)core\capabilities\include;$(CatroRepoRoot)core\reporting\include;$(CatroRepoRoot)apps\diagnostics;$(CatroRepoRoot)platform\windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>$(CatroCoreRoot)\apps\windows\$(Configuration)\catro_windows_diagnostics.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_platform_windows.lib;$(CatroCoreRoot)\core\reporting\$(Configuration)\catro_reporting.lib;$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib;powrprof.lib;user32.lib;wtsapi32.lib;dxgi.lib;d3d11.lib;d3d12.lib;dxcore.lib;shcore.lib;mfplat.lib;mfuuid.lib;ole32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(CatroCoreRoot)\apps\diagnostics\$(Configuration)\catro_diagnostics.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_platform_windows.lib;$(CatroCoreRoot)\core\reporting\$(Configuration)\catro_reporting.lib;$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib;powrprof.lib;user32.lib;wtsapi32.lib;dxgi.lib;d3d11.lib;d3d12.lib;dxcore.lib;shcore.lib;mfplat.lib;mfuuid.lib;ole32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)' == 'Debug'">
@@ -105,7 +105,6 @@
     <ClInclude Include="Diagnostics\DiagnosticsView.xaml.h">
       <DependentUpon>Diagnostics\DiagnosticsView.xaml</DependentUpon>
     </ClInclude>
-    <ClInclude Include="Diagnostics\DiagnosticsViewModel.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml" />
@@ -175,9 +174,12 @@
   <!-- After C++/WinRT drops its provider source from unoptimized builds. -->
   <Target Name="CatroXamlCompileInputs" AfterTargets="CppWinRTComputeXamlGeneratedCompileInputs">
     <ItemGroup>
-      <CatroXamlSource Include="@(_GeneratedCodeFiles->Distinct())" Condition="'%(Extension)' == '.cpp'" />
-      <ClCompile Include="@(CatroXamlSource)" />
-      <ClCompile Include="$(XamlMetaDataProviderCpp)" Condition="Exists('$(XamlMetaDataProviderCpp)')" />
+      <CatroXamlSource Include="@(_GeneratedCodeFiles)" Condition="'%(Extension)' == '.cpp'" />
+      <CatroXamlSource Include="$(XamlMetaDataProviderCpp)" Condition="Exists('$(XamlMetaDataProviderCpp)')" />
+      <!-- Incremental builds may already list a generated source; add each one exactly once. -->
+      <ClCompile Remove="@(CatroXamlSource->'%(FullPath)')" />
+      <ClCompile Remove="@(CatroXamlSource)" />
+      <ClCompile Include="@(CatroXamlSource->'%(FullPath)'->Distinct())" />
     </ItemGroup>
   </Target>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

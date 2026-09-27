@@ -28,6 +28,7 @@ catro_enable_reporting_dependency()
 
 add_subdirectory(core/capabilities)
 add_subdirectory(core/reporting)
+add_subdirectory(apps/diagnostics)
 # Its portable translation builds everywhere; the Objective-C++ layer only on Apple platforms.
 add_subdirectory(platform/macos)
 
@@ -35,7 +36,6 @@ add_subdirectory(platform/macos)
 if(WIN32 AND MSVC)
     add_subdirectory(platform/windows)
     add_subdirectory(tools/capability-probe)
-    add_subdirectory(apps/windows)
 elseif(APPLE)
     add_subdirectory(tools/capability-probe)
 endif()
