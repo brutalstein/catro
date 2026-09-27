@@ -175,6 +175,7 @@ public:
         started_.store(!start_error_);
         return start_error_;
     }
+    void request_stop() noexcept override { started_.store(false); }
     std::uint64_t glitches() const noexcept override { return 2; }
 
 private:
