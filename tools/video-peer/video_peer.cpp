@@ -548,9 +548,9 @@ int run_receiver(
                 std::chrono::duration_cast<std::chrono::seconds>(
                     now - started).count();
             const auto decoder_stats = decoder.statistics();
-            const auto decoded =
+            const auto submitted =
                 std::max<std::uint64_t>(
-                    decoder_stats.frames_decoded, 1);
+                    decoder_stats.frames_submitted, 1);
             out << elapsed << "s:"
                 << " rx-pkt " << packets
                 << " rx-bytes " << bytes
@@ -558,7 +558,7 @@ int run_receiver(
                 << " key " << keyframes
                 << " decoded " << decoder_stats.frames_decoded
                 << " decode "
-                << (decoder_stats.decode_total_us / decoded)
+                << (decoder_stats.decode_total_us / submitted)
                 << "/" << decoder_stats.decode_max_us << " us"
                 << " stream-change " << decoder_stats.stream_changes
                 << " input-buf " << decoder_stats.input_sample_allocations
