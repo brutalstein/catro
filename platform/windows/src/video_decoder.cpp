@@ -10,7 +10,6 @@
 #include <mfidl.h>
 #include <mfobjects.h>
 #include <mftransform.h>
-#include <wmcodecdsp.h>
 #include <wrl/client.h>
 
 #include <algorithm>
@@ -181,6 +180,127 @@ struct DecoderDevice {
     return SUCCEEDED(codec.SetValue(&key, &setting));
 }
 
+struct ActivationArray {
+    IMFActivate** data = nullptr;
+    UINT32 count = 0;
+
+    ~ActivationArray() {
+        if (data == nullptr) {
+            return;
+        }
+        for (UINT32 index = 0; index < count; ++index) {
+            if (data[index] != nullptr) {
+                data[index]->Release();
+            }
+        }
+        CoTaskMemFree(data);
+    }
+};
+
+[[nodiscard]] std::string activation_name(IMFActivate& activation) {
+    wchar_t* raw = nullptr;
+    UINT32 length = 0;
+    if (FAILED(activation.GetAllocatedString(
+            MFT_FRIENDLY_NAME_Attribute, &raw, &length)) ||
+        raw == nullptr) {
+        return {};
+    }
+
+    struct CoTaskString {
+        wchar_t* value = nullptr;
+        ~CoTaskString() {
+            CoTaskMemFree(value);
+        }
+    } owned{raw};
+
+    const auto required = WideCharToMultiByte(
+        CP_UTF8, 0, raw, static_cast<int>(length),
+        nullptr, 0, nullptr, nullptr);
+    if (required <= 0) {
+        return {};
+    }
+
+    std::string output(static_cast<std::size_t>(required), '\0');
+    const auto converted = WideCharToMultiByte(
+        CP_UTF8, 0, raw, static_cast<int>(length),
+        output.data(), required, nullptr, nullptr);
+    if (converted != required) {
+        return {};
+    }
+    return output;
+}
+
+[[nodiscard]] std::variant<ComPtr<IMFTransform>, H264DecoderError>
+activate_h264_d3d11_decoder(std::string& decoder_name) {
+    const MFT_REGISTER_TYPE_INFO input{
+        MFMediaType_Video,
+        MFVideoFormat_H264,
+    };
+
+    IMFActivate** raw_activations = nullptr;
+    UINT32 activation_count = 0;
+    auto result = MFTEnumEx(
+        MFT_CATEGORY_VIDEO_DECODER,
+        MFT_ENUM_FLAG_SYNCMFT |
+            MFT_ENUM_FLAG_LOCALMFT |
+            MFT_ENUM_FLAG_SORTANDFILTER,
+        &input,
+        nullptr,
+        &raw_activations,
+        &activation_count);
+    if (FAILED(result)) {
+        return H264DecoderError{
+            H264DecoderErrorCode::decoder_activation_failed,
+            result};
+    }
+
+    ActivationArray activations{
+        raw_activations,
+        activation_count,
+    };
+    if (activation_count == 0 || raw_activations == nullptr) {
+        return H264DecoderError{
+            H264DecoderErrorCode::decoder_activation_failed,
+            MF_E_TOPO_CODEC_NOT_FOUND};
+    }
+
+    HRESULT last_result = MF_E_TOPO_CODEC_NOT_FOUND;
+    for (UINT32 index = 0; index < activation_count; ++index) {
+        if (raw_activations[index] == nullptr) {
+            continue;
+        }
+
+        ComPtr<IMFTransform> candidate;
+        result = raw_activations[index]->ActivateObject(
+            IID_PPV_ARGS(&candidate));
+        if (FAILED(result) || !candidate) {
+            last_result = result;
+            continue;
+        }
+
+        ComPtr<IMFAttributes> attributes;
+        result = candidate->GetAttributes(&attributes);
+        if (FAILED(result) || !attributes) {
+            last_result = result;
+            continue;
+        }
+        if (MFGetAttributeUINT32(
+                attributes.Get(),
+                MF_SA_D3D11_AWARE,
+                FALSE) == FALSE) {
+            last_result = E_NOINTERFACE;
+            continue;
+        }
+
+        decoder_name = activation_name(*raw_activations[index]);
+        return candidate;
+    }
+
+    return H264DecoderError{
+        H264DecoderErrorCode::decoder_not_d3d11,
+        last_result};
+}
+
 } // namespace
 
 struct WindowsH264D3D11Decoder::Impl {
@@ -232,15 +352,15 @@ struct WindowsH264D3D11Decoder::Impl {
         }
         media_foundation_started_ = true;
 
-        result = CoCreateInstance(
-            __uuidof(CMSH264DecoderMFT), nullptr,
-            CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&transform_));
-        if (FAILED(result) || !transform_) {
-            return fail(H264DecoderError{
-                H264DecoderErrorCode::decoder_activation_failed,
-                result});
+        auto decoder_result =
+            activate_h264_d3d11_decoder(stats_.decoder_name);
+        if (const auto* error =
+                std::get_if<H264DecoderError>(&decoder_result)) {
+            return fail(*error);
         }
-        stats_.decoder_name = "Microsoft H.264 Video Decoder MFT";
+        transform_ =
+            std::get<ComPtr<IMFTransform>>(
+                std::move(decoder_result));
 
         ComPtr<IMFAttributes> attributes;
         result = transform_->GetAttributes(&attributes);
