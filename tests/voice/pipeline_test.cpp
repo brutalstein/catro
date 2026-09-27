@@ -20,13 +20,14 @@ namespace {
 std::unique_ptr<VoicePipeline> make_pipeline(std::uint32_t stream_id, std::uint16_t jitter_target = 1,
                                              std::size_t render_queue_frames = 8,
                                              std::uint16_t initial_sequence = 0,
-                                             std::uint32_t initial_timestamp = 0) {
+                                             std::uint32_t initial_timestamp = 0,
+                                             std::size_t capture_queue_frames = 8) {
     VoicePipelineConfig config{
         .local_stream_id = stream_id,
         .initial_sequence = initial_sequence,
         .initial_timestamp = initial_timestamp,
         .jitter_target_packets = jitter_target,
-        .capture_queue_frames = 8,
+        .capture_queue_frames = capture_queue_frames,
         .render_queue_frames = render_queue_frames,
     };
     auto result = VoicePipeline::create(config);
@@ -136,7 +137,7 @@ TEST_CASE("sender packet clock advances across intentionally discarded capture b
 }
 
 TEST_CASE("capture overflow creates a packet-clock gap instead of time-compressing speech") {
-    auto pipeline = make_pipeline(0x13131313U, 1, 4, 500U, 20'000U);
+    auto pipeline = make_pipeline(0x13131313U, 1, 4, 500U, 20'000U, 4);
     double phase = 0.0;
 
     for (int index = 0; index < 5; ++index) {
