@@ -41,6 +41,26 @@ void CaptureBridge::on_captured(std::span<const float> frames) noexcept {
     update_peak(ring_.size());
 }
 
+std::size_t CaptureBridge::trim_backlog(std::size_t keep_frames) noexcept {
+    keep_frames = std::max<std::size_t>(keep_frames, 1);
+    const auto buffered = ring_.size();
+    const auto keep_samples = keep_frames * static_cast<std::size_t>(kFrameSamples);
+    if (buffered <= keep_samples) {
+        return 0;
+    }
+
+    // Only discard complete 20 ms frames. Any partial native callback remains attached to the
+    // same codec-frame phase, so subsequent read_exact() keeps deterministic frame boundaries.
+    const auto discard_frames = (buffered - keep_samples) / static_cast<std::size_t>(kFrameSamples);
+    if (discard_frames == 0) {
+        return 0;
+    }
+    const auto discard_samples = discard_frames * static_cast<std::size_t>(kFrameSamples);
+    const auto discarded = ring_.discard(discard_samples) / static_cast<std::size_t>(kFrameSamples);
+    stale_frames_discarded_.fetch_add(discarded, std::memory_order_relaxed);
+    return discarded;
+}
+
 bool CaptureBridge::try_pop(PcmFrame& frame) noexcept {
     if (!ring_.read_exact(std::span<float>(frame))) {
         return false;
@@ -56,6 +76,7 @@ CaptureBridgeStatistics CaptureBridge::statistics() const noexcept {
         .dropped_callbacks = dropped_callbacks_.load(std::memory_order_relaxed),
         .dropped_samples = dropped_samples_.load(std::memory_order_relaxed),
         .frames_dequeued = frames_dequeued_.load(std::memory_order_relaxed),
+        .stale_frames_discarded = stale_frames_discarded_.load(std::memory_order_relaxed),
         .buffered_samples = ring_.size(),
         .peak_buffered_samples = peak_buffered_samples_.load(std::memory_order_relaxed),
     };
