@@ -45,9 +45,9 @@ CodecError field_error(std::string detail) {
 
 } // namespace
 
-std::string encode_local_state(const LocalState& state) {
+std::variant<std::string, CodecError> encode_local_state(const LocalState& state) {
     if (const auto error = validate(state)) {
-        return {};
+        return CodecError{CodecErrorCode::invalid_state, error->detail};
     }
 
     json root;
