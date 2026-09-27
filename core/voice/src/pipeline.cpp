@@ -103,13 +103,34 @@ std::variant<DecodeStep, CodecError> VoicePipeline::decode_next() noexcept {
         break;
     }
 
+    const auto recover_with_plc = [&]() -> std::optional<CodecError> {
+        const auto concealed = decoder_->conceal(decoded_frame_);
+        if (const auto* error = std::get_if<CodecError>(&concealed)) {
+            return *error;
+        }
+        if (std::get<std::size_t>(concealed) != kFrameSamples) {
+            return CodecError{CodecErrorCode::codec_failure};
+        }
+        step = DecodeStep::queued_plc;
+        return std::nullopt;
+    };
+
     if (const auto* error = std::get_if<CodecError>(&decoded)) {
         decode_errors_.fetch_add(1, std::memory_order_relaxed);
-        return *error;
-    }
-    if (std::get<std::size_t>(decoded) != kFrameSamples) {
+        if (kind == PlayoutKind::plc) {
+            return *error;
+        }
+        if (const auto conceal_error = recover_with_plc()) {
+            return *conceal_error;
+        }
+    } else if (std::get<std::size_t>(decoded) != kFrameSamples) {
         decode_errors_.fetch_add(1, std::memory_order_relaxed);
-        return CodecError{CodecErrorCode::codec_failure};
+        if (kind == PlayoutKind::plc) {
+            return CodecError{CodecErrorCode::codec_failure};
+        }
+        if (const auto conceal_error = recover_with_plc()) {
+            return *conceal_error;
+        }
     }
 
     decoded_frames_.fetch_add(1, std::memory_order_relaxed);
