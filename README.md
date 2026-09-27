@@ -20,13 +20,21 @@ Internet transport or security boundary.
 | `core/audio` | Real-time audio primitives and the session engine. Standard library only. |
 | `core/voice` | Opus codec wrapper, packet v1, bounded jitter/loss handling, real-time PCM bridges, transport-agnostic media pipeline. |
 | `platform/windows`, `platform/macos` | Passive probes, the out-of-process probe executor, the capability service, and the audio backends (WASAPI, CoreAudio AUHAL). |
-| `apps/diagnostics` | Shared plain C++ view model for both shells. |
-| `apps/windows`, `apps/macos` | Native diagnostics shells. |
+| `apps/diagnostics` | Shared plain C++ diagnostics/audio presentation. |
+| `apps/shell` | Portable personal-server/channel navigation contract. |
+| `apps/windows`, `apps/macos` | Native desktop shells. Windows includes the server-first product UI. |
 | `tools/capability-probe` | Helper process that runs one passive probe and prints one fragment. |
 | `tools/capability-report` | Command-line capability report. |
 | `tools/audio-check` | Command-line audio session check (meter, tone, monitor). |
 | `tools/voice-peer` | Localhost/LAN engineering harness for Opus voice, bounded UDP, jitter/FEC/PLC, and live timing counters. |
 | `tests` | Core, reporting, policy, and platform tests. |
+
+## Windows product shell
+
+The Windows app opens directly into the user's personal server: one `# general` text channel, one
+`Voice` channel, a member rail, owner state, invite/join connection points, and voice-local screen
+share controls. The shell is native WinUI 3 and intentionally avoids blur/backdrop/animation costs.
+See [`docs/ui-foundation.md`](docs/ui-foundation.md).
 
 ## Quick start
 
