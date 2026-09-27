@@ -3,6 +3,8 @@
 #include <d3d11.h>
 #include <wrl/client.h>
 
+#include <winrt/Windows.Graphics.Capture.h>
+
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -50,6 +52,9 @@ struct ScreenCaptureError {
 }
 
 struct GpuCaptureFrame {
+    // WGC owns a small reusable surface pool. Keeping the projected frame alive is the lease that
+    // prevents the texture from being recycled while the consumer/encoder still reads it.
+    winrt::Windows::Graphics::Capture::Direct3D11CaptureFrame lease{nullptr};
     Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
     std::uint64_t sequence = 0;
     std::uint32_t width = 0;
