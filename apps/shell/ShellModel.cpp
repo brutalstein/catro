@@ -9,7 +9,7 @@ const ChannelSpec& channel_spec(std::string_view id) noexcept {
     return found != kDefaultChannels.end() ? *found : kDefaultChannels.front();
 }
 
-std::optional<ChannelKind> channel_kind(std::string_view id) noexcept {
+std::optional<community::ChannelKind> channel_kind(std::string_view id) noexcept {
     const auto found = std::ranges::find(kDefaultChannels, id, &ChannelSpec::id);
     return found != kDefaultChannels.end() ? std::optional{found->kind} : std::nullopt;
 }
