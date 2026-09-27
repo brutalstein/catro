@@ -69,7 +69,7 @@ void RenderBridge::update_peak(std::size_t depth) noexcept {
 
 bool RenderBridge::try_push(const PcmFrame& frame) noexcept {
     if (!ring_.write_exact(std::span<const float>(frame))) {
-        frames_dropped_.fetch_add(1, std::memory_order_relaxed);
+        push_rejections_.fetch_add(1, std::memory_order_relaxed);
         return false;
     }
     frames_enqueued_.fetch_add(1, std::memory_order_relaxed);
@@ -100,7 +100,7 @@ RenderBridgeStatistics RenderBridge::statistics() const noexcept {
         .silence_samples_rendered = silence_samples_rendered_.load(std::memory_order_relaxed),
         .underrun_callbacks = underrun_callbacks_.load(std::memory_order_relaxed),
         .frames_enqueued = frames_enqueued_.load(std::memory_order_relaxed),
-        .frames_dropped = frames_dropped_.load(std::memory_order_relaxed),
+        .push_rejections = push_rejections_.load(std::memory_order_relaxed),
         .buffered_samples = ring_.size(),
         .peak_buffered_samples = peak_buffered_samples_.load(std::memory_order_relaxed),
     };
