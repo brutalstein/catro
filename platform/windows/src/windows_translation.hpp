@@ -129,9 +129,12 @@ inline constexpr std::string_view kDesktopDuplicationDisplay = "dxgi-duplication
 [[nodiscard]] caps::EncoderId encoder_id(const NativeEncoder& encoder);
 
 // Encoders are advertised, never runtime-validated. Transfers claim only what is certain: a
-// software encoder always takes CPU-staged frames; a hardware encoder's transfer cost stays
-// unknown because passive discovery cannot prove capture and encoder share a resource.
+// software encoder always takes CPU-staged frames. Desktop Duplication produces frames only on
+// the adapter an output is attached to, so each such adapter gets its own duplication transfer
+// to a hardware encoder: a same-adapter copy or a cross-adapter copy. Graphics Capture delivers
+// to whichever device the caller supplies, so its cost to a hardware encoder stays unknown.
 [[nodiscard]] caps::EncoderProbeFacts translate_encoders(const std::vector<NativeEncoder>& encoders,
+                                                         const std::vector<NativeLuid>& output_adapters,
                                                          std::string_view probe_id,
                                                          std::vector<caps::ProbeIssue>& issues);
 

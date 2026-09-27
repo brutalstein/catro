@@ -51,14 +51,31 @@ struct Errors {
     }
 };
 
-// Hardware transforms are enumerated per adapter so each one is tied to the adapter that owns it.
-std::optional<std::vector<LUID>> hardware_adapters(Errors& errors) {
+struct Adapters {
+    // Hardware transforms are enumerated per adapter so each one is tied to the adapter that owns it.
+    std::vector<LUID> hardware;
+    // Adapters with an output attached to the desktop: where duplicated frames are produced.
+    std::vector<NativeLuid> with_outputs;
+};
+
+bool drives_desktop(IDXGIAdapter1& adapter) {
+    ComPtr<IDXGIOutput> output;
+    for (UINT index = 0; SUCCEEDED(adapter.EnumOutputs(index, &output)); ++index, output.Reset()) {
+        DXGI_OUTPUT_DESC description{};
+        if (SUCCEEDED(output->GetDesc(&description)) && description.AttachedToDesktop) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::optional<Adapters> enumerate_adapters(Errors& errors) {
     ComPtr<IDXGIFactory1> factory;
     if (const auto result = CreateDXGIFactory1(IID_PPV_ARGS(&factory)); FAILED(result)) {
         errors.remember(result);
         return std::nullopt;
     }
-    std::vector<LUID> adapters;
+    Adapters adapters;
     ComPtr<IDXGIAdapter1> adapter;
     for (UINT index = 0; SUCCEEDED(factory->EnumAdapters1(index, &adapter)); ++index, adapter.Reset()) {
         DXGI_ADAPTER_DESC1 description{};
@@ -67,7 +84,11 @@ std::optional<std::vector<LUID>> hardware_adapters(Errors& errors) {
             continue;
         }
         if ((description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0) {
-            adapters.push_back(description.AdapterLuid);
+            adapters.hardware.push_back(description.AdapterLuid);
+        }
+        if (drives_desktop(*adapter.Get())) {
+            adapters.with_outputs.push_back(
+                {static_cast<std::uint32_t>(description.AdapterLuid.HighPart), description.AdapterLuid.LowPart});
         }
     }
     return adapters;
@@ -146,8 +167,7 @@ struct Enumeration {
     }
 };
 
-void enumerate(caps::Codec codec, const GUID& subtype, const std::optional<std::vector<LUID>>& adapters,
-               Enumeration& found) {
+void enumerate(caps::Codec codec, const GUID& subtype, const std::optional<Adapters>& adapters, Enumeration& found) {
     const MFT_REGISTER_TYPE_INFO output{MFMediaType_Video, subtype};
     IMFActivate** activates = nullptr;
     UINT32 count = 0;
@@ -158,7 +178,7 @@ void enumerate(caps::Codec codec, const GUID& subtype, const std::optional<std::
     if (!adapters) {
         return;
     }
-    for (const auto& luid : *adapters) {
+    for (const auto& luid : adapters->hardware) {
         ComPtr<IMFAttributes> attributes;
         result = MFCreateAttributes(&attributes, 1);
         if (SUCCEEDED(result)) {
@@ -188,7 +208,7 @@ caps::ProbeFragment run_encoder_probe(const caps::ProbeSpec& spec) {
     const auto started = std::chrono::steady_clock::now();
     const auto apartment = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     Enumeration found;
-    const auto adapters = hardware_adapters(found.errors);
+    const auto adapters = enumerate_adapters(found.errors);
     if (const auto result = MFStartup(MF_VERSION, MFSTARTUP_LITE); FAILED(result)) {
         found.errors.remember(result);
     } else {
@@ -211,7 +231,8 @@ caps::ProbeFragment run_encoder_probe(const caps::ProbeSpec& spec) {
         fragment.outcome = caps::ProbeOutcome::os_failure;
         add_issue(fragment.issues, spec.probe_id, caps::IssueCode::os_failure);
     } else {
-        fragment.encoders = translate_encoders(found.encoders, spec.probe_id, fragment.issues);
+        fragment.encoders = translate_encoders(found.encoders, adapters ? adapters->with_outputs : std::vector<NativeLuid>{},
+                                               spec.probe_id, fragment.issues);
         // A failed adapter or codec enumeration leaves encoders unlisted.
         if (found.errors.any) {
             fragment.outcome = caps::ProbeOutcome::partial;

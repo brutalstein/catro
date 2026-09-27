@@ -84,7 +84,8 @@ public:
         return facts;
     }
 
-    caps::EncoderProbeFacts encoders(const std::vector<NativeEncoder>& native) {
+    caps::EncoderProbeFacts encoders(const std::vector<NativeEncoder>& native,
+                                     const std::vector<NativeLuid>& output_adapters) {
         caps::EncoderProbeFacts facts;
         std::set<std::string> seen;
         for (const auto& encoder : native) {
@@ -93,8 +94,15 @@ public:
             if (!seen.insert(id.value).second) {
                 continue;
             }
-            for (const auto path : {kGraphicsCaptureDisplay, kGraphicsCaptureWindow, kDesktopDuplicationDisplay}) {
-                facts.transfer_paths.push_back(transfer(path, encoder, id));
+            facts.transfer_paths.push_back(transfer(kGraphicsCaptureDisplay, encoder, id));
+            facts.transfer_paths.push_back(transfer(kGraphicsCaptureWindow, encoder, id));
+            const std::set<NativeLuid> sources(output_adapters.begin(), output_adapters.end());
+            if (!encoder.hardware || !encoder.adapter || sources.empty()) {
+                facts.transfer_paths.push_back(transfer(kDesktopDuplicationDisplay, encoder, id));
+            } else {
+                for (const auto source : sources) {
+                    facts.transfer_paths.push_back(duplication(source, *encoder.adapter, id));
+                }
             }
             facts.encoders.push_back(capability(encoder, std::move(id)));
         }
@@ -365,6 +373,21 @@ private:
         return result;
     }
 
+    // The duplicated frame is a texture on the output's adapter; the encoder needs its own input
+    // surface on its adapter, so the frame is always copied at least once.
+    caps::TransferPathCapability duplication(NativeLuid source, NativeLuid encoder, const caps::EncoderId& id) {
+        return caps::TransferPathCapability{
+            .source = {std::string(kDesktopDuplicationDisplay), caps::IdentityScope::persistent},
+            .destination = id,
+            .source_gpu = gpu_id(source),
+            .destination_gpu = gpu_id(encoder),
+            .transfer = source == encoder ? caps::TransferKind::same_adapter_copy
+                                          : caps::TransferKind::cross_adapter_copy,
+            .conversions = unknown<std::vector<caps::Conversion>>(caps::IssueCode::relationship_unprovable),
+            .evidence = {caps::Support::supported, inferred()},
+        };
+    }
+
     static bool identifier(std::string_view value) {
         return !value.empty() && value.size() <= caps::kMaxIdentifierBytes &&
                std::ranges::all_of(value, [](char c) { return c > ' ' && c <= '~'; });
@@ -409,9 +432,10 @@ caps::EncoderId encoder_id(const NativeEncoder& encoder) {
     return {std::move(value), encoder.hardware ? caps::IdentityScope::os_session : caps::IdentityScope::persistent};
 }
 
-caps::EncoderProbeFacts translate_encoders(const std::vector<NativeEncoder>& encoders, std::string_view probe_id,
+caps::EncoderProbeFacts translate_encoders(const std::vector<NativeEncoder>& encoders,
+                                           const std::vector<NativeLuid>& output_adapters, std::string_view probe_id,
                                            std::vector<caps::ProbeIssue>& issues) {
-    return Translator(probe_id, issues).encoders(encoders);
+    return Translator(probe_id, issues).encoders(encoders, output_adapters);
 }
 
 caps::AudioProbeFacts translate_audio(const std::vector<NativeAudioEndpoint>& endpoints, std::string_view probe_id,
