@@ -26,6 +26,9 @@ catro_add_test(canonical_determinism capabilities/canonical_determinism_test.cpp
 target_link_libraries(catro_canonical_determinism_test PRIVATE Catro::Reporting)
 target_compile_definitions(catro_canonical_determinism_test PRIVATE CATRO_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 
+catro_add_test(community community/community_test.cpp)
+target_link_libraries(catro_community_test PRIVATE Catro::Community)
+
 catro_add_test(audio audio/audio_test.cpp)
 target_link_libraries(catro_audio_test PRIVATE Catro::Audio)
 
