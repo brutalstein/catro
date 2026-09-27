@@ -74,11 +74,11 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/bigobj /permissive- /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>NOMINMAX;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(IntDir);$(IntDir)Diagnostics;$(IntDir)Audio;$(IntDir)Server;$(IntDir)Settings;$(CatroRepoRoot)core\capabilities\include;$(CatroRepoRoot)core\audio\include;$(CatroRepoRoot)core\reporting\include;$(CatroRepoRoot)apps\diagnostics;$(CatroRepoRoot)apps\shell;$(CatroRepoRoot)platform\windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(IntDir);$(IntDir)Diagnostics;$(IntDir)Audio;$(IntDir)Server;$(IntDir)Settings;$(CatroRepoRoot)core\capabilities\include;$(CatroRepoRoot)core\audio\include;$(CatroRepoRoot)core\community\include;$(CatroRepoRoot)core\reporting\include;$(CatroRepoRoot)apps\diagnostics;$(CatroRepoRoot)apps\shell;$(CatroRepoRoot)platform\windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>$(CatroCoreRoot)\apps\shell\$(Configuration)\catro_shell.lib;$(CatroCoreRoot)\apps\diagnostics\$(Configuration)\catro_diagnostics.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_platform_windows.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_windows_translation.lib;$(CatroCoreRoot)\core\reporting\$(Configuration)\catro_reporting.lib;$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib;$(CatroCoreRoot)\core\audio\$(Configuration)\catro_audio.lib;avrt.lib;powrprof.lib;user32.lib;wtsapi32.lib;dxgi.lib;d3d11.lib;d3d12.lib;dxcore.lib;shcore.lib;mfplat.lib;mfuuid.lib;ole32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(CatroCoreRoot)\apps\shell\$(Configuration)\catro_shell.lib;$(CatroCoreRoot)\core\community\$(Configuration)\catro_community.lib;$(CatroCoreRoot)\apps\diagnostics\$(Configuration)\catro_diagnostics.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_platform_windows.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_windows_translation.lib;$(CatroCoreRoot)\core\reporting\$(Configuration)\catro_reporting.lib;$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib;$(CatroCoreRoot)\core\audio\$(Configuration)\catro_audio.lib;avrt.lib;powrprof.lib;user32.lib;wtsapi32.lib;dxgi.lib;d3d11.lib;d3d12.lib;dxcore.lib;shcore.lib;mfplat.lib;mfuuid.lib;ole32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)' == 'Debug'">
@@ -245,6 +245,7 @@
   <Target Name="EnsureCatroCore" BeforeTargets="PrepareForBuild">
     <Error Condition="!Exists('$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib')" Text="Catro core libraries were not found under $(CatroCoreRoot). Build them first with cmake --build --preset windows-debug, or pass /p:CatroCoreRoot=&lt;CMake build directory&gt;." />
     <Error Condition="!Exists('$(CatroCoreRoot)\apps\shell\$(Configuration)\catro_shell.lib')" Text="Catro shell model was not found under $(CatroCoreRoot). Build the CMake targets before the WinUI shell." />
+    <Error Condition="!Exists('$(CatroCoreRoot)\core\community\$(Configuration)\catro_community.lib')" Text="Catro community state library was not found under $(CatroCoreRoot). Build the CMake targets before the WinUI shell." />
   </Target>
   <!-- The capability service starts its probe helper from the application directory. -->
   <Target Name="CopyCatroProbeHelper" AfterTargets="Build">
