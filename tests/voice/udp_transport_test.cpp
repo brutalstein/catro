@@ -63,6 +63,22 @@ OutboundDatagram encode(VoicePipeline& sender, const PcmFrame& pcm) {
 
 } // namespace
 
+TEST_CASE("UDP transport rejects non-numeric endpoints and releases bound ports") {
+    const auto invalid = UdpPeerSocket::bind({"not-an-ip", 0});
+    REQUIRE(std::holds_alternative<UdpError>(invalid));
+    CHECK(std::get<UdpError>(invalid).code == UdpErrorCode::invalid_endpoint);
+
+    std::uint16_t port = 0;
+    {
+        auto socket = bind_loopback();
+        port = socket->local_port();
+        REQUIRE(port != 0);
+    }
+
+    const auto rebound = UdpPeerSocket::bind({"127.0.0.1", port});
+    CHECK(std::holds_alternative<std::unique_ptr<UdpPeerSocket>>(rebound));
+}
+
 TEST_CASE("connected UDP sockets exchange one bounded datagram on loopback") {
     auto first = bind_loopback();
     auto second = bind_loopback();
