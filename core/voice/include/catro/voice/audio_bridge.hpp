@@ -36,7 +36,8 @@ struct RenderBridgeStatistics {
     std::uint64_t silence_samples_rendered = 0;
     std::uint64_t underrun_callbacks = 0;
     std::uint64_t frames_enqueued = 0;
-    std::uint64_t frames_dropped = 0;
+    // Queue-full attempts. A caller may retry the same frame; actual media drops are owned by the pipeline.
+    std::uint64_t push_rejections = 0;
     std::size_t buffered_samples = 0;
     std::size_t peak_buffered_samples = 0;
 
@@ -74,7 +75,7 @@ class RenderBridge final : public audio::RenderSource {
 public:
     explicit RenderBridge(std::size_t queue_frames = kDefaultRealtimeQueueFrames);
 
-    // Voice worker only. Commits one whole 20 ms frame or drops it if the bounded queue is full.
+    // Voice worker only. Commits one whole 20 ms frame or rejects it if the bounded queue is full.
     [[nodiscard]] bool try_push(const PcmFrame& frame) noexcept;
     void on_render(std::span<float> frames) noexcept override;
 
@@ -91,7 +92,7 @@ private:
     std::atomic<std::uint64_t> silence_samples_rendered_{0};
     std::atomic<std::uint64_t> underrun_callbacks_{0};
     std::atomic<std::uint64_t> frames_enqueued_{0};
-    std::atomic<std::uint64_t> frames_dropped_{0};
+    std::atomic<std::uint64_t> push_rejections_{0};
     std::atomic<std::size_t> peak_buffered_samples_{0};
 };
 
