@@ -23,6 +23,7 @@ public:
     explicit Stream(StreamInfo info) : info_(std::move(info)) {}
     const StreamInfo& info() const noexcept override { return info_; }
     std::optional<AudioError> start() override { return std::nullopt; }
+    void request_stop() noexcept override {}
     std::uint64_t glitches() const noexcept override { return 0; }
 
 private:
