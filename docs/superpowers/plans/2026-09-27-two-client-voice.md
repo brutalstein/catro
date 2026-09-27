@@ -9,9 +9,9 @@ Every slice must remain independently buildable/testable. Do not proceed past a 
 |---|---|---|---|
 | 1 | Pin libopus; add transport-agnostic codec wrappers and voice packet v1 | PCM can round-trip through Opus and packet bytes are deterministic/strict | local green 2026-09-27 |
 | 2 | Bounded reorder/jitter buffer, sequence wrap logic, PLC/FEC decisions | deterministic simulated loss/reorder survives without unbounded memory | local green 2026-09-27 |
-| 3 | Real-time capture/render bridges and worker-owned frame queues | no codec/socket work is reachable from audio callbacks | implemented; local gate pending |
-| 4 | Portable UDP development transport and one-way `catro-voice-peer` | one local process captures/encodes/sends; another decodes/plays | localhost manual test |
-| 5 | Full-duplex peer, shutdown/restart, rich once-per-second counters | two processes on one PC/LAN can talk and diagnose loss/latency | local + LAN manual test |
+| 3 | Real-time capture/render bridges and worker-owned frame queues | no codec/socket work is reachable from audio callbacks | local green 2026-09-27 |
+| 4 | Portable UDP development transport and one-way `catro-voice-peer` | one local process captures/encodes/sends; another decodes/plays | implemented; localhost hardware gate pending |
+| 5 | Full-duplex peer, shutdown/restart, rich once-per-second counters | two processes on one PC/LAN can talk and diagnose loss/latency | implemented; localhost/LAN hardware gate pending |
 | 6 | macOS compile/interoperability gate, docs and final regression | Windows remains green; macOS build green; real Mac remains explicit manual gate | CI + real hardware when available |
 
 ### Slice 1 exact scope
@@ -49,3 +49,17 @@ Commit boundary: one green commit after local MSVC tests.
 - Opus encodes directly into the datagram payload region; the fixed header is written afterward, avoiding a second payload copy.
 - Codec, jitter, and packet methods are worker-side only. The audio callback cannot reach them through either bridge.
 - Tests cover exact SPSC semantics, bounded overload, render underrun silence, sustained two-thread ordering, sequence wrap, packet reordering, FEC, PLC, malformed input, and bounded render backpressure.
+
+
+### Slices 4-5 implementation invariants
+
+- UDP is a development-only transport with numeric IPv4, explicit bind/peer endpoints, and no encryption/authentication claims.
+- The UDP socket is connected to one peer, non-blocking, bounded, and sleeps in select; voice work does not busy-spin.
+- One worker owns encode, send, receive, jitter, decode, and playout scheduling. The only concurrent media code is the native audio callbacks through the SPSC bridges.
+- The worker drains at most four encode frames and 64 receive datagrams per iteration so either direction cannot monopolize the loop.
+- Playout is paced at 20 ms with a maximum three-tick catch-up. Larger scheduler stalls are counted and resynchronized instead of generating an unbounded PLC burst.
+- Native playback starts before capture in duplex sessions. Startup render silence is tracked separately and is not misreported as a steady-state underrun.
+- Windows disables UDP ICMP connection-reset behavior so one localhost peer may start before the other without killing the socket.
+- Socket buffers are finite, packet buffers are fixed, and a voice datagram remains below 1400 bytes.
+- Live diagnostics read audio state once per second or on failure; the 2 ms worker loop does not take the audio-session mutex.
+- Real UDP loopback tests send encoded Opus packets through the OS socket stack before jitter and decode, while the CLI parser has explicit range/repetition tests.
