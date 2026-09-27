@@ -4,6 +4,10 @@
 
 #include <ShellModel.hpp>
 
+#include <catro/community/model.hpp>
+
+#include <optional>
+
 namespace winrt::Catro::implementation {
 
 struct MainWindow : MainWindowT<MainWindow> {
@@ -23,6 +27,7 @@ private:
     Microsoft::UI::Xaml::UIElement server_page_{nullptr};
     Microsoft::UI::Xaml::UIElement diagnostics_page_{nullptr};
     Microsoft::UI::Xaml::UIElement settings_page_{nullptr};
+    std::optional<catro::community::LocalState> local_state_;
 };
 
 } // namespace winrt::Catro::implementation
