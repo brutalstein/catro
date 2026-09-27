@@ -93,7 +93,7 @@ catro-voice-peer --bind <numeric-ipv4:port> --peer <numeric-ipv4:port>
                  [--jitter 1-10] [--bitrate 12000-128000]
 ```
 
-This is an engineering harness for localhost or an explicitly selected LAN peer. It uses connected,
+This is an engineering harness for localhost or an explicitly selected private/link-local IPv4 LAN peer. Public IPv4 and wildcard bind addresses are rejected in code. It uses connected,
 non-blocking UDP and has **no encryption or authentication**. It must not be exposed to the public
 Internet. Each datagram is bounded to one Catro voice packet (maximum 1291 bytes), keeping it below
 a conservative Ethernet MTU once IP/UDP headers are included.
