@@ -269,9 +269,13 @@ std::variant<LocalState, StateError> bootstrap_personal_state(EntropySource& ent
 }
 
 std::variant<Invite, StateError> create_invite(
-    EntropySource& entropy, ServerId server_id, UserId creator_id) {
-    if (server_id.empty() || creator_id.empty()) {
+    EntropySource& entropy, const PersonalServer& server, UserId creator_id) {
+    if (server.id.empty() || server.owner_id.empty() || creator_id.empty()) {
         return StateError{StateErrorCode::invalid_identifier, "invite requires valid server and creator ids"};
+    }
+    if (creator_id != server.owner_id) {
+        return StateError{StateErrorCode::permission_denied,
+                          "only the server owner may create an invite"};
     }
 
     for (int attempt = 0; attempt < 4; ++attempt) {
@@ -280,7 +284,7 @@ std::variant<Invite, StateError> create_invite(
             return StateError{StateErrorCode::entropy_failure, "secure entropy was unavailable"};
         }
         if (!code.empty()) {
-            return Invite{.code = code, .server_id = server_id, .creator_id = creator_id};
+            return Invite{.code = code, .server_id = server.id, .creator_id = creator_id};
         }
     }
     return StateError{StateErrorCode::entropy_failure, "secure entropy produced only invalid invite codes"};
