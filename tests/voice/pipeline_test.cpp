@@ -108,6 +108,63 @@ TEST_CASE("capture to Opus packet path increments sequence and timestamp across 
     CHECK(stats.capture.frames_dequeued == 2);
 }
 
+TEST_CASE("sender packet clock advances across intentionally discarded capture backlog") {
+    auto pipeline = make_pipeline(0x12121212U, 1, 8, 100U, 10'000U);
+    double phase = 0.0;
+
+    const auto one = tone_frame(phase, 0.10F);
+    const auto two = tone_frame(phase, 0.11F);
+    const auto three = tone_frame(phase, 0.12F);
+    const auto four = tone_frame(phase, 0.13F);
+    pipeline->capture().on_captured(one);
+    pipeline->capture().on_captured(two);
+    pipeline->capture().on_captured(three);
+    pipeline->capture().on_captured(four);
+
+    OutboundDatagram datagram;
+    const auto encoded = pipeline->encode_next(datagram);
+    REQUIRE(std::holds_alternative<EncodeStep>(encoded));
+    REQUIRE(std::get<EncodeStep>(encoded) == EncodeStep::packet_ready);
+
+    const auto parsed = parse_packet(datagram.view());
+    REQUIRE(std::holds_alternative<VoicePacketView>(parsed));
+    const auto packet = std::get<VoicePacketView>(parsed);
+    CHECK(packet.sequence == 102U);
+    CHECK(packet.timestamp == 10'000U + 2U * kFrameSamples);
+    CHECK(pipeline->statistics().capture.stale_frames_discarded == 2);
+    CHECK(pipeline->statistics().capture.timeline_frames_skipped == 2);
+}
+
+TEST_CASE("capture overflow creates a packet-clock gap instead of time-compressing speech") {
+    auto pipeline = make_pipeline(0x13131313U, 1, 4, 500U, 20'000U);
+    double phase = 0.0;
+
+    for (int index = 0; index < 5; ++index) {
+        pipeline->capture().on_captured(tone_frame(phase, 0.1F));
+    }
+
+    OutboundDatagram datagram;
+    auto result = pipeline->encode_next(datagram);
+    REQUIRE(std::holds_alternative<EncodeStep>(result));
+    CHECK(std::get<EncodeStep>(result) == EncodeStep::no_frame);
+
+    pipeline->capture().on_captured(tone_frame(phase, 0.1F));
+    result = pipeline->encode_next(datagram);
+    REQUIRE(std::holds_alternative<EncodeStep>(result));
+    REQUIRE(std::get<EncodeStep>(result) == EncodeStep::packet_ready);
+
+    const auto parsed = parse_packet(datagram.view());
+    REQUIRE(std::holds_alternative<VoicePacketView>(parsed));
+    const auto packet = std::get<VoicePacketView>(parsed);
+    CHECK(packet.sequence == 505U);
+    CHECK(packet.timestamp == 20'000U + 5U * kFrameSamples);
+
+    const auto stats = pipeline->statistics().capture;
+    CHECK(stats.dropped_callbacks == 1);
+    CHECK(stats.resync_events == 1);
+    CHECK(stats.timeline_frames_skipped == 5);
+}
+
 TEST_CASE("two pipelines restore reordered datagrams and queue decoded audio") {
     auto sender = make_pipeline(0x11111111U, 1);
     auto receiver = make_pipeline(0x22222222U, 3);
