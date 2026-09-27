@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <limits>
 #include <span>
 #include <variant>
 #include <vector>
@@ -74,7 +75,9 @@ TEST_CASE("pipeline rejects an invalid local stream identity") {
 }
 
 TEST_CASE("capture to Opus packet path increments sequence and timestamp across wrap") {
-    auto pipeline = make_pipeline(0x12345678U, 1, 8, 65535U, 9'000U);
+    constexpr auto kTimestampBeforeWrap =
+        std::numeric_limits<std::uint32_t>::max() - kFrameSamples + 1U;
+    auto pipeline = make_pipeline(0x12345678U, 1, 8, 65535U, kTimestampBeforeWrap);
     double phase = 0.0;
 
     auto first = encode(*pipeline, tone_frame(phase, 0.15F));
@@ -83,14 +86,14 @@ TEST_CASE("capture to Opus packet path increments sequence and timestamp across 
     auto packet = std::get<VoicePacketView>(parsed);
     CHECK(packet.stream_id == 0x12345678U);
     CHECK(packet.sequence == 65535U);
-    CHECK(packet.timestamp == 9'000U);
+    CHECK(packet.timestamp == kTimestampBeforeWrap);
 
     auto second = encode(*pipeline, tone_frame(phase, 0.15F));
     parsed = parse_packet(second.view());
     REQUIRE(std::holds_alternative<VoicePacketView>(parsed));
     packet = std::get<VoicePacketView>(parsed);
     CHECK(packet.sequence == 0U);
-    CHECK(packet.timestamp == 9'000U + kFrameSamples);
+    CHECK(packet.timestamp == 0U);
 
     OutboundDatagram none;
     const auto empty = pipeline->encode_next(none);
