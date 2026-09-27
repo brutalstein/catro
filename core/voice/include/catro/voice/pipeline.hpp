@@ -57,6 +57,7 @@ struct VoicePipelineStatistics {
     std::uint64_t encoded_frames = 0;
     std::uint64_t encode_errors = 0;
     std::uint64_t outbound_bytes = 0;
+    std::uint64_t muted_frames = 0;
     std::uint64_t received_datagrams = 0;
     std::uint64_t malformed_datagrams = 0;
     std::uint64_t decoded_frames = 0;
@@ -80,6 +81,11 @@ public:
 
     [[nodiscard]] CaptureBridge& capture() noexcept { return capture_; }
     [[nodiscard]] RenderBridge& render() noexcept { return render_; }
+
+    void set_muted(bool value) noexcept { muted_.store(value, std::memory_order_release); }
+    [[nodiscard]] bool muted() const noexcept { return muted_.load(std::memory_order_acquire); }
+    void set_deafened(bool value) noexcept { render_.set_deafened(value); }
+    [[nodiscard]] bool deafened() const noexcept { return render_.deafened(); }
 
     [[nodiscard]] std::variant<EncodeStep, CodecError> encode_next(OutboundDatagram& datagram) noexcept;
     [[nodiscard]] ReceiveResult receive(std::span<const std::byte> datagram) noexcept;
@@ -107,6 +113,8 @@ private:
     std::atomic<std::uint64_t> encoded_frames_{0};
     std::atomic<std::uint64_t> encode_errors_{0};
     std::atomic<std::uint64_t> outbound_bytes_{0};
+    std::atomic<std::uint64_t> muted_frames_{0};
+    std::atomic_bool muted_{false};
     std::atomic<std::uint64_t> received_datagrams_{0};
     std::atomic<std::uint64_t> malformed_datagrams_{0};
     std::atomic<std::uint64_t> decoded_frames_{0};
