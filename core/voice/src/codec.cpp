@@ -155,4 +155,9 @@ std::variant<std::size_t, CodecError> Decoder::conceal(std::span<float> pcm) noe
     return static_cast<std::size_t>(decoded);
 }
 
+std::optional<CodecError> Decoder::reset() noexcept {
+    const auto result = opus_decoder_ctl(impl_->handle, OPUS_RESET_STATE);
+    return result == OPUS_OK ? std::nullopt : std::optional{opus_error(result)};
+}
+
 } // namespace catro::voice
