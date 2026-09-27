@@ -93,6 +93,11 @@ std::variant<std::size_t, CodecError> Encoder::encode(std::span<const float> pcm
     return static_cast<std::size_t>(encoded);
 }
 
+std::optional<CodecError> Encoder::reset() noexcept {
+    const auto result = opus_encoder_ctl(impl_->handle, OPUS_RESET_STATE);
+    return result == OPUS_OK ? std::nullopt : std::optional{opus_error(result)};
+}
+
 struct Decoder::Impl {
     explicit Impl(OpusDecoder* value) noexcept : handle(value) {}
     ~Impl() {
