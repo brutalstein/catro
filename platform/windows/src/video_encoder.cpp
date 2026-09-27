@@ -530,10 +530,19 @@ struct WindowsH264HardwareEncoder::Impl {
 
         source_width_ = source_description.Width;
         source_height_ = source_description.Height;
-        if (static_cast<std::uint64_t>(source_width_) * config_.height !=
-            static_cast<std::uint64_t>(source_height_) * config_.width) {
-            // Screen sharing must not stretch UI/text. The media policy chooses an aspect-matched
-            // encode size; letterbox/crop policy belongs above this primitive.
+        const auto source_scaled_height =
+            static_cast<std::uint64_t>(source_width_) * config_.height;
+        const auto source_scaled_width =
+            static_cast<std::uint64_t>(source_height_) * config_.width;
+        const auto aspect_cross_error =
+            source_scaled_height >= source_scaled_width
+                ? source_scaled_height - source_scaled_width
+                : source_scaled_width - source_scaled_height;
+        const auto one_projected_pixel_tolerance =
+            static_cast<std::uint64_t>(std::max(source_width_, source_height_));
+        if (aspect_cross_error > one_projected_pixel_tolerance) {
+            // Screen sharing must not visibly stretch UI/text. Exact-ratio sizes have zero cross
+            // error; arbitrary odd source dimensions may require one-pixel even rounding for NV12.
             return HardwareEncoderError{HardwareEncoderErrorCode::invalid_config};
         }
 
