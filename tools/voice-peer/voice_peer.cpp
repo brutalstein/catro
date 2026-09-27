@@ -177,6 +177,7 @@ void print_progress(std::ostream& out, std::int64_t elapsed_seconds,
         << " dec-err " << media.decode_errors
         << " render-q " << media.render.buffered_samples
         << " render-full " << media.render_queue_full
+        << " render-resync " << media.render.resync_events
         << " prime " << network.startup_prime_frames
         << " underrun " << media.render.underrun_callbacks
         << " glitches " << audio_stats.glitches
@@ -619,6 +620,8 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         << ", encode-errors " << final_media.encode_errors
         << ", decode-errors " << final_media.decode_errors
         << ", render-full " << final_media.render_queue_full
+        << ", render-resync " << final_media.render.resync_events
+        << ", render-stale " << final_media.render.stale_samples_discarded
         << ", startup-prime " << network.startup_prime_frames
         << ", underrun " << final_media.render.underrun_callbacks
         << ", startup-silence " << final_media.render.startup_silence_samples
