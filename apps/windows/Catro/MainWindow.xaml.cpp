@@ -9,6 +9,8 @@
 #include "Server/ServerView.xaml.h"
 #include "Settings/SettingsView.xaml.h"
 
+#include <catro/platform/windows/local_state.hpp>
+
 #include <winrt/Windows.UI.h>
 
 namespace winrt::Catro::implementation {
@@ -33,6 +35,14 @@ void MainWindow::InitializeComponent() {
     const auto scale = GetDpiForWindow(hwnd) / 96.0;
     AppWindow().Resize({static_cast<int32_t>(1280 * scale), static_cast<int32_t>(820 * scale)});
 
+    const auto local = catro::platform::windows::load_or_create_default_local_state();
+    if (const auto* state = std::get_if<catro::community::LocalState>(&local)) {
+        local_state_ = *state;
+        TitleContext().Text(to_hstring(state->personal_server.name));
+    } else {
+        TitleContext().Text(L"State unavailable");
+    }
+
     Activate(catro::app::AppDestination::server);
 }
 
@@ -52,7 +62,11 @@ xaml::UIElement MainWindow::PageFor(catro::app::AppDestination destination) {
     switch (destination) {
     case catro::app::AppDestination::server:
         if (!server_page_) {
-            server_page_ = Catro::ServerView{};
+            auto page = Catro::ServerView{};
+            if (local_state_) {
+                get_self<implementation::ServerView>(page)->SetLocalState(*local_state_);
+            }
+            server_page_ = page;
         }
         return server_page_;
     case catro::app::AppDestination::diagnostics:
@@ -74,7 +88,8 @@ void MainWindow::Activate(catro::app::AppDestination destination) {
     switch (destination) {
     case catro::app::AppDestination::server:
         (void)shell_state_.open_server();
-        TitleContext().Text(L"My Server");
+        TitleContext().Text(local_state_ ? to_hstring(local_state_->personal_server.name)
+                                        : hstring{L"State unavailable"});
         break;
     case catro::app::AppDestination::diagnostics:
         (void)shell_state_.open_diagnostics();
