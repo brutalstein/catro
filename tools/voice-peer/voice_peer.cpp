@@ -35,6 +35,7 @@ struct NetworkStatistics {
     std::uint64_t received_packets = 0;
     std::uint64_t received_bytes = 0;
     std::uint64_t oversized_packets = 0;
+    std::uint64_t peer_unreachable_events = 0;
     std::uint64_t worker_late_resyncs = 0;
 };
 
@@ -153,6 +154,7 @@ void print_progress(std::ostream& out, std::int64_t elapsed_seconds,
         << " rx " << network.received_packets << " pkts/" << network.received_bytes << " B"
         << " net-drop " << network.send_backpressure_drops
         << " oversize " << network.oversized_packets
+        << " peer-miss " << network.peer_unreachable_events
         << " malformed " << media.malformed_datagrams
         << " dup " << media.jitter.duplicates
         << " reorder " << media.jitter.reordered
@@ -377,6 +379,10 @@ int run_voice_peer(std::span<const std::string_view> arguments,
                         ++network.send_backpressure_drops;
                         continue;
                     }
+                    if (failure->code == UdpErrorCode::peer_unreachable) {
+                        ++network.peer_unreachable_events;
+                        continue;
+                    }
                     network_failure = *failure;
                     exit_code = voice_peer_network_failed;
                     break;
@@ -418,6 +424,10 @@ int run_voice_peer(std::span<const std::string_view> arguments,
                         if (failure->code == UdpErrorCode::datagram_too_large) {
                             ++network.oversized_packets;
                             continue;
+                        }
+                        if (failure->code == UdpErrorCode::peer_unreachable) {
+                            ++network.peer_unreachable_events;
+                            break;
                         }
                         network_failure = *failure;
                         exit_code = voice_peer_network_failed;
@@ -506,6 +516,7 @@ int run_voice_peer(std::span<const std::string_view> arguments,
         << ", rx " << network.received_packets
         << ", net-drop " << network.send_backpressure_drops
         << ", oversize " << network.oversized_packets
+        << ", peer-miss " << network.peer_unreachable_events
         << ", malformed " << final_media.malformed_datagrams
         << ", duplicate " << final_media.jitter.duplicates
         << ", reordered " << final_media.jitter.reordered
