@@ -36,6 +36,57 @@ TEST_CASE("capture bridge assembles arbitrary callback blocks into exact codec f
     CHECK(stats.peak_buffered_samples >= 960);
 }
 
+TEST_CASE("capture backlog trimming drops only complete oldest codec frames") {
+    CaptureBridge bridge(4);
+    PcmFrame one{};
+    PcmFrame two{};
+    PcmFrame three{};
+    PcmFrame four{};
+    std::fill(one.begin(), one.end(), 1.0F);
+    std::fill(two.begin(), two.end(), 2.0F);
+    std::fill(three.begin(), three.end(), 3.0F);
+    std::fill(four.begin(), four.end(), 4.0F);
+
+    bridge.on_captured(one);
+    bridge.on_captured(two);
+    bridge.on_captured(three);
+    bridge.on_captured(four);
+
+    CHECK(bridge.trim_backlog(2) == 2);
+    CHECK(bridge.statistics().stale_frames_discarded == 2);
+    CHECK(bridge.statistics().buffered_samples == 2U * kFrameSamples);
+
+    PcmFrame out{};
+    REQUIRE(bridge.try_pop(out));
+    CHECK(out == three);
+    REQUIRE(bridge.try_pop(out));
+    CHECK(out == four);
+    CHECK_FALSE(bridge.try_pop(out));
+}
+
+TEST_CASE("capture backlog trimming preserves partial native callback phase") {
+    CaptureBridge bridge(4);
+    PcmFrame first{};
+    PcmFrame second{};
+    std::array<float, 480> half{};
+    std::fill(first.begin(), first.end(), 1.0F);
+    std::fill(second.begin(), second.end(), 2.0F);
+    std::fill(half.begin(), half.end(), 3.0F);
+
+    bridge.on_captured(first);
+    bridge.on_captured(second);
+    bridge.on_captured(half);
+
+    CHECK(bridge.trim_backlog(1) == 1);
+    CHECK(bridge.statistics().buffered_samples == kFrameSamples + half.size());
+
+    PcmFrame out{};
+    REQUIRE(bridge.try_pop(out));
+    CHECK(out == second);
+    CHECK_FALSE(bridge.try_pop(out));
+    CHECK(bridge.statistics().buffered_samples == half.size());
+}
+
 TEST_CASE("capture overload drops whole callback blocks without corrupting queued frames") {
     CaptureBridge bridge(2);
     PcmFrame one{};
