@@ -18,6 +18,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <cctype>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -190,6 +191,33 @@ std::string utf8(std::wstring_view wide) {
     return converted == required ? output : std::string{};
 }
 
+std::string process_image_name(DWORD process_id) noexcept {
+    if (process_id == 0) {
+        return {};
+    }
+    const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, process_id);
+    if (process == nullptr) {
+        return {};
+    }
+    std::wstring path(32768, L'\0');
+    DWORD length = static_cast<DWORD>(path.size());
+    const BOOL queried = QueryFullProcessImageNameW(process, 0, path.data(), &length);
+    CloseHandle(process);
+    if (!queried || length == 0) {
+        return {};
+    }
+    path.resize(static_cast<std::size_t>(length));
+    const auto separator = path.find_last_of(L"\\/");
+    const std::wstring_view base =
+        separator == std::wstring::npos ? std::wstring_view{path}
+                                        : std::wstring_view{path}.substr(separator + 1U);
+    auto result = utf8(base);
+    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char value) {
+        return static_cast<char>(std::tolower(value));
+    });
+    return result;
+}
+
 std::variant<capture::GraphicsCaptureItem, ScreenCaptureError> capture_item_for_monitor(
     HMONITOR monitor) {
     if (monitor == nullptr) {
@@ -329,6 +357,13 @@ struct WindowsGraphicsCapture::Impl {
                 kFramePoolBuffers,
                 size);
             auto session = pool.CreateCaptureSession(item);
+            if (config.borderless) {
+                try {
+                    session.IsBorderRequired(false);
+                } catch (const winrt::hresult_error&) {
+                    // Consent/capability denial is cosmetic; capture must continue normally.
+                }
+            }
 
             reset_counters();
             adapter_luid_.store(bundle.adapter_luid, std::memory_order_relaxed);
@@ -689,6 +724,7 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
                     .kind = CaptureSourceKind::window,
                     .native_handle = reinterpret_cast<std::uintptr_t>(window),
                     .title = utf8(title),
+                    .process_name = process_image_name(process_id),
                     .width = static_cast<std::uint32_t>(width),
                     .height = static_cast<std::uint32_t>(height),
                     .primary = false,
