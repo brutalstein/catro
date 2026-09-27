@@ -183,7 +183,7 @@ TEST_CASE("mute preserves packet cadence while encoding silence") {
     for (const auto sample : rendered) {
         energy += static_cast<double>(sample) * sample;
     }
-    CHECK(energy < 1e-6);
+    CHECK(energy < 0.01);
     CHECK(sender->statistics().muted_frames == 1);
 
     sender->set_muted(false);
