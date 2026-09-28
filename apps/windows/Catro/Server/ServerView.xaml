@@ -404,12 +404,25 @@
                                                    CharacterSpacing="70"
                                                    Foreground="{ThemeResource CatroSageBrush}" />
                                     </Border>
-                                    <Button x:Name="LeaveStreamButton"
-                                            Grid.Column="2"
-                                            Content="Leave Stream"
-                                            Click="OnLeaveStream"
-                                            Padding="10,5"
-                                            Style="{StaticResource CatroSecondaryButtonStyle}" />
+                                    <StackPanel Grid.Column="2"
+                                                Orientation="Horizontal"
+                                                Spacing="6">
+                                        <Button x:Name="PopOutStreamButton"
+                                                Content="Pop Out"
+                                                Click="OnPopOutStream"
+                                                Padding="10,5"
+                                                Style="{StaticResource CatroSecondaryButtonStyle}" />
+                                        <Button x:Name="FullScreenStreamButton"
+                                                Content="Full Screen"
+                                                Click="OnFullScreenStream"
+                                                Padding="10,5"
+                                                Style="{StaticResource CatroSecondaryButtonStyle}" />
+                                        <Button x:Name="LeaveStreamButton"
+                                                Content="Leave Stream"
+                                                Click="OnLeaveStream"
+                                                Padding="10,5"
+                                                Style="{StaticResource CatroSecondaryButtonStyle}" />
+                                    </StackPanel>
                                 </Grid>
                             </Grid>
                         </Border>
