@@ -279,7 +279,7 @@ function New-CatroPinnedCppWinRTProjection([string] $MSBuildPath) {
 
     Write-Host '[catro] Generating pinned C++/WinRT platform projection'
     & $MSBuildPath $project -t:CppWinRTMakePlatformProjection `
-        "-p:Configuration=$Configuration" -p:Platform=x64 -nologo -v:m
+        "-p:Configuration=$Configuration" -p:Platform=x64 -p:CatroProjectionOnly=true -nologo -v:m
     if ($LASTEXITCODE -ne 0) {
         throw 'Pinned C++/WinRT platform projection generation failed.'
     }
