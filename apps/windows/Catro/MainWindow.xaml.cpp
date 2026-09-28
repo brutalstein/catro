@@ -19,10 +19,6 @@
 
 namespace winrt::Catro::implementation {
 
-MainWindow::MainWindow() {
-    InitializeComponent();
-}
-
 namespace {
 
 namespace xaml = Microsoft::UI::Xaml;
