@@ -1,6 +1,7 @@
 #pragma once
 
 #include <catro/platform/windows/screen_capture.hpp>
+#include <catro/room_runtime.h>
 #include <catro/transport/udp_peer_socket.hpp>
 
 #include <dxgi1_2.h>
@@ -42,6 +43,10 @@ struct ScreenShareError {
 };
 
 struct ScreenTransportConfig {
+    // Production mode uses one shared WebRTC room runtime. Null keeps the direct UDP engineering
+    // transport used by local diagnostics.
+    CatroRoomRuntimeHandle room_runtime = nullptr;
+
     transport::UdpEndpoint bind;
     transport::UdpEndpoint peer;
     std::uint8_t payload_type = 96;
@@ -54,6 +59,7 @@ struct ScreenTransportConfig {
 struct ScreenShareConfig {
     platform::windows::CaptureSource source;
     bool borderless = false;
+    CatroRoomRuntimeHandle room_runtime = nullptr;
     transport::UdpEndpoint bind;
     transport::UdpEndpoint peer;
 
