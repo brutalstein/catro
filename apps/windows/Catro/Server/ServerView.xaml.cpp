@@ -14,6 +14,7 @@
 #include <winrt/Windows.Graphics.Capture.h>
 #include <winrt/Windows.Security.Authorization.AppCapabilityAccess.h>
 
+#include <algorithm>
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -32,6 +33,38 @@ namespace {
 namespace xaml = Microsoft::UI::Xaml;
 namespace controls = Microsoft::UI::Xaml::Controls;
 using namespace std::chrono_literals;
+
+struct ViewportSize {
+    double width = 0.0;
+    double height = 0.0;
+};
+
+[[nodiscard]] ViewportSize fit_viewport(
+    std::uint32_t source_width,
+    std::uint32_t source_height,
+    double max_width,
+    double max_height) noexcept {
+    if (source_width == 0 || source_height == 0 ||
+        !std::isfinite(max_width) || !std::isfinite(max_height) ||
+        max_width <= 0.0 || max_height <= 0.0) {
+        return {};
+    }
+
+    const auto horizontal =
+        max_width / static_cast<double>(source_width);
+    const auto vertical =
+        max_height / static_cast<double>(source_height);
+    const auto scale =
+        std::min({1.0, horizontal, vertical});
+    if (!std::isfinite(scale) || scale <= 0.0) {
+        return {};
+    }
+
+    return ViewportSize{
+        std::max(2.0, static_cast<double>(source_width) * scale),
+        std::max(2.0, static_cast<double>(source_height) * scale),
+    };
+}
 
 struct Endpoint {
     std::string address;
@@ -225,8 +258,10 @@ void ServerView::InitializeComponent() {
         }
         if (screen_runtime_) {
             screen_runtime_->set_local_preview_enabled(false);
+            screen_runtime_->set_remote_viewing_enabled(false);
         }
         DetachPreviewSwapChain();
+        DetachRemoteSwapChain();
     });
 
     ShowChannel("general");
@@ -316,12 +351,35 @@ void ServerView::OnShareScreen(IInspectable const&, xaml::RoutedEventArgs const&
     BeginScreenShare();
 }
 
+void ServerView::OnWatchStream(
+    IInspectable const&, xaml::RoutedEventArgs const&) {
+    if (!screen_runtime_) {
+        return;
+    }
+    screen_runtime_->set_remote_viewing_enabled(true);
+    if (screen_timer_) {
+        screen_timer_.Start();
+    }
+    UpdateScreenShareUi();
+}
+
+void ServerView::OnLeaveStream(
+    IInspectable const&, xaml::RoutedEventArgs const&) {
+    if (!screen_runtime_) {
+        return;
+    }
+    screen_runtime_->set_remote_viewing_enabled(false);
+    DetachRemoteSwapChain();
+    UpdateScreenShareUi();
+}
+
 void ServerView::OnSizeChanged(IInspectable const&, xaml::SizeChangedEventArgs const& args) {
     const auto width = args.NewSize().Width;
     const bool show_members = width >= 920.0;
     MembersColumn().Width(xaml::GridLengthHelper::FromPixels(show_members ? 216.0 : 0.0));
     MembersPane().Visibility(show_members ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
     ChannelsColumn().Width(xaml::GridLengthHelper::FromPixels(width >= 760.0 ? 232.0 : 196.0));
+    UpdateScreenShareUi();
 }
 
 void ServerView::StartVoice() {
@@ -375,6 +433,7 @@ void ServerView::StopVoice() {
     }
     StopScreenShare();
     if (screen_runtime_) {
+        screen_runtime_->set_remote_viewing_enabled(false);
         screen_runtime_->stop();
     }
     DetachRemoteSwapChain();
@@ -778,11 +837,12 @@ void ServerView::StopScreenShare() {
     DetachPreviewSwapChain();
     SharePreviewHost().Visibility(xaml::Visibility::Collapsed);
 
-    const bool remote_active =
-        screen_runtime_ &&
-        screen_runtime_->snapshot().remote_active;
+    const auto remote =
+        screen_runtime_
+            ? screen_runtime_->snapshot()
+            : catro::screen::ScreenShareSnapshot{};
     VoiceIdentityPanel().Visibility(
-        remote_active
+        remote.remote_available || remote.remote_viewing
             ? xaml::Visibility::Collapsed
             : xaml::Visibility::Visible);
 
@@ -802,7 +862,20 @@ void ServerView::UpdateScreenShareUi() {
     const bool local_active =
         snapshot.state == catro::screen::ScreenShareState::starting ||
         snapshot.state == catro::screen::ScreenShareState::sharing;
+    const bool remote_available = snapshot.remote_available;
+    const bool remote_viewing = snapshot.remote_viewing;
     const bool remote_active = snapshot.remote_active;
+
+    const auto panel_width = VoicePanel().ActualWidth();
+    const auto panel_height = VoicePanel().ActualHeight();
+    const auto max_stream_width =
+        panel_width > 80.0
+            ? std::min(960.0, std::max(160.0, panel_width - 44.0))
+            : 720.0;
+    const auto max_stream_height =
+        panel_height > 140.0
+            ? std::min(720.0, std::max(120.0, panel_height - 120.0))
+            : 405.0;
 
     ShareScreenButton().Content(
         box_value(local_active ? hstring{L"Stop sharing"}
@@ -813,12 +886,33 @@ void ServerView::UpdateScreenShareUi() {
                                : hstring{L"Share screen"}));
 
     VoiceIdentityPanel().Visibility(
-        local_active || remote_active
+        local_active || remote_available || remote_viewing
             ? xaml::Visibility::Collapsed
             : xaml::Visibility::Visible);
 
-    if (remote_active) {
+    RemoteStreamInvite().Visibility(
+        remote_available && !remote_viewing
+            ? xaml::Visibility::Visible
+            : xaml::Visibility::Collapsed);
+
+    if (remote_viewing) {
         RemoteShareHost().Visibility(xaml::Visibility::Visible);
+
+        const auto remote_size =
+            fit_viewport(
+                snapshot.remote_width != 0
+                    ? snapshot.remote_width
+                    : 1280U,
+                snapshot.remote_height != 0
+                    ? snapshot.remote_height
+                    : 720U,
+                max_stream_width,
+                max_stream_height);
+        if (remote_size.width > 0.0 &&
+            remote_size.height > 0.0) {
+            RemoteShareViewport().Width(remote_size.width);
+            RemoteShareViewport().Height(remote_size.height);
+        }
 
         const auto remote_swap =
             screen_runtime_->remote_swap_chain();
@@ -836,7 +930,8 @@ void ServerView::UpdateScreenShareUi() {
             }
         }
 
-        if (snapshot.remote_width != 0 &&
+        if (remote_active &&
+            snapshot.remote_width != 0 &&
             snapshot.remote_height != 0) {
             std::wstring meta =
                 std::to_wstring(snapshot.remote_width);
@@ -844,8 +939,12 @@ void ServerView::UpdateScreenShareUi() {
             meta += std::to_wstring(snapshot.remote_height);
             meta += L"  ·  LIVE";
             RemoteShareMetaText().Text(hstring{meta});
+        } else if (remote_available) {
+            RemoteShareMetaText().Text(
+                L"Connecting to live stream…");
         } else {
-            RemoteShareMetaText().Text(L"LIVE");
+            RemoteShareMetaText().Text(
+                L"Waiting for stream…");
         }
     } else {
         DetachRemoteSwapChain();
@@ -888,9 +987,31 @@ void ServerView::UpdateScreenShareUi() {
             ShareMetaText().Text(L"Starting…");
         }
 
-        if (remote_active) {
-            SharePreviewHost().Width(300.0);
-            SharePreviewHost().Height(210.0);
+        const auto local_source_width =
+            snapshot.encoded_width != 0
+                ? snapshot.encoded_width
+                : (snapshot.source_width != 0
+                       ? snapshot.source_width
+                       : 1280U);
+        const auto local_source_height =
+            snapshot.encoded_height != 0
+                ? snapshot.encoded_height
+                : (snapshot.source_height != 0
+                       ? snapshot.source_height
+                       : 720U);
+
+        if (remote_viewing) {
+            const auto local_size =
+                fit_viewport(
+                    local_source_width,
+                    local_source_height,
+                    300.0,
+                    210.0);
+            if (local_size.width > 0.0 &&
+                local_size.height > 0.0) {
+                LocalShareViewport().Width(local_size.width);
+                LocalShareViewport().Height(local_size.height);
+            }
             SharePreviewHost().HorizontalAlignment(
                 xaml::HorizontalAlignment::Right);
             SharePreviewHost().VerticalAlignment(
@@ -900,14 +1021,21 @@ void ServerView::UpdateScreenShareUi() {
             Microsoft::UI::Xaml::Controls::Canvas::SetZIndex(
                 SharePreviewHost(), 10);
         } else {
-            SharePreviewHost().Width(
-                std::numeric_limits<double>::quiet_NaN());
-            SharePreviewHost().Height(
-                std::numeric_limits<double>::quiet_NaN());
+            const auto local_size =
+                fit_viewport(
+                    local_source_width,
+                    local_source_height,
+                    max_stream_width,
+                    max_stream_height);
+            if (local_size.width > 0.0 &&
+                local_size.height > 0.0) {
+                LocalShareViewport().Width(local_size.width);
+                LocalShareViewport().Height(local_size.height);
+            }
             SharePreviewHost().HorizontalAlignment(
-                xaml::HorizontalAlignment::Stretch);
+                xaml::HorizontalAlignment::Center);
             SharePreviewHost().VerticalAlignment(
-                xaml::VerticalAlignment::Stretch);
+                xaml::VerticalAlignment::Center);
             SharePreviewHost().Margin(
                 xaml::Thickness{22.0, 22.0, 22.0, 22.0});
             Microsoft::UI::Xaml::Controls::Canvas::SetZIndex(
