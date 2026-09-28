@@ -94,6 +94,11 @@ type service struct {
 func main() {
 	addr := flag.String("addr", ":8443", "listen address")
 	secret := flag.String("secret", os.Getenv("CATRO_SIGNALING_SECRET"), "HMAC secret")
+	stateFileDefault := os.Getenv("CATRO_SIGNALING_STATE")
+	if stateFileDefault == "" {
+		stateFileDefault = "catro-directory.json"
+	}
+	stateFile := flag.String("state-file", stateFileDefault, "persistent membership state file")
 	tlsCert := flag.String("tls-cert", os.Getenv("CATRO_SIGNALING_TLS_CERT"), "TLS certificate path")
 	tlsKey := flag.String("tls-key", os.Getenv("CATRO_SIGNALING_TLS_KEY"), "TLS private key path")
 	maxRoom := flag.Int("max-room-peers", defaultMaxRoom, "maximum peers per voice room")
@@ -132,6 +137,11 @@ func main() {
 		log.Fatal("TLS certificate/key required unless --allow-insecure-http is explicitly set")
 	}
 
+	directory, err := openDirectory(*stateFile, []byte(*secret))
+	if err != nil {
+		log.Fatalf("directory: %v", err)
+	}
+
 	s := &service{
 		secret: []byte(*secret), maxRoomPeers: *maxRoom,
 		allowedOrigin: *origin, rooms: make(map[string]*room),
@@ -140,6 +150,12 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.health)
 	mux.HandleFunc("/metrics", s.metrics)
+	mux.HandleFunc("/v1/users/register", directory.handleRegister)
+	mux.HandleFunc("/v1/servers/sync", directory.handleServerSync)
+	mux.HandleFunc("/v1/servers", directory.handleServers)
+	mux.HandleFunc("/v1/invites", directory.handleInvites)
+	mux.HandleFunc("/v1/invites/accept", directory.handleInviteAccept)
+	mux.HandleFunc("/v1/rtc-token", directory.handleRTCToken)
 	mux.HandleFunc("/v1/rtc", s.websocket)
 
 	httpServer := &http.Server{
