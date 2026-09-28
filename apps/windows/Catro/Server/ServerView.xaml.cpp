@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -89,6 +90,105 @@ std::optional<std::string> environment(char const* name) {
     }
     value.resize(static_cast<std::size_t>(written));
     return value;
+}
+
+struct ProductionRoomSettings {
+    std::string signaling_url;
+    std::string access_token;
+    std::string server_id;
+    std::string channel_id;
+    std::string user_id;
+    std::vector<std::string> ice_servers;
+    bool allow_insecure_signaling = false;
+    bool allow_no_turn = false;
+};
+
+[[nodiscard]] std::vector<std::string> split_ice_servers(
+    std::string_view value) {
+    std::vector<std::string> result;
+    std::size_t begin = 0;
+    while (begin < value.size()) {
+        auto end = value.find_first_of(";,", begin);
+        if (end == std::string_view::npos) {
+            end = value.size();
+        }
+        auto item = value.substr(begin, end - begin);
+        while (!item.empty() &&
+               (item.front() == ' ' || item.front() == '\t')) {
+            item.remove_prefix(1);
+        }
+        while (!item.empty() &&
+               (item.back() == ' ' || item.back() == '\t')) {
+            item.remove_suffix(1);
+        }
+        if (!item.empty()) {
+            result.emplace_back(item);
+        }
+        begin = end + 1;
+    }
+    return result;
+}
+
+[[nodiscard]] std::optional<ProductionRoomSettings>
+production_room_settings(
+    const std::optional<catro::community::LocalState>& local_state) {
+    const auto signaling =
+        environment("CATRO_SIGNALING_URL");
+    const auto token =
+        environment("CATRO_ROOM_TOKEN");
+    const auto ice =
+        environment("CATRO_ICE_SERVERS");
+
+    // No signaling URL means engineering direct-peer mode. Once production RTC is configured,
+    // fail closed on incomplete credentials rather than silently falling back to localhost UDP.
+    if (!signaling) {
+        return std::nullopt;
+    }
+    if (!token || !ice || !local_state) {
+        return ProductionRoomSettings{
+            .signaling_url = *signaling,
+        };
+    }
+
+    ProductionRoomSettings result;
+    result.signaling_url = *signaling;
+    result.access_token = *token;
+    result.ice_servers =
+        split_ice_servers(*ice);
+    result.allow_insecure_signaling =
+        environment("CATRO_ALLOW_INSECURE_RTC")
+            .value_or("") == "1";
+    result.allow_no_turn =
+        environment("CATRO_ALLOW_NO_TURN")
+            .value_or("") == "1";
+
+    result.server_id =
+        environment("CATRO_SERVER_ID")
+            .value_or(
+                catro::community::to_hex(
+                    local_state->personal_server.id));
+    result.user_id =
+        environment("CATRO_USER_ID")
+            .value_or(
+                catro::community::to_hex(
+                    local_state->identity.id));
+
+    if (const auto override_channel =
+            environment("CATRO_VOICE_CHANNEL_ID")) {
+        result.channel_id = *override_channel;
+    } else {
+        for (const auto& channel :
+             local_state->personal_server.channels) {
+            if (channel.kind ==
+                catro::community::ChannelKind::voice) {
+                result.channel_id =
+                    catro::community::to_hex(
+                        channel.id);
+                break;
+            }
+        }
+    }
+    return result;
 }
 
 std::optional<Endpoint> parse_endpoint(std::string_view value) {
@@ -217,10 +317,15 @@ ServerView::~ServerView() {
         catro_voice_runtime_destroy(voice_runtime_);
         voice_runtime_ = nullptr;
     }
+    if (room_runtime_ != nullptr) {
+        catro_room_runtime_destroy(room_runtime_);
+        room_runtime_ = nullptr;
+    }
 }
 
 void ServerView::InitializeComponent() {
     ServerViewT<ServerView>::InitializeComponent();
+    room_runtime_ = catro_room_runtime_create();
     voice_runtime_ = catro_voice_runtime_create();
     screen_runtime_ =
         std::make_unique<catro::screen::WindowsScreenShareRuntime>();
