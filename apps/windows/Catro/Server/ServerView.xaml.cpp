@@ -513,39 +513,155 @@ void ServerView::StartVoice() {
     const auto direct = direct_voice_config();
     const auto input = environment("CATRO_VOICE_INPUT");
     const auto output = environment("CATRO_VOICE_OUTPUT");
+
+    room_mode_active_ = false;
+    if (room_runtime_ != nullptr) {
+        catro_room_runtime_stop(room_runtime_);
+    }
+
+    const auto production =
+        production_room_settings(local_state_);
+    if (production) {
+        if (room_runtime_ == nullptr ||
+            production->access_token.empty() ||
+            production->server_id.empty() ||
+            production->channel_id.empty() ||
+            production->user_id.empty() ||
+            production->ice_servers.empty()) {
+            VoiceStateText().Text(
+                L"RTC configuration is incomplete");
+            controls::ToolTipService::SetToolTip(
+                VoiceStateText(),
+                box_value(hstring{
+                    L"CATRO_SIGNALING_URL, CATRO_ROOM_TOKEN and CATRO_ICE_SERVERS "
+                    L"must be configured for production room voice."}));
+            return;
+        }
+
+        std::vector<const char*> ice_urls;
+        ice_urls.reserve(
+            production->ice_servers.size());
+        for (const auto& url :
+             production->ice_servers) {
+            ice_urls.push_back(url.c_str());
+        }
+
+        const CatroRoomRuntimeConfig room_config{
+            .signaling_url =
+                production->signaling_url.c_str(),
+            .access_token =
+                production->access_token.c_str(),
+            .server_id =
+                production->server_id.c_str(),
+            .channel_id =
+                production->channel_id.c_str(),
+            .user_id =
+                production->user_id.c_str(),
+            .ice_server_urls = ice_urls.data(),
+            .ice_server_count = ice_urls.size(),
+            .allow_insecure_signaling =
+                production->allow_insecure_signaling
+                    ? 1U
+                    : 0U,
+            .allow_no_turn =
+                production->allow_no_turn
+                    ? 1U
+                    : 0U,
+        };
+
+        if (catro_room_runtime_start(
+                room_runtime_,
+                &room_config) != 0) {
+            const auto room =
+                catro_room_runtime_snapshot(
+                    room_runtime_);
+            VoiceStateText().Text(L"Room connection error");
+            if (room.error[0] != '\0') {
+                controls::ToolTipService::SetToolTip(
+                    VoiceStateText(),
+                    box_value(
+                        to_hstring(
+                            std::string{room.error})));
+            }
+            return;
+        }
+        room_mode_active_ = true;
+    }
+
     const CatroVoiceRuntimeConfig config{
-        .bind_address = direct.bind.address.c_str(),
-        .bind_port = direct.bind.port,
-        .peer_address = direct.peer.address.c_str(),
-        .peer_port = direct.peer.port,
+        .room_runtime =
+            room_mode_active_
+                ? room_runtime_
+                : nullptr,
+        .bind_address =
+            room_mode_active_
+                ? nullptr
+                : direct.bind.address.c_str(),
+        .bind_port =
+            room_mode_active_
+                ? 0
+                : direct.bind.port,
+        .peer_address =
+            room_mode_active_
+                ? nullptr
+                : direct.peer.address.c_str(),
+        .peer_port =
+            room_mode_active_
+                ? 0
+                : direct.peer.port,
         .stream_id = LocalStreamId(),
         .jitter_packets = 3,
         .bitrate = 48'000,
-        .input_endpoint = input ? input->c_str() : nullptr,
-        .output_endpoint = output ? output->c_str() : nullptr,
+        .input_endpoint =
+            input ? input->c_str() : nullptr,
+        .output_endpoint =
+            output ? output->c_str() : nullptr,
     };
 
     muted_ = false;
     deafened_ = false;
-    if (catro_voice_runtime_start(voice_runtime_, &config) == 0) {
+    if (catro_voice_runtime_start(
+            voice_runtime_, &config) == 0) {
         voice_timer_.Start();
 
         if (screen_runtime_) {
-            const auto video = direct_video_config();
-            const catro::screen::ScreenTransportConfig transport{
-                .bind = video.bind,
-                .peer = video.peer,
-            };
+            const auto video =
+                direct_video_config();
+            const catro::screen::ScreenTransportConfig
+                transport{
+                    .room_runtime =
+                        room_mode_active_
+                            ? room_runtime_
+                            : nullptr,
+                    .bind =
+                        room_mode_active_
+                            ? catro::transport::
+                                  UdpEndpoint{}
+                            : video.bind,
+                    .peer =
+                        room_mode_active_
+                            ? catro::transport::
+                                  UdpEndpoint{}
+                            : video.peer,
+                };
             if (const auto failure =
-                    screen_runtime_->start_listening(transport)) {
+                    screen_runtime_->start_listening(
+                        transport)) {
                 controls::ToolTipService::SetToolTip(
                     ShareScreenButton(),
-                    box_value(to_hstring(failure->message)));
+                    box_value(
+                        to_hstring(
+                            failure->message)));
             } else {
                 screen_timer_.Start();
             }
         }
+    } else if (room_mode_active_ &&
+               room_runtime_ != nullptr) {
+        catro_room_runtime_stop(room_runtime_);
+        room_mode_active_ = false;
     }
+
     UpdateVoiceUi();
     UpdateScreenShareUi();
 }
@@ -567,6 +683,10 @@ void ServerView::StopVoice() {
         screen_timer_.Stop();
     }
     catro_voice_runtime_stop(voice_runtime_);
+    if (room_runtime_ != nullptr) {
+        catro_room_runtime_stop(room_runtime_);
+    }
+    room_mode_active_ = false;
     muted_ = false;
     deafened_ = false;
     if (voice_timer_) {
