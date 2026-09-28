@@ -29,9 +29,10 @@ struct VoiceWorkerPriority::Impl {
 #elif defined(__APPLE__)
     qos_class_t previous = QOS_CLASS_DEFAULT;
     int previous_relative = 0;
+    bool previous_valid = false;
 
     ~Impl() {
-        if (active) {
+        if (active && previous_valid) {
             (void)pthread_set_qos_class_self_np(previous, previous_relative);
         }
     }
@@ -54,7 +55,11 @@ VoiceWorkerPriority::VoiceWorkerPriority() noexcept
         impl_->active = true;
     }
 #elif defined(__APPLE__)
-    impl_->previous = pthread_get_qos_class_np(pthread_self(), &impl_->previous_relative);
+    impl_->previous_valid =
+        pthread_get_qos_class_np(
+            pthread_self(),
+            &impl_->previous,
+            &impl_->previous_relative) == 0;
     if (pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0) == 0) {
         impl_->active = true;
     }
