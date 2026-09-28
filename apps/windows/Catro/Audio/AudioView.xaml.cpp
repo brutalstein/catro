@@ -9,6 +9,11 @@
 #include <chrono>
 
 namespace winrt::Catro::implementation {
+
+AudioView::AudioView() {
+    InitializeComponent();
+}
+
 namespace {
 
 namespace xaml = Microsoft::UI::Xaml;
