@@ -180,6 +180,14 @@ struct DecoderDevice {
     return SUCCEEDED(codec.SetValue(&key, &setting));
 }
 
+[[nodiscard]] bool set_codec_uint32(
+    ICodecAPI& codec, const GUID& key, std::uint32_t value) noexcept {
+    VARIANT setting{};
+    setting.vt = VT_UI4;
+    setting.ulVal = value;
+    return SUCCEEDED(codec.SetValue(&key, &setting));
+}
+
 struct ActivationArray {
     IMFActivate** data = nullptr;
     UINT32 count = 0;
@@ -388,17 +396,29 @@ struct WindowsH264D3D11Decoder::Impl {
 
         stats_.low_latency_requested = true;
         stats_.hardware_acceleration_requested = true;
+
+        // Microsoft documents two low-latency control surfaces for MFTs. The transform attribute
+        // uses UINT32, and the inbox H.264 decoder is a special case that also expects VT_UI4
+        // through ICodecAPI (unlike the encoder and most codecs, which use VT_BOOL). Supplying
+        // VT_BOOL here silently leaves the decoder in its normal buffered playback mode on current
+        // Windows builds, which manifests as a fixed multi-frame decode backlog.
+        const bool low_latency_attribute_applied =
+            SUCCEEDED(attributes->SetUINT32(MF_LOW_LATENCY, TRUE));
+        bool low_latency_codec_applied = false;
         if (ComPtr<ICodecAPI> codec;
             SUCCEEDED(transform_.As(&codec)) && codec) {
-            stats_.low_latency_applied =
-                set_codec_bool(
-                    *codec.Get(), CODECAPI_AVLowLatencyMode, true);
+            low_latency_codec_applied =
+                set_codec_uint32(
+                    *codec.Get(), CODECAPI_AVLowLatencyMode, 1U);
             stats_.hardware_acceleration_applied =
                 set_codec_bool(
                     *codec.Get(),
                     CODECAPI_AVDecVideoAcceleration_H264,
                     true);
         }
+        stats_.low_latency_applied =
+            low_latency_attribute_applied ||
+            low_latency_codec_applied;
 
         UINT reset_token = 0;
         result = MFCreateDXGIDeviceManager(
