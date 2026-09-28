@@ -584,7 +584,8 @@ struct WindowsScreenShareRuntime::Impl {
                 "invalid screen transport configuration"};
         }
 
-        if (socket_ &&
+        if ((socket_ ||
+             config.room_runtime != nullptr) &&
             receiver_worker_.joinable() &&
             !stop_requested_.load(std::memory_order_acquire) &&
             transport_config_ &&
