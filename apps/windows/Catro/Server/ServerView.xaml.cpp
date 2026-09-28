@@ -14,6 +14,7 @@
 #include <winrt/Windows.Graphics.Capture.h>
 #include <winrt/Windows.Security.Authorization.AppCapabilityAccess.h>
 #include <winrt/Windows.UI.h>
+#include <winrt/Windows.UI.Text.h>
 
 #include <algorithm>
 #include <charconv>
