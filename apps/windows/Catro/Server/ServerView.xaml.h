@@ -5,6 +5,7 @@
 #include <ShellModel.hpp>
 
 #include <catro/community/model.hpp>
+#include <catro/room_runtime.h>
 #include <catro/screen_runtime.hpp>
 #include <catro/voice_runtime.h>
 
@@ -49,6 +50,7 @@ private:
 
     catro::app::ShellState state_;
     std::optional<catro::community::LocalState> local_state_;
+    CatroRoomRuntimeHandle room_runtime_ = nullptr;
     CatroVoiceRuntimeHandle voice_runtime_ = nullptr;
     Microsoft::UI::Dispatching::DispatcherQueueTimer voice_timer_{nullptr};
     std::unique_ptr<catro::screen::WindowsScreenShareRuntime> screen_runtime_;
@@ -64,8 +66,8 @@ private:
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> stream_window_swap_chain_;
     bool stream_window_fullscreen_ = false;
 
+    bool room_mode_active_ = false;
     bool share_dialog_open_ = false;
-    bool stream_fullscreen_ = false;
     bool muted_ = false;
     bool deafened_ = false;
 };
