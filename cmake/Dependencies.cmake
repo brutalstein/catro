@@ -89,7 +89,10 @@ if(WIN32 AND MSVC)
         set(USE_NICE OFF CACHE BOOL "" FORCE)
         set(PREFER_SYSTEM_LIB OFF CACHE BOOL "" FORCE)
         set(NO_WEBSOCKET OFF CACHE BOOL "" FORCE)
-        set(NO_MEDIA OFF CACHE BOOL "" FORCE)
+        # Catro transports its own bounded Opus/H.264 datagrams over WebRTC DataChannels. It does
+        # not use libdatachannel media Tracks/SRTP, so compiling that layer only adds libsrtp and a
+        # second crypto-discovery path without providing any runtime capability.
+        set(NO_MEDIA ON CACHE BOOL "" FORCE)
         set(NO_EXAMPLES ON CACHE BOOL "" FORCE)
         set(NO_TESTS ON CACHE BOOL "" FORCE)
         set(WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
