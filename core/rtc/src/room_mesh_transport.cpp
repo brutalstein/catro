@@ -27,6 +27,8 @@ constexpr std::size_t kMaximumMediaDatagram = 2048;
 constexpr std::size_t kMaximumSignalMessage = 64U * 1024U;
 constexpr std::string_view kVoiceLabel = "catro.voice.v1";
 constexpr std::string_view kVideoLabel = "catro.video.v1";
+constexpr std::string_view kStreamAudioLabel =
+    "catro.stream-audio.v1";
 
 [[nodiscard]] bool starts_with(
     std::string_view value,
@@ -86,6 +88,7 @@ struct RoomMeshTransport::Impl {
         std::shared_ptr<::rtc::PeerConnection> connection;
         std::shared_ptr<::rtc::DataChannel> voice;
         std::shared_ptr<::rtc::DataChannel> video;
+        std::shared_ptr<::rtc::DataChannel> stream_audio;
     };
 
     [[nodiscard]] std::optional<RoomTransportError> start(
@@ -230,6 +233,11 @@ struct RoomMeshTransport::Impl {
         return broadcast(kVideoLabel, datagram);
     }
 
+    [[nodiscard]] std::size_t send_stream_audio(
+        std::span<const std::byte> datagram) noexcept {
+        return broadcast(kStreamAudioLabel, datagram);
+    }
+
     [[nodiscard]] std::size_t broadcast(
         std::string_view label,
         std::span<const std::byte> datagram) noexcept {
@@ -251,7 +259,9 @@ struct RoomMeshTransport::Impl {
                 const auto channel =
                     label == kVoiceLabel
                         ? peer->voice
-                        : peer->video;
+                        : (label == kVideoLabel
+                               ? peer->video
+                               : peer->stream_audio);
                 if (channel && channel->isOpen()) {
                     channels.push_back(channel);
                 }
@@ -397,6 +407,11 @@ struct RoomMeshTransport::Impl {
                 connection->createDataChannel(
                     std::string{kVideoLabel},
                     channel_config));
+            bind_channel(
+                peer,
+                connection->createDataChannel(
+                    std::string{kStreamAudioLabel},
+                    channel_config));
         }
 
         {
@@ -440,7 +455,8 @@ struct RoomMeshTransport::Impl {
 
         const auto label = channel->label();
         if (label != kVoiceLabel &&
-            label != kVideoLabel) {
+            label != kVideoLabel &&
+            label != kStreamAudioLabel) {
             channel->close();
             return;
         }
@@ -449,12 +465,15 @@ struct RoomMeshTransport::Impl {
             std::scoped_lock lock(mutex_);
             if (label == kVoiceLabel) {
                 peer->voice = channel;
-            } else {
+            } else if (label == kVideoLabel) {
                 peer->video = channel;
+            } else {
+                peer->stream_audio = channel;
             }
         }
 
         const bool voice = label == kVoiceLabel;
+        const bool video = label == kVideoLabel;
         const auto peer_id = peer->id;
         channel->onMessage(
             [this, peer_id, voice](
@@ -483,9 +502,14 @@ struct RoomMeshTransport::Impl {
                         callbacks.on_voice_datagram(
                             peer_id, bytes);
                     } else if (
-                        !voice &&
+                        video &&
                         callbacks.on_video_datagram) {
                         callbacks.on_video_datagram(
+                            peer_id, bytes);
+                    } else if (
+                        !voice && !video &&
+                        callbacks.on_stream_audio_datagram) {
+                        callbacks.on_stream_audio_datagram(
                             peer_id, bytes);
                     }
                 } catch (...) {
@@ -702,6 +726,10 @@ struct RoomMeshTransport::Impl {
                 peer->video->resetCallbacks();
                 peer->video->close();
             }
+            if (peer->stream_audio) {
+                peer->stream_audio->resetCallbacks();
+                peer->stream_audio->close();
+            }
             if (peer->connection) {
                 peer->connection->resetCallbacks();
                 peer->connection->close();
@@ -804,6 +832,11 @@ std::size_t RoomMeshTransport::send_voice(
 std::size_t RoomMeshTransport::send_video(
     std::span<const std::byte> datagram) noexcept {
     return impl_->send_video(datagram);
+}
+
+std::size_t RoomMeshTransport::send_stream_audio(
+    std::span<const std::byte> datagram) noexcept {
+    return impl_->send_stream_audio(datagram);
 }
 
 RoomTransportState RoomMeshTransport::state()
