@@ -268,7 +268,7 @@ function Resolve-CatroMSBuild {
 
 function New-CatroPinnedCppWinRTProjection([string] $MSBuildPath) {
     $solution = Join-Path $root 'apps\windows\Catro.sln'
-    $project = Join-Path $root 'apps\windows\Catro\Catro.vcxproj'
+    $packagesConfig = Join-Path $root 'apps\windows\Catro\packages.config'
 
     Write-Host '[catro] Restoring pinned Windows packages'
     & $MSBuildPath $solution -t:Restore -p:RestorePackagesConfig=true `
@@ -277,14 +277,32 @@ function New-CatroPinnedCppWinRTProjection([string] $MSBuildPath) {
         throw 'NuGet restore for the pinned C++/WinRT projection failed.'
     }
 
-    Write-Host '[catro] Generating pinned C++/WinRT platform projection'
-    & $MSBuildPath $project -t:CppWinRTMakePlatformProjection `
-        "-p:Configuration=$Configuration" -p:Platform=x64 -p:CatroProjectionOnly=true -nologo -v:m
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Pinned C++/WinRT platform projection generation failed.'
+    [xml] $packageXml = Get-Content -Raw $packagesConfig
+    $cppwinrtPackage = $packageXml.packages.package |
+        Where-Object { $_.id -eq 'Microsoft.Windows.CppWinRT' } |
+        Select-Object -First 1
+    if (-not $cppwinrtPackage -or -not $cppwinrtPackage.version) {
+        throw 'Microsoft.Windows.CppWinRT is not pinned in packages.config.'
     }
 
-    $generated = Join-Path $root "out\apps\windows\obj\x64\$Configuration\Generated Files"
+    $cppwinrtExe = Join-Path $root (
+        "apps\windows\packages\Microsoft.Windows.CppWinRT.$($cppwinrtPackage.version)\bin\cppwinrt.exe")
+    if (-not (Test-Path $cppwinrtExe)) {
+        throw "Pinned cppwinrt.exe not found after restore: $cppwinrtExe"
+    }
+
+    $generated = Join-Path $root "out\build\cppwinrt-pinned\$Configuration"
+    if (Test-Path $generated) {
+        Remove-Item -Recurse -Force $generated
+    }
+    New-Item -ItemType Directory -Force -Path $generated | Out-Null
+
+    Write-Host "[catro] Generating C++/WinRT $($cppwinrtPackage.version) platform projection"
+    & $cppwinrtExe -input sdk+ -output $generated
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Pinned cppwinrt.exe platform projection generation failed.'
+    }
+
     $baseHeader = Join-Path $generated 'winrt\base.h'
     if (-not (Test-Path $baseHeader)) {
         throw "Pinned C++/WinRT projection missing expected header: $baseHeader"
