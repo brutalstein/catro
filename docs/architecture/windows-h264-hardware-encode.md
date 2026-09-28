@@ -67,9 +67,11 @@ than assumed.
 
 `catro-encode-check` joins the validated WGC capture path to the encoder.
 
+Width/height CLI values are encode ceilings, not forced dimensions. The diagnostic uses the same constant-time integer fitting policy as the product runtime: it never upscales, preserves source aspect ratio, and rounds only to legal even NV12 dimensions.
+
 Defaults:
 
-- 1728x1080;
+- 1728x1080 ceiling;
 - 30 fps;
 - 6 Mbit/s;
 - H.264 Main;
