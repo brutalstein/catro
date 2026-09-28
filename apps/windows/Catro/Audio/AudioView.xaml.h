@@ -13,7 +13,7 @@ namespace winrt::Catro::implementation {
 // The audio test page: pick devices, run a meter, tone, or monitor session, and watch its
 // statistics. Devices stay closed unless a session runs; leaving the page stops the session.
 struct AudioView : AudioViewT<AudioView> {
-    AudioView();
+    AudioView() = default;
 
     void InitializeComponent();
 
