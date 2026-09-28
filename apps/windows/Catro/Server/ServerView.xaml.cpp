@@ -92,105 +92,6 @@ std::optional<std::string> environment(char const* name) {
     return value;
 }
 
-struct ProductionRoomSettings {
-    std::string signaling_url;
-    std::string access_token;
-    std::string server_id;
-    std::string channel_id;
-    std::string user_id;
-    std::vector<std::string> ice_servers;
-    bool allow_insecure_signaling = false;
-    bool allow_no_turn = false;
-};
-
-[[nodiscard]] std::vector<std::string> split_ice_servers(
-    std::string_view value) {
-    std::vector<std::string> result;
-    std::size_t begin = 0;
-    while (begin < value.size()) {
-        auto end = value.find_first_of(";,", begin);
-        if (end == std::string_view::npos) {
-            end = value.size();
-        }
-        auto item = value.substr(begin, end - begin);
-        while (!item.empty() &&
-               (item.front() == ' ' || item.front() == '\t')) {
-            item.remove_prefix(1);
-        }
-        while (!item.empty() &&
-               (item.back() == ' ' || item.back() == '\t')) {
-            item.remove_suffix(1);
-        }
-        if (!item.empty()) {
-            result.emplace_back(item);
-        }
-        begin = end + 1;
-    }
-    return result;
-}
-
-[[nodiscard]] std::optional<ProductionRoomSettings>
-production_room_settings(
-    const std::optional<catro::community::LocalState>& local_state) {
-    const auto signaling =
-        environment("CATRO_SIGNALING_URL");
-    const auto token =
-        environment("CATRO_ROOM_TOKEN");
-    const auto ice =
-        environment("CATRO_ICE_SERVERS");
-
-    // No signaling URL means engineering direct-peer mode. Once production RTC is configured,
-    // fail closed on incomplete credentials rather than silently falling back to localhost UDP.
-    if (!signaling) {
-        return std::nullopt;
-    }
-    if (!token || !ice || !local_state) {
-        return ProductionRoomSettings{
-            .signaling_url = *signaling,
-        };
-    }
-
-    ProductionRoomSettings result;
-    result.signaling_url = *signaling;
-    result.access_token = *token;
-    result.ice_servers =
-        split_ice_servers(*ice);
-    result.allow_insecure_signaling =
-        environment("CATRO_ALLOW_INSECURE_RTC")
-            .value_or("") == "1";
-    result.allow_no_turn =
-        environment("CATRO_ALLOW_NO_TURN")
-            .value_or("") == "1";
-
-    result.server_id =
-        environment("CATRO_SERVER_ID")
-            .value_or(
-                catro::community::to_hex(
-                    local_state->personal_server.id));
-    result.user_id =
-        environment("CATRO_USER_ID")
-            .value_or(
-                catro::community::to_hex(
-                    local_state->identity.id));
-
-    if (const auto override_channel =
-            environment("CATRO_VOICE_CHANNEL_ID")) {
-        result.channel_id = *override_channel;
-    } else {
-        for (const auto& channel :
-             local_state->personal_server.channels) {
-            if (channel.kind ==
-                catro::community::ChannelKind::voice) {
-                result.channel_id =
-                    catro::community::to_hex(
-                        channel.id);
-                break;
-            }
-        }
-    }
-    return result;
-}
-
 std::optional<Endpoint> parse_endpoint(std::string_view value) {
     const auto separator = value.rfind(':');
     if (separator == std::string_view::npos || separator == 0 || separator + 1 >= value.size()) {
@@ -416,16 +317,31 @@ void ServerView::OnVoiceChannel(IInspectable const&, xaml::RoutedEventArgs const
     ShowChannel("voice");
 }
 
-void ServerView::OnJoinVoice(IInspectable const&, xaml::RoutedEventArgs const&) {
-    if (voice_runtime_ == nullptr) {
+void ServerView::OnJoinVoice(
+    IInspectable const&,
+    xaml::RoutedEventArgs const&) {
+    if (voice_runtime_ == nullptr ||
+        voice_join_pending_) {
         return;
     }
-    const auto snapshot = catro_voice_runtime_snapshot(voice_runtime_);
-    if (snapshot.state == CATRO_VOICE_STARTING || snapshot.state == CATRO_VOICE_JOINED) {
+    const auto snapshot =
+        catro_voice_runtime_snapshot(
+            voice_runtime_);
+    if (snapshot.state ==
+            CATRO_VOICE_STARTING ||
+        snapshot.state ==
+            CATRO_VOICE_JOINED ||
+        room_mode_active_) {
         StopVoice();
     } else {
-        StartVoice();
+        BeginVoiceJoin();
     }
+}
+
+void ServerView::OnInvite(
+    IInspectable const&,
+    xaml::RoutedEventArgs const&) {
+    BeginInvite();
 }
 
 void ServerView::OnMuteVoice(IInspectable const&, xaml::RoutedEventArgs const&) {
@@ -505,69 +421,335 @@ void ServerView::OnSizeChanged(IInspectable const&, xaml::SizeChangedEventArgs c
     UpdateScreenShareUi();
 }
 
-void ServerView::StartVoice() {
+winrt::fire_and_forget
+ServerView::BeginVoiceJoin() {
+    auto lifetime = get_strong();
+    if (voice_join_pending_ ||
+        voice_runtime_ == nullptr) {
+        co_return;
+    }
+
+    if (!directory_service_ ||
+        directory_access_token_.empty() ||
+        !directory_server_) {
+        // Deliberate engineering fallback. Packaged production builds receive a directory session
+        // from MainWindow; local two-instance diagnostics can still exercise the direct UDP path.
+        StartVoice(std::nullopt);
+        co_return;
+    }
+
+    voice_join_pending_ = true;
+    UpdateVoiceUi();
+    VoiceStateText().Text(
+        L"Authorizing room…");
+
+    const auto service =
+        *directory_service_;
+    const auto access_token =
+        directory_access_token_;
+    const auto server =
+        *directory_server_;
+    const auto queue = DispatcherQueue();
+
+    co_await winrt::resume_background();
+
+    const auto result =
+        catro::platform::windows::
+            request_rtc_provisioning(
+                service,
+                access_token,
+                server.id,
+                server.voice_channel_id);
+
+    if (const auto* failure =
+            std::get_if<
+                catro::platform::windows::
+                    DirectoryError>(&result)) {
+        const auto message =
+            failure->message;
+        (void)queue.TryEnqueue(
+            [lifetime, message] {
+                lifetime->
+                    voice_join_pending_ =
+                    false;
+                lifetime->
+                    VoiceStateText().Text(
+                        L"Room authorization failed");
+                controls::ToolTipService::
+                    SetToolTip(
+                        lifetime->
+                            VoiceStateText(),
+                        box_value(
+                            to_hstring(message)));
+                lifetime->
+                    UpdateVoiceUi();
+            });
+        co_return;
+    }
+
+    auto provisioning =
+        std::get<
+            catro::platform::windows::
+                RtcProvisioning>(result);
+    (void)queue.TryEnqueue(
+        [lifetime,
+         provisioning =
+             std::move(provisioning)]() mutable {
+            lifetime->
+                voice_join_pending_ =
+                false;
+            lifetime->StartVoice(
+                std::move(provisioning));
+        });
+}
+
+winrt::fire_and_forget
+ServerView::BeginInvite() {
+    auto lifetime = get_strong();
+    if (invite_pending_ ||
+        !directory_service_ ||
+        directory_access_token_.empty() ||
+        !directory_server_ ||
+        directory_server_->role != "owner") {
+        co_return;
+    }
+
+    invite_pending_ = true;
+    InviteButton().IsEnabled(false);
+
+    const auto service =
+        *directory_service_;
+    const auto access_token =
+        directory_access_token_;
+    const auto server_id =
+        directory_server_->id;
+    const auto queue = DispatcherQueue();
+
+    co_await winrt::resume_background();
+
+    const auto result =
+        catro::platform::windows::
+            create_directory_invite(
+                service,
+                access_token,
+                server_id);
+
+    if (const auto* failure =
+            std::get_if<
+                catro::platform::windows::
+                    DirectoryError>(&result)) {
+        const auto message =
+            failure->message;
+        (void)queue.TryEnqueue(
+            [lifetime, message] {
+                lifetime->
+                    invite_pending_ =
+                    false;
+                lifetime->
+                    InviteButton()
+                    .IsEnabled(
+                        lifetime->
+                            directory_server_ &&
+                        lifetime->
+                            directory_server_
+                            ->role ==
+                            "owner");
+                controls::ToolTipService::
+                    SetToolTip(
+                        lifetime->
+                            InviteButton(),
+                        box_value(
+                            to_hstring(message)));
+            });
+        co_return;
+    }
+
+    auto invite =
+        std::get<
+            catro::platform::windows::
+                DirectoryInvite>(result);
+    (void)queue.TryEnqueue(
+        [lifetime,
+         code = std::move(
+             invite.code)]() mutable {
+            lifetime->
+                invite_pending_ = false;
+            lifetime->
+                InviteButton()
+                .IsEnabled(true);
+            lifetime->ShowInviteCode(
+                std::move(code));
+        });
+}
+
+winrt::fire_and_forget
+ServerView::ShowInviteCode(
+    std::string code) {
+    auto lifetime = get_strong();
+
+    controls::ContentDialog dialog;
+    dialog.XamlRoot(XamlRoot());
+    dialog.Title(
+        box_value(
+            hstring{L"Invite to server"}));
+    dialog.CloseButtonText(L"Done");
+
+    controls::StackPanel content;
+    content.Spacing(8);
+
+    controls::TextBlock hint;
+    hint.Text(
+        L"Send this one-use invite code to the person you want to add.");
+    hint.TextWrapping(
+        xaml::TextWrapping::Wrap);
+    content.Children().Append(hint);
+
+    controls::TextBox code_box;
+    code_box.Text(to_hstring(code));
+    code_box.IsReadOnly(true);
+    code_box.SelectAll();
+    content.Children().Append(code_box);
+
+    dialog.Content(content);
+    co_await dialog.ShowAsync();
+}
+
+void ServerView::SetDirectorySession(
+    const catro::platform::windows::
+        DirectoryServiceConfig& service,
+    std::string access_token,
+    const catro::platform::windows::
+        DirectoryServer& server) {
+    const bool server_changed =
+        directory_server_ &&
+        directory_server_->id !=
+            server.id;
+    if (server_changed &&
+        voice_runtime_ != nullptr) {
+        const auto snapshot =
+            catro_voice_runtime_snapshot(
+                voice_runtime_);
+        if (snapshot.state ==
+                CATRO_VOICE_STARTING ||
+            snapshot.state ==
+                CATRO_VOICE_JOINED ||
+            room_mode_active_) {
+            StopVoice();
+        }
+    }
+
+    directory_service_ = service;
+    directory_access_token_ =
+        std::move(access_token);
+    directory_server_ = server;
+
+    ServerName().Text(
+        to_hstring(server.name));
+    std::wstring count =
+        L"MEMBERS — ";
+    count += std::to_wstring(
+        server.member_count);
+    MemberCountLabel().Text(
+        hstring{count});
+
+    const bool owner =
+        server.role == "owner";
+    ServerOwnerIcon().Visibility(
+        owner
+            ? xaml::Visibility::Visible
+            : xaml::Visibility::Collapsed);
+    InviteButton().IsEnabled(
+        owner && !invite_pending_);
+
+    ShowChannel(state_.channel_id());
+}
+
+void ServerView::StartVoice(
+    std::optional<
+        catro::platform::windows::
+            RtcProvisioning> provisioning) {
     if (voice_runtime_ == nullptr) {
         return;
     }
 
-    const auto direct = direct_voice_config();
-    const auto input = environment("CATRO_VOICE_INPUT");
-    const auto output = environment("CATRO_VOICE_OUTPUT");
+    const auto direct =
+        direct_voice_config();
+    const auto input =
+        environment("CATRO_VOICE_INPUT");
+    const auto output =
+        environment("CATRO_VOICE_OUTPUT");
 
     room_mode_active_ = false;
     if (room_runtime_ != nullptr) {
-        catro_room_runtime_stop(room_runtime_);
+        catro_room_runtime_stop(
+            room_runtime_);
     }
 
-    const auto production =
-        production_room_settings(local_state_);
-    if (production) {
+    if (provisioning) {
         if (room_runtime_ == nullptr ||
-            production->access_token.empty() ||
-            production->server_id.empty() ||
-            production->channel_id.empty() ||
-            production->user_id.empty() ||
-            production->ice_servers.empty()) {
+            provisioning->token.empty() ||
+            provisioning->server_id.empty() ||
+            provisioning->channel_id.empty() ||
+            provisioning->peer_id.empty() ||
+            provisioning->signaling_url.empty() ||
+            provisioning->ice_servers.empty()) {
             VoiceStateText().Text(
-                L"RTC configuration is incomplete");
-            controls::ToolTipService::SetToolTip(
-                VoiceStateText(),
-                box_value(hstring{
-                    L"CATRO_SIGNALING_URL, CATRO_ROOM_TOKEN and CATRO_ICE_SERVERS "
-                    L"must be configured for production room voice."}));
+                L"RTC provisioning is incomplete");
+            controls::ToolTipService::
+                SetToolTip(
+                    VoiceStateText(),
+                    box_value(
+                        hstring{
+                            L"The Catro service returned incomplete RTC provisioning."}));
+            UpdateVoiceUi();
             return;
         }
 
-        std::vector<const char*> ice_urls;
+        std::vector<const char*>
+            ice_urls;
         ice_urls.reserve(
-            production->ice_servers.size());
+            provisioning->
+                ice_servers.size());
         for (const auto& url :
-             production->ice_servers) {
-            ice_urls.push_back(url.c_str());
+             provisioning->
+                 ice_servers) {
+            ice_urls.push_back(
+                url.c_str());
         }
 
-        const CatroRoomRuntimeConfig room_config{
-            .signaling_url =
-                production->signaling_url.c_str(),
-            .access_token =
-                production->access_token.c_str(),
-            .server_id =
-                production->server_id.c_str(),
-            .channel_id =
-                production->channel_id.c_str(),
-            .user_id =
-                production->user_id.c_str(),
-            .ice_server_urls = ice_urls.data(),
-            .ice_server_count = ice_urls.size(),
-            .allow_insecure_signaling =
-                production->allow_insecure_signaling
-                    ? 1U
-                    : 0U,
-            .allow_no_turn =
-                production->allow_no_turn
-                    ? 1U
-                    : 0U,
-        };
+        const CatroRoomRuntimeConfig
+            room_config{
+                .signaling_url =
+                    provisioning->
+                        signaling_url
+                        .c_str(),
+                .access_token =
+                    provisioning->
+                        token.c_str(),
+                .server_id =
+                    provisioning->
+                        server_id.c_str(),
+                .channel_id =
+                    provisioning->
+                        channel_id.c_str(),
+                .user_id =
+                    provisioning->
+                        peer_id.c_str(),
+                .ice_server_urls =
+                    ice_urls.data(),
+                .ice_server_count =
+                    ice_urls.size(),
+                .allow_insecure_signaling =
+                    provisioning->
+                            allow_insecure_signaling
+                        ? 1U
+                        : 0U,
+                .allow_no_turn =
+                    provisioning->
+                            allow_no_turn
+                        ? 1U
+                        : 0U,
+            };
 
         if (catro_room_runtime_start(
                 room_runtime_,
@@ -575,14 +757,18 @@ void ServerView::StartVoice() {
             const auto room =
                 catro_room_runtime_snapshot(
                     room_runtime_);
-            VoiceStateText().Text(L"Room connection error");
+            VoiceStateText().Text(
+                L"Room connection error");
             if (room.error[0] != '\0') {
-                controls::ToolTipService::SetToolTip(
-                    VoiceStateText(),
-                    box_value(
-                        to_hstring(
-                            std::string{room.error})));
+                controls::ToolTipService::
+                    SetToolTip(
+                        VoiceStateText(),
+                        box_value(
+                            to_hstring(
+                                std::string{
+                                    room.error})));
             }
+            UpdateVoiceUi();
             return;
         }
         room_mode_active_ = true;
@@ -621,13 +807,15 @@ void ServerView::StartVoice() {
     muted_ = false;
     deafened_ = false;
     if (catro_voice_runtime_start(
-            voice_runtime_, &config) == 0) {
+            voice_runtime_,
+            &config) == 0) {
         voice_timer_.Start();
 
         if (screen_runtime_) {
             const auto video =
                 direct_video_config();
-            const catro::screen::ScreenTransportConfig
+            const catro::screen::
+                ScreenTransportConfig
                 transport{
                     .room_runtime =
                         room_mode_active_
@@ -645,20 +833,24 @@ void ServerView::StartVoice() {
                             : video.peer,
                 };
             if (const auto failure =
-                    screen_runtime_->start_listening(
-                        transport)) {
-                controls::ToolTipService::SetToolTip(
-                    ShareScreenButton(),
-                    box_value(
-                        to_hstring(
-                            failure->message)));
+                    screen_runtime_->
+                        start_listening(
+                            transport)) {
+                controls::ToolTipService::
+                    SetToolTip(
+                        ShareScreenButton(),
+                        box_value(
+                            to_hstring(
+                                failure->
+                                    message)));
             } else {
                 screen_timer_.Start();
             }
         }
     } else if (room_mode_active_ &&
                room_runtime_ != nullptr) {
-        catro_room_runtime_stop(room_runtime_);
+        catro_room_runtime_stop(
+            room_runtime_);
         room_mode_active_ = false;
     }
 
@@ -737,9 +929,12 @@ void ServerView::UpdateVoiceUi() {
     ShareScreenButton().IsEnabled(can_share);
     ShareScreenIconButton().IsEnabled(can_share);
 
-    JoinVoiceButton().IsEnabled(true);
+    JoinVoiceButton().IsEnabled(
+        !voice_join_pending_);
     const hstring join_label =
-        active ? hstring{L"Leave"}
+        voice_join_pending_
+            ? hstring{L"Joining"}
+            : active ? hstring{L"Leave"}
                : (snapshot.state == CATRO_VOICE_FAILED ? hstring{L"Retry"} : hstring{L"Join"});
     JoinVoiceButton().Content(box_value(join_label));
 
@@ -761,6 +956,11 @@ void ServerView::UpdateVoiceUi() {
     DeafenVoiceButton().Opacity(deafened_ ? 1.0 : 0.72);
     ProfileDeafenButton().Opacity(deafened_ ? 1.0 : 0.72);
 
+    if (voice_join_pending_) {
+        VoiceStateText().Text(
+            L"Authorizing room…");
+        return;
+    }
     if (room_mode_active_ &&
         room.state == CATRO_ROOM_FAILED) {
         VoiceStateText().Text(L"Room connection error");
