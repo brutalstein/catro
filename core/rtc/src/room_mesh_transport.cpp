@@ -504,7 +504,7 @@ struct RoomMeshTransport::Impl {
         const bool video = label == kVideoLabel;
         const auto peer_id = peer->id;
         channel->onMessage(
-            [this, peer_id, voice](
+            [this, peer_id, voice, video](
                 ::rtc::binary data) {
                 if (data.empty() ||
                     data.size() >
