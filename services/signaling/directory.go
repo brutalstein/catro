@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -11,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,8 +75,9 @@ type directory struct {
 
 	signalingURL             string
 	iceServers               []string
-	allowInsecureSignaling   bool
-	allowNoTURN              bool
+	allowInsecureSignaling bool
+	allowNoTURN            bool
+	turnSecret             []byte
 }
 
 type serverDescriptor struct {
@@ -91,6 +94,7 @@ func (d *directory) setRTCProvisioning(
 	iceServers []string,
 	allowInsecure bool,
 	allowNoTURN bool,
+	turnSecret []byte,
 ) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -98,6 +102,56 @@ func (d *directory) setRTCProvisioning(
 	d.iceServers = append([]string(nil), iceServers...)
 	d.allowInsecureSignaling = allowInsecure
 	d.allowNoTURN = allowNoTURN
+	d.turnSecret = append([]byte(nil), turnSecret...)
+}
+
+func ephemeralICEServers(
+	base []string,
+	turnSecret []byte,
+	peerID string,
+	expires int64,
+) ([]string, error) {
+	result := make([]string, 0, len(base))
+	username := fmt.Sprintf("%d:%s", expires, peerID)
+
+	var password string
+	if len(turnSecret) != 0 {
+		mac := hmac.New(sha1.New, turnSecret)
+		_, _ = mac.Write([]byte(username))
+		password = base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	}
+
+	for _, raw := range base {
+		lower := strings.ToLower(raw)
+		isTURN := strings.HasPrefix(lower, "turn:") ||
+			strings.HasPrefix(lower, "turns:")
+		if !isTURN {
+			result = append(result, raw)
+			continue
+		}
+		if len(turnSecret) == 0 {
+			return nil, errors.New("TURN REST secret is not configured")
+		}
+
+		// net/url treats RFC 7065's turn:host form as opaque. Normalize only for credential
+		// injection; libdatachannel accepts the resulting authority-form TURN URL.
+		normalized := raw
+		if strings.HasPrefix(lower, "turn:") &&
+			!strings.HasPrefix(lower, "turn://") {
+			normalized = "turn://" + raw[len("turn:"):]
+		} else if strings.HasPrefix(lower, "turns:") &&
+			!strings.HasPrefix(lower, "turns://") {
+			normalized = "turns://" + raw[len("turns:"):]
+		}
+
+		parsed, err := url.Parse(normalized)
+		if err != nil || parsed.Host == "" {
+			return nil, fmt.Errorf("invalid TURN URL: %s", raw)
+		}
+		parsed.User = url.UserPassword(username, password)
+		result = append(result, parsed.String())
+	}
+	return result, nil
 }
 
 func openDirectory(path string, secret []byte) (*directory, error) {
@@ -651,9 +705,10 @@ func (d *directory) handleRTCToken(w http.ResponseWriter, r *http.Request) {
 	server, exists := d.state.Servers[request.ServerID]
 	_, member := server.Members[user.ID]
 	signalingURL := d.signalingURL
-	iceServers := append([]string(nil), d.iceServers...)
+	baseICEServers := append([]string(nil), d.iceServers...)
 	allowInsecure := d.allowInsecureSignaling
 	allowNoTURN := d.allowNoTURN
+	turnSecret := append([]byte(nil), d.turnSecret...)
 	d.mu.Unlock()
 	if !exists || !member || server.VoiceChannelID != request.ChannelID {
 		writeAPIError(w, http.StatusForbidden, "room membership required")
@@ -661,6 +716,16 @@ func (d *directory) handleRTCToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	expires := time.Now().Add(defaultRTCTokenTTL).Unix()
+	iceServers, err := ephemeralICEServers(
+		baseICEServers,
+		turnSecret,
+		user.ID,
+		expires)
+	if err != nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "TURN provisioning unavailable")
+		return
+	}
+
 	token, err := mintToken(d.secret, claims{
 		ServerID: server.ID,
 		ChannelID: server.VoiceChannelID,
