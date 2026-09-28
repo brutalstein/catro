@@ -10,9 +10,9 @@ permissions:
 # Keep fast-moving feature branches from queueing dozens of obsolete full matrix runs. The newest
 # commit is the only useful result for a given ref; pull-request and branch refs remain isolated.
 concurrency:
-  # Include the commit SHA so a runner stuck finalizing a cancelled older build cannot block
-  # validation of the current HEAD. Obsolete runs remain identifiable and may finish independently.
-  group: ci-v3-${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+  # Only the newest commit for a branch/PR is useful. Cancel obsolete matrix runs so hosted
+  # Windows/macOS/sanitizer capacity is spent validating the current HEAD.
+  group: ci-v4-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 # Hosted runners have no reliable GPU, encoder, or display; reports from them are collected as
