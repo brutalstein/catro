@@ -875,26 +875,90 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
                 : xaml::Visibility::Collapsed);
         form.Children().Append(browser_note);
 
+        controls::ToggleSwitch share_audio_box;
+        share_audio_box.Header(
+            box_value(hstring{L"Share application audio"}));
+        share_audio_box.OnContent(
+            box_value(hstring{L"On"}));
+        share_audio_box.OffContent(
+            box_value(hstring{L"Off"}));
+        const auto first_audio_available =
+            room_mode_active_ &&
+            sources.front().kind ==
+                catro::platform::windows::CaptureSourceKind::window &&
+            sources.front().process_id != 0;
+        share_audio_box.IsEnabled(
+            first_audio_available);
+        share_audio_box.IsOn(
+            first_audio_available);
+        form.Children().Append(share_audio_box);
+
+        controls::TextBlock audio_note;
+        audio_note.Text(
+            room_mode_active_
+                ? L"Application audio captures only the selected window's process tree at 48 kHz stereo. Display shares never capture all system audio automatically."
+                : L"Application audio is enabled for secure RTC rooms; local direct-peer engineering mode carries video only.");
+        audio_note.TextWrapping(
+            xaml::TextWrapping::Wrap);
+        audio_note.FontSize(11);
+        audio_note.Foreground(
+            Application::Current()
+                .Resources()
+                .Lookup(
+                    box_value(
+                        hstring{
+                            L"CatroTextTertiaryBrush"}))
+                .as<Microsoft::UI::Xaml::Media::Brush>());
+        form.Children().Append(audio_note);
+
         source_box.SelectionChanged(
-            [&sources, browser_note, game_note](auto const& sender, auto const&) {
+            [this,
+             &sources,
+             browser_note,
+             game_note,
+             share_audio_box](auto const& sender, auto const&) {
                 const auto selected =
                     sender.as<controls::ComboBox>().SelectedIndex();
-                const bool visible =
+                const bool valid =
                     selected >= 0 &&
-                    static_cast<std::size_t>(selected) < sources.size() &&
-                    chromium_window(sources[static_cast<std::size_t>(selected)]);
+                    static_cast<std::size_t>(selected) <
+                        sources.size();
+                const auto* source =
+                    valid
+                        ? &sources[
+                              static_cast<std::size_t>(
+                                  selected)]
+                        : nullptr;
+
                 browser_note.Visibility(
-                    visible ? xaml::Visibility::Visible
-                            : xaml::Visibility::Collapsed);
+                    source != nullptr &&
+                            chromium_window(*source)
+                        ? xaml::Visibility::Visible
+                        : xaml::Visibility::Collapsed);
                 const bool game_visible =
-                    selected >= 0 &&
-                    static_cast<std::size_t>(selected) < sources.size() &&
-                    catro::platform::windows::recommended_capture_backend(
-                        sources[static_cast<std::size_t>(selected)]) ==
-                        catro::platform::windows::ScreenCaptureBackend::desktop_duplication;
+                    source != nullptr &&
+                    catro::platform::windows::
+                            recommended_capture_backend(
+                                *source) ==
+                        catro::platform::windows::
+                            ScreenCaptureBackend::
+                                desktop_duplication;
                 game_note.Visibility(
-                    game_visible ? xaml::Visibility::Visible
-                                 : xaml::Visibility::Collapsed);
+                    game_visible
+                        ? xaml::Visibility::Visible
+                        : xaml::Visibility::Collapsed);
+
+                const bool audio_available =
+                    source != nullptr &&
+                    room_mode_active_ &&
+                    source->kind ==
+                        catro::platform::windows::
+                            CaptureSourceKind::window &&
+                    source->process_id != 0;
+                share_audio_box.IsEnabled(
+                    audio_available);
+                share_audio_box.IsOn(
+                    audio_available);
             });
 
         controls::ToggleSwitch borderless_box;
@@ -988,6 +1052,9 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         const auto fps_value = fps_box.Value();
         const auto bitrate_value = bitrate_box.Value();
         const bool request_borderless = borderless_box.IsOn();
+        const bool request_audio =
+            share_audio_box.IsEnabled() &&
+            share_audio_box.IsOn();
 
         if (selected < 0 ||
             static_cast<std::size_t>(selected) >= sources.size() ||
@@ -1067,6 +1134,8 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         config.max_height = height;
         config.fps = fps;
         config.bitrate = bitrate;
+        config.share_audio = request_audio;
+        config.stream_audio_bitrate = 128'000;
         config.ssrc = LocalStreamId() ^ 0x56494430U;
         if (config.ssrc == 0) {
             config.ssrc = 1;
