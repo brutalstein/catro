@@ -133,33 +133,6 @@ environment(const char* name) {
     return output;
 }
 
-[[nodiscard]] std::string utf8(
-    std::wstring_view value) {
-    if (value.empty()) {
-        return {};
-    }
-    const auto required = WideCharToMultiByte(
-        CP_UTF8, WC_ERR_INVALID_CHARS,
-        value.data(),
-        static_cast<int>(value.size()),
-        nullptr, 0, nullptr, nullptr);
-    if (required <= 0) {
-        return {};
-    }
-    std::string output(
-        static_cast<std::size_t>(required), '\0');
-    if (WideCharToMultiByte(
-            CP_UTF8, WC_ERR_INVALID_CHARS,
-            value.data(),
-            static_cast<int>(value.size()),
-            output.data(),
-            required,
-            nullptr, nullptr) != required) {
-        return {};
-    }
-    return output;
-}
-
 [[nodiscard]] std::variant<
     ParsedBaseUrl, DirectoryError>
 parse_base_url(
