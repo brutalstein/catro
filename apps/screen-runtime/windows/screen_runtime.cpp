@@ -434,7 +434,12 @@ struct WindowsScreenShareRuntime::Impl {
 
         WindowsGraphicsCapture capture;
         platform::windows::ScreenCaptureConfig capture_config;
-        capture_config.borderless = config.borderless;
+        capture_config.backend =
+            platform::windows::recommended_capture_backend(config.source);
+        capture_config.borderless =
+            config.borderless &&
+            capture_config.backend ==
+                platform::windows::ScreenCaptureBackend::windows_graphics_capture;
         if (const auto error =
                 capture.start_source(config.source, capture_config)) {
             fail_share(
@@ -467,9 +472,14 @@ struct WindowsScreenShareRuntime::Impl {
             return;
         }
         if (!first.texture) {
-            fail_share(
-                ScreenShareErrorCode::capture_failed,
-                "capture source did not produce a GPU frame");
+            const auto backend_name =
+                capture_config.backend ==
+                        platform::windows::ScreenCaptureBackend::desktop_duplication
+                    ? "DXGI Desktop Duplication"
+                    : "Windows Graphics Capture";
+            std::string message{backend_name};
+            message += " did not produce a GPU frame for the selected source";
+            fail_share(ScreenShareErrorCode::capture_failed, std::move(message));
             capture.stop();
             return;
         }

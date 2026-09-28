@@ -28,6 +28,37 @@ TEST_CASE("stopping an idle Windows screen capture is idempotent") {
     CHECK(capture.statistics().state == ScreenCaptureState::idle);
 }
 
+TEST_CASE("fullscreen window sources use the game-compatible capture backend") {
+    CaptureSource windowed{
+        .kind = CaptureSourceKind::window,
+        .native_handle = 1,
+        .monitor_handle = 2,
+        .title = "Counter-Strike 2",
+        .process_name = "cs2.exe",
+        .width = 1920,
+        .height = 1080,
+        .fullscreen_like = false,
+    };
+    CHECK(recommended_capture_backend(windowed) ==
+          ScreenCaptureBackend::windows_graphics_capture);
+
+    windowed.fullscreen_like = true;
+    CHECK(recommended_capture_backend(windowed) ==
+          ScreenCaptureBackend::desktop_duplication);
+
+    CaptureSource display{
+        .kind = CaptureSourceKind::display,
+        .native_handle = 2,
+        .monitor_handle = 2,
+        .title = "Primary display",
+        .width = 1920,
+        .height = 1080,
+        .primary = true,
+    };
+    CHECK(recommended_capture_backend(display) ==
+          ScreenCaptureBackend::windows_graphics_capture);
+}
+
 TEST_CASE("capture source descriptors are inert value objects") {
     const CaptureSource source{
         .kind = CaptureSourceKind::window,

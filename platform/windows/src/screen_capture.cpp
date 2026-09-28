@@ -49,6 +49,15 @@ struct DeviceBundle {
     std::uint64_t adapter_luid = 0;
 };
 
+struct DuplicationBundle {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    ComPtr<IDXGIOutputDuplication> duplication;
+    std::uint64_t adapter_luid = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+};
+
 std::variant<DeviceBundle, ScreenCaptureError> create_capture_device(
     const std::optional<std::uint64_t>& requested_luid) {
     ComPtr<IDXGIFactory6> factory;
@@ -172,6 +181,136 @@ std::variant<DeviceBundle, ScreenCaptureError> create_capture_device(
         .winrt_device = inspectable.as<direct3d::IDirect3DDevice>(),
         .adapter_luid = pack_luid(description.AdapterLuid),
     };
+}
+
+std::variant<DuplicationBundle, ScreenCaptureError> create_duplication_bundle(
+    HMONITOR monitor) {
+    if (monitor == nullptr) {
+        return ScreenCaptureError{ScreenCaptureErrorCode::source_unavailable};
+    }
+
+    ComPtr<IDXGIFactory1> factory;
+    auto result = CreateDXGIFactory1(IID_PPV_ARGS(&factory));
+    if (FAILED(result) || !factory) {
+        return ScreenCaptureError{ScreenCaptureErrorCode::device_creation_failed, result};
+    }
+
+    for (UINT adapter_index = 0;; ++adapter_index) {
+        ComPtr<IDXGIAdapter1> adapter;
+        result = factory->EnumAdapters1(adapter_index, &adapter);
+        if (result == DXGI_ERROR_NOT_FOUND) break;
+        if (FAILED(result) || !adapter) continue;
+
+        DXGI_ADAPTER_DESC1 adapter_desc{};
+        if (FAILED(adapter->GetDesc1(&adapter_desc)) ||
+            (adapter_desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0) {
+            continue;
+        }
+
+        for (UINT output_index = 0;; ++output_index) {
+            ComPtr<IDXGIOutput> output;
+            result = adapter->EnumOutputs(output_index, &output);
+            if (result == DXGI_ERROR_NOT_FOUND) break;
+            if (FAILED(result) || !output) continue;
+
+            DXGI_OUTPUT_DESC output_desc{};
+            if (FAILED(output->GetDesc(&output_desc)) ||
+                output_desc.Monitor != monitor) {
+                continue;
+            }
+
+            UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT |
+                         D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+            const std::array levels{
+                D3D_FEATURE_LEVEL_11_1,
+                D3D_FEATURE_LEVEL_11_0,
+            };
+            ComPtr<ID3D11Device> device;
+            D3D_FEATURE_LEVEL created_level{};
+            result = D3D11CreateDevice(
+                adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flags,
+                levels.data(), static_cast<UINT>(levels.size()),
+                D3D11_SDK_VERSION, &device, &created_level, nullptr);
+            if (result == E_INVALIDARG) {
+                result = D3D11CreateDevice(
+                    adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flags,
+                    &levels[1], 1, D3D11_SDK_VERSION,
+                    &device, &created_level, nullptr);
+            }
+            if (FAILED(result) || !device) {
+                return ScreenCaptureError{
+                    ScreenCaptureErrorCode::device_creation_failed, result};
+            }
+
+            ComPtr<IDXGIOutput1> output1;
+            result = output.As(&output1);
+            if (FAILED(result) || !output1) {
+                return ScreenCaptureError{
+                    ScreenCaptureErrorCode::capture_creation_failed, result};
+            }
+
+            ComPtr<IDXGIOutputDuplication> duplication;
+            result = output1->DuplicateOutput(device.Get(), &duplication);
+            if (FAILED(result) || !duplication) {
+                return ScreenCaptureError{
+                    ScreenCaptureErrorCode::capture_creation_failed, result};
+            }
+
+            ComPtr<ID3D11DeviceContext> context;
+            device->GetImmediateContext(&context);
+            if (!context) {
+                return ScreenCaptureError{
+                    ScreenCaptureErrorCode::device_creation_failed};
+            }
+
+            const auto width = output_desc.DesktopCoordinates.right -
+                               output_desc.DesktopCoordinates.left;
+            const auto height = output_desc.DesktopCoordinates.bottom -
+                                output_desc.DesktopCoordinates.top;
+            if (width <= 0 || height <= 0) {
+                return ScreenCaptureError{
+                    ScreenCaptureErrorCode::source_unavailable};
+            }
+
+            return DuplicationBundle{
+                .device = std::move(device),
+                .context = std::move(context),
+                .duplication = std::move(duplication),
+                .adapter_luid = pack_luid(adapter_desc.AdapterLuid),
+                .width = static_cast<std::uint32_t>(width),
+                .height = static_cast<std::uint32_t>(height),
+            };
+        }
+    }
+    return ScreenCaptureError{ScreenCaptureErrorCode::source_unavailable};
+}
+
+bool nearly_equal_edge(LONG left, LONG right) noexcept {
+    constexpr LONG tolerance = 8;
+    const auto delta = left >= right ? left - right : right - left;
+    return delta <= tolerance;
+}
+
+bool window_is_fullscreen_like(HWND window, HMONITOR monitor) noexcept {
+    if (window == nullptr || monitor == nullptr || IsIconic(window)) return false;
+
+    RECT client{};
+    if (!GetClientRect(window, &client)) return false;
+    POINT top_left{client.left, client.top};
+    POINT bottom_right{client.right, client.bottom};
+    if (!ClientToScreen(window, &top_left) ||
+        !ClientToScreen(window, &bottom_right)) {
+        return false;
+    }
+
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfoW(monitor, &info)) return false;
+
+    return nearly_equal_edge(top_left.x, info.rcMonitor.left) &&
+           nearly_equal_edge(top_left.y, info.rcMonitor.top) &&
+           nearly_equal_edge(bottom_right.x, info.rcMonitor.right) &&
+           nearly_equal_edge(bottom_right.y, info.rcMonitor.bottom);
 }
 
 std::string utf8(std::wstring_view wide) {
@@ -304,6 +443,11 @@ struct WindowsGraphicsCapture::Impl {
     };
 
     std::optional<ScreenCaptureError> start_primary_display(const ScreenCaptureConfig& config) {
+        const auto monitor =
+            MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+        if (config.backend == ScreenCaptureBackend::desktop_duplication) {
+            return start_duplication(monitor);
+        }
         initialize_apartment();
         auto item_result = primary_display_item();
         return start_item(std::move(item_result), config);
@@ -312,6 +456,13 @@ struct WindowsGraphicsCapture::Impl {
     std::optional<ScreenCaptureError> start_source(
         const CaptureSource& source,
         const ScreenCaptureConfig& config) {
+        if (config.backend == ScreenCaptureBackend::desktop_duplication) {
+            const auto monitor = reinterpret_cast<HMONITOR>(
+                source.kind == CaptureSourceKind::display
+                    ? source.native_handle
+                    : source.monitor_handle);
+            return start_duplication(monitor);
+        }
         initialize_apartment();
         auto item_result = capture_item_for_source(source);
         return start_item(std::move(item_result), config);
@@ -323,6 +474,35 @@ struct WindowsGraphicsCapture::Impl {
         } catch (const winrt::hresult_error&) {
             // WinUI callers already own an STA. WGC activation is valid from that apartment.
         }
+    }
+
+    std::optional<ScreenCaptureError> start_duplication(HMONITOR monitor) {
+        std::scoped_lock lifecycle_lock(lifecycle_mutex_);
+        stop_locked();
+
+        auto result = create_duplication_bundle(monitor);
+        if (const auto* error = std::get_if<ScreenCaptureError>(&result)) {
+            return fail(*error);
+        }
+        auto bundle = std::move(std::get<DuplicationBundle>(result));
+
+        reset_counters();
+        backend_.store(ScreenCaptureBackend::desktop_duplication,
+                       std::memory_order_release);
+        adapter_luid_.store(bundle.adapter_luid, std::memory_order_relaxed);
+        width_.store(bundle.width, std::memory_order_relaxed);
+        height_.store(bundle.height, std::memory_order_relaxed);
+        format_.store(DXGI_FORMAT_B8G8R8A8_UNORM, std::memory_order_relaxed);
+        stopping_.store(false, std::memory_order_release);
+
+        d3d_device_ = std::move(bundle.device);
+        duplication_context_ = std::move(bundle.context);
+        duplication_ = std::move(bundle.duplication);
+        duplication_slot_ = 0;
+        for (auto& texture : duplication_textures_) texture.Reset();
+
+        state_.store(ScreenCaptureState::running, std::memory_order_release);
+        return std::nullopt;
     }
 
     std::optional<ScreenCaptureError> start_item(
@@ -366,6 +546,8 @@ struct WindowsGraphicsCapture::Impl {
             }
 
             reset_counters();
+            backend_.store(ScreenCaptureBackend::windows_graphics_capture,
+                           std::memory_order_release);
             adapter_luid_.store(bundle.adapter_luid, std::memory_order_relaxed);
             width_.store(static_cast<std::uint32_t>(size.Width), std::memory_order_relaxed);
             height_.store(static_cast<std::uint32_t>(size.Height), std::memory_order_relaxed);
@@ -444,6 +626,10 @@ struct WindowsGraphicsCapture::Impl {
         pool_ = nullptr;
         item_ = nullptr;
         winrt_device_ = nullptr;
+        duplication_.Reset();
+        duplication_context_.Reset();
+        for (auto& texture : duplication_textures_) texture.Reset();
+        duplication_slot_ = 0;
         d3d_device_.Reset();
 
         {
@@ -572,15 +758,116 @@ struct WindowsGraphicsCapture::Impl {
         }
     }
 
+    bool wait_for_duplication(
+        GpuCaptureFrame& output,
+        std::chrono::milliseconds timeout) noexcept {
+        std::scoped_lock lock(duplication_mutex_);
+        if (!duplication_ || !duplication_context_ || !d3d_device_ ||
+            state_.load(std::memory_order_acquire) != ScreenCaptureState::running) {
+            return false;
+        }
+
+        DXGI_OUTDUPL_FRAME_INFO info{};
+        ComPtr<IDXGIResource> resource;
+        const auto timeout_ms = static_cast<UINT>(
+            std::max<std::int64_t>(0, timeout.count()));
+        const auto acquired =
+            duplication_->AcquireNextFrame(timeout_ms, &info, &resource);
+        if (acquired == DXGI_ERROR_WAIT_TIMEOUT) return false;
+        if (FAILED(acquired) || !resource) {
+            fail_from_callback(ScreenCaptureError{
+                ScreenCaptureErrorCode::frame_failure, acquired});
+            return false;
+        }
+
+        struct FrameGuard {
+            IDXGIOutputDuplication* duplication = nullptr;
+            ~FrameGuard() {
+                if (duplication) (void)duplication->ReleaseFrame();
+            }
+        } guard{duplication_.Get()};
+
+        ComPtr<ID3D11Texture2D> desktop;
+        const auto query = resource.As(&desktop);
+        if (FAILED(query) || !desktop) {
+            fail_from_callback(ScreenCaptureError{
+                ScreenCaptureErrorCode::frame_failure, query});
+            return false;
+        }
+
+        D3D11_TEXTURE2D_DESC desc{};
+        desktop->GetDesc(&desc);
+        if (desc.Width == 0 || desc.Height == 0 ||
+            desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM) {
+            fail_from_callback(ScreenCaptureError{
+                ScreenCaptureErrorCode::frame_failure});
+            return false;
+        }
+
+        auto& copy = duplication_textures_[duplication_slot_];
+        bool recreate = !copy;
+        if (copy) {
+            D3D11_TEXTURE2D_DESC current{};
+            copy->GetDesc(&current);
+            recreate = current.Width != desc.Width ||
+                       current.Height != desc.Height ||
+                       current.Format != desc.Format;
+        }
+        if (recreate) {
+            D3D11_TEXTURE2D_DESC target = desc;
+            target.MipLevels = 1;
+            target.ArraySize = 1;
+            target.SampleDesc.Count = 1;
+            target.SampleDesc.Quality = 0;
+            target.Usage = D3D11_USAGE_DEFAULT;
+            target.BindFlags = D3D11_BIND_SHADER_RESOURCE |
+                               D3D11_BIND_RENDER_TARGET;
+            target.CPUAccessFlags = 0;
+            target.MiscFlags = 0;
+            copy.Reset();
+            const auto created =
+                d3d_device_->CreateTexture2D(&target, nullptr, &copy);
+            if (FAILED(created) || !copy) {
+                fail_from_callback(ScreenCaptureError{
+                    ScreenCaptureErrorCode::frame_failure, created});
+                return false;
+            }
+        }
+
+        duplication_context_->CopyResource(copy.Get(), desktop.Get());
+        frames_received_.fetch_add(1, std::memory_order_relaxed);
+        const auto sequence =
+            sequence_.fetch_add(1, std::memory_order_relaxed) + 1;
+        frames_published_.fetch_add(1, std::memory_order_relaxed);
+        width_.store(desc.Width, std::memory_order_relaxed);
+        height_.store(desc.Height, std::memory_order_relaxed);
+        format_.store(desc.Format, std::memory_order_relaxed);
+
+        output = GpuCaptureFrame{
+            .lease = nullptr,
+            .texture = copy,
+            .sequence = sequence,
+            .width = desc.Width,
+            .height = desc.Height,
+            .format = desc.Format,
+        };
+        duplication_slot_ =
+            (duplication_slot_ + 1U) % duplication_textures_.size();
+        return true;
+    }
+
     bool wait_for_latest(GpuCaptureFrame& output, std::chrono::milliseconds timeout) noexcept {
+        if (backend_.load(std::memory_order_acquire) ==
+            ScreenCaptureBackend::desktop_duplication) {
+            return wait_for_duplication(output, timeout);
+        }
+
         std::unique_lock lock(frame_mutex_);
         frame_cv_.wait_for(lock, timeout, [this] {
             return has_latest_ ||
                    state_.load(std::memory_order_acquire) != ScreenCaptureState::running;
         });
-        if (!has_latest_) {
-            return false;
-        }
+        if (!has_latest_) return false;
         output = std::move(latest_);
         latest_ = {};
         has_latest_ = false;
@@ -590,6 +877,7 @@ struct WindowsGraphicsCapture::Impl {
     ScreenCaptureStatistics statistics() const noexcept {
         ScreenCaptureStatistics result;
         result.state = state_.load(std::memory_order_acquire);
+        result.backend = backend_.load(std::memory_order_acquire);
         const auto encoded_error = error_code_.load(std::memory_order_relaxed);
         if (encoded_error > 0) {
             result.error = ScreenCaptureError{
@@ -622,6 +910,11 @@ struct WindowsGraphicsCapture::Impl {
 
     ComPtr<ID3D11Device> d3d_device_;
     direct3d::IDirect3DDevice winrt_device_{nullptr};
+    std::mutex duplication_mutex_;
+    ComPtr<ID3D11DeviceContext> duplication_context_;
+    ComPtr<IDXGIOutputDuplication> duplication_;
+    std::array<ComPtr<ID3D11Texture2D>, 2> duplication_textures_{};
+    std::size_t duplication_slot_ = 0;
     capture::GraphicsCaptureItem item_{nullptr};
     capture::Direct3D11CaptureFramePool pool_{nullptr};
     capture::GraphicsCaptureSession session_{nullptr};
@@ -630,6 +923,8 @@ struct WindowsGraphicsCapture::Impl {
     winrt::Windows::Graphics::SizeInt32 current_size_{};
 
     std::atomic<ScreenCaptureState> state_{ScreenCaptureState::idle};
+    std::atomic<ScreenCaptureBackend> backend_{
+        ScreenCaptureBackend::windows_graphics_capture};
     std::atomic<int> error_code_{0};
     std::atomic<std::int64_t> error_native_{0};
     std::atomic<std::uint64_t> sequence_{0};
@@ -671,6 +966,7 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
                 output.push_back(CaptureSource{
                     .kind = CaptureSourceKind::display,
                     .native_handle = reinterpret_cast<std::uintptr_t>(monitor),
+                    .monitor_handle = reinterpret_cast<std::uintptr_t>(monitor),
                     .title = std::move(title),
                     .width = static_cast<std::uint32_t>(width),
                     .height = static_cast<std::uint32_t>(height),
@@ -718,16 +1014,23 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
                 }
                 title.resize(static_cast<std::size_t>(written));
 
+                const auto monitor =
+                    MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+                const bool fullscreen_like =
+                    window_is_fullscreen_like(window, monitor);
+
                 auto& output =
                     *reinterpret_cast<std::vector<CaptureSource>*>(opaque);
                 output.push_back(CaptureSource{
                     .kind = CaptureSourceKind::window,
                     .native_handle = reinterpret_cast<std::uintptr_t>(window),
+                    .monitor_handle = reinterpret_cast<std::uintptr_t>(monitor),
                     .title = utf8(title),
                     .process_name = process_image_name(process_id),
                     .width = static_cast<std::uint32_t>(width),
                     .height = static_cast<std::uint32_t>(height),
                     .primary = false,
+                    .fullscreen_like = fullscreen_like,
                 });
                 return TRUE;
             },
@@ -749,6 +1052,16 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
         sources.clear();
     }
     return sources;
+}
+
+ScreenCaptureBackend recommended_capture_backend(
+    const CaptureSource& source) noexcept {
+    if (source.kind == CaptureSourceKind::window &&
+        source.fullscreen_like &&
+        source.monitor_handle != 0) {
+        return ScreenCaptureBackend::desktop_duplication;
+    }
+    return ScreenCaptureBackend::windows_graphics_capture;
 }
 
 WindowsGraphicsCapture::WindowsGraphicsCapture() : impl_(std::make_unique<Impl>()) {}

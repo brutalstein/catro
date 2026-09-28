@@ -16,6 +16,7 @@
 #include <winrt/Windows.UI.h>
 
 #include <chrono>
+#include <filesystem>
 
 namespace winrt::Catro::implementation {
 
@@ -51,7 +52,25 @@ void MainWindow::InitializeComponent() {
     title_bar.ButtonBackgroundColor(transparent);
     title_bar.ButtonInactiveBackgroundColor(transparent);
 
-    const auto hwnd = Microsoft::UI::GetWindowFromWindowId(AppWindow().Id());
+    const auto hwnd =
+        Microsoft::UI::GetWindowFromWindowId(AppWindow().Id());
+
+    std::wstring module_path(32768, L'\0');
+    const auto module_length = GetModuleFileNameW(
+        nullptr, module_path.data(), static_cast<DWORD>(module_path.size()));
+    if (module_length > 0 && module_length < module_path.size()) {
+        module_path.resize(module_length);
+        const auto icon_path =
+            std::filesystem::path{module_path}.parent_path() /
+            L"Assets" / L"Catro.ico";
+        if (std::filesystem::exists(icon_path)) {
+            try {
+                AppWindow().SetIcon(hstring{icon_path.wstring()});
+            } catch (const winrt::hresult_error&) {
+            }
+        }
+    }
+
     const auto scale = GetDpiForWindow(hwnd) / 96.0;
     AppWindow().Resize({static_cast<int32_t>(1280 * scale), static_cast<int32_t>(820 * scale)});
 

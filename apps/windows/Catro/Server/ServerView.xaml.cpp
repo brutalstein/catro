@@ -133,6 +133,10 @@ std::wstring capture_source_label(
         source.kind == catro::platform::windows::CaptureSourceKind::display
             ? L"Display — "
             : L"Window — ";
+    if (source.fullscreen_like &&
+        source.kind == catro::platform::windows::CaptureSourceKind::window) {
+        label += L"Fullscreen/game — ";
+    }
     label += to_hstring(source.title).c_str();
     if (!source.process_name.empty()) {
         label += L"  ·  ";
@@ -497,6 +501,17 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         source_box.SelectedIndex(0);
         form.Children().Append(source_box);
 
+        controls::TextBlock game_note;
+        game_note.Text(
+            L"Fullscreen/game sources automatically use DXGI Desktop Duplication. "
+            L"This is the GPU-only path used for fullscreen DirectX games such as Counter-Strike 2.");
+        game_note.TextWrapping(xaml::TextWrapping::Wrap);
+        game_note.Visibility(
+            sources.front().fullscreen_like
+                ? xaml::Visibility::Visible
+                : xaml::Visibility::Collapsed);
+        form.Children().Append(game_note);
+
         controls::TextBlock browser_note;
         browser_note.Text(
             L"Browser video compatibility: Brave/Chrome/Edge may stop rendering a hardware video "
@@ -511,7 +526,7 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         form.Children().Append(browser_note);
 
         source_box.SelectionChanged(
-            [&sources, browser_note](auto const& sender, auto const&) {
+            [&sources, browser_note, game_note](auto const& sender, auto const&) {
                 const auto selected =
                     sender.as<controls::ComboBox>().SelectedIndex();
                 const bool visible =
@@ -521,6 +536,13 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
                 browser_note.Visibility(
                     visible ? xaml::Visibility::Visible
                             : xaml::Visibility::Collapsed);
+                const bool game_visible =
+                    selected >= 0 &&
+                    static_cast<std::size_t>(selected) < sources.size() &&
+                    sources[static_cast<std::size_t>(selected)].fullscreen_like;
+                game_note.Visibility(
+                    game_visible ? xaml::Visibility::Visible
+                                 : xaml::Visibility::Collapsed);
             });
 
         controls::ToggleSwitch borderless_box;
@@ -883,7 +905,7 @@ void ServerView::UpdateScreenShareUi() {
         controls::ToolTipService::SetToolTip(
             ShareScreenButton(),
             box_value(to_hstring(snapshot.error)));
-        VoiceStateText().Text(L"Screen video error");
+        VoiceStateText().Text(to_hstring(snapshot.error));
     }
 }
 

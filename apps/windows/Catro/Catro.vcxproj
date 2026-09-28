@@ -102,6 +102,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="App.xaml.h">
       <DependentUpon>App.xaml</DependentUpon>
     </ClInclude>
@@ -268,7 +269,7 @@
        identity-only package. Keep them beside the built shell for borderless-capture debug identity. -->
   <Target Name="CopyCatroIdentityAssets" AfterTargets="Build">
     <MakeDir Directories="$(OutDir)Assets" />
-    <Copy SourceFiles="$(MSBuildThisFileDirectory)Assets\Catro44.png;$(MSBuildThisFileDirectory)Assets\Catro150.png"
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Assets\Catro.ico;$(MSBuildThisFileDirectory)Assets\Catro44.png;$(MSBuildThisFileDirectory)Assets\Catro150.png"
           DestinationFolder="$(OutDir)Assets"
           SkipUnchangedFiles="true"
           Condition="Exists('$(MSBuildThisFileDirectory)Assets\Catro44.png') And Exists('$(MSBuildThisFileDirectory)Assets\Catro150.png')" />

@@ -58,16 +58,23 @@ enum class CaptureSourceKind : std::uint8_t {
     window,
 };
 
+enum class ScreenCaptureBackend : std::uint8_t {
+    windows_graphics_capture,
+    desktop_duplication,
+};
+
 struct CaptureSource {
     CaptureSourceKind kind = CaptureSourceKind::display;
     // HMONITOR or HWND encoded as an integer so this public header does not expose Win32 handle
     // typedefs to portable callers. Handles are validated again immediately before capture starts.
     std::uintptr_t native_handle = 0;
+    std::uintptr_t monitor_handle = 0;
     std::string title;
     std::string process_name;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     bool primary = false;
+    bool fullscreen_like = false;
 
     friend bool operator==(const CaptureSource&, const CaptureSource&) = default;
 };
@@ -76,7 +83,12 @@ struct CaptureSource {
 // No D3D device, WGC session, or capture worker is created by enumeration.
 [[nodiscard]] std::vector<CaptureSource> enumerate_capture_sources() noexcept;
 
+[[nodiscard]] ScreenCaptureBackend recommended_capture_backend(
+    const CaptureSource& source) noexcept;
+
 struct ScreenCaptureConfig {
+    ScreenCaptureBackend backend = ScreenCaptureBackend::windows_graphics_capture;
+
     // Border suppression is fail-soft. The product layer must obtain Borderless graphics-capture
     // consent before setting this; Windows may still keep its system capture border.
     bool borderless = false;
@@ -100,6 +112,7 @@ struct GpuCaptureFrame {
 
 struct ScreenCaptureStatistics {
     ScreenCaptureState state = ScreenCaptureState::idle;
+    ScreenCaptureBackend backend = ScreenCaptureBackend::windows_graphics_capture;
     std::optional<ScreenCaptureError> error;
     std::uint64_t frames_received = 0;
     std::uint64_t frames_published = 0;
