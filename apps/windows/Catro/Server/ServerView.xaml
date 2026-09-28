@@ -150,7 +150,8 @@
                                        FontSize="12"
                                        FontWeight="SemiBold"
                                        Foreground="{ThemeResource CatroTextBrush}" />
-                            <TextBlock Text="Owner"
+                            <TextBlock x:Name="ProfileRoleText"
+                                       Text="Owner"
                                        FontSize="10"
                                        Foreground="{ThemeResource CatroTextTertiaryBrush}" />
                         </StackPanel>
@@ -314,11 +315,13 @@
                                    FontWeight="SemiBold"
                                    Foreground="{ThemeResource CatroTextBrush}"
                                    HorizontalAlignment="Center" />
-                        <Border Padding="8,3"
+                        <Border x:Name="VoiceRoleBadge"
+                                Padding="8,3"
                                 CornerRadius="8"
                                 Background="{ThemeResource CatroAccentSoftBrush}"
                                 HorizontalAlignment="Center">
-                            <TextBlock Text="OWNER"
+                            <TextBlock x:Name="VoiceRoleText"
+                                       Text="OWNER"
                                        FontSize="9"
                                        FontWeight="SemiBold"
                                        CharacterSpacing="70"
@@ -573,7 +576,8 @@
                                FontWeight="SemiBold"
                                Foreground="{ThemeResource CatroTextBrush}"
                                VerticalAlignment="Center" />
-                    <FontIcon Grid.Column="2"
+                    <FontIcon x:Name="MemberRoleIcon"
+                              Grid.Column="2"
                               Glyph="&#xE735;"
                               FontSize="11"
                               Foreground="{ThemeResource CatroAccentBrush}"
