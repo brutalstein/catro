@@ -24,6 +24,10 @@ enum CatroVoiceRuntimeState : std::int32_t {
 };
 
 struct CatroVoiceRuntimeConfig {
+    // When non-null, production media uses the shared WebRTC room runtime and the direct UDP
+    // endpoint fields below are ignored. Null keeps the engineering direct-peer path.
+    void* room_runtime;
+
     const char* bind_address;
     std::uint16_t bind_port;
     const char* peer_address;
