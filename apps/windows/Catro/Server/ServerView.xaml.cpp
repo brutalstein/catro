@@ -447,12 +447,11 @@ ServerView::BeginVoiceJoin() {
         } else {
             VoiceStateText().Text(
                 L"Online service unavailable");
-            controls::ToolTipService::
-                SetToolTip(
-                    VoiceStateText(),
-                    box_value(
-                        hstring{
-                            L"Catro could not establish its shared-server session. Check the packaged network configuration and service connectivity."}));
+            controls::ToolTipService::SetToolTip(
+                VoiceStateText(),
+                box_value(
+                    hstring{
+                        L"Catro could not establish its shared-server session. Check the packaged network configuration and service connectivity."}));
             UpdateVoiceUi();
         }
         co_return;
@@ -471,7 +470,7 @@ ServerView::BeginVoiceJoin() {
         *directory_server_;
     const auto requested_server_id =
         server.id;
-    const auto queue = DispatcherQueue();
+    winrt::apartment_context ui_thread;
 
     co_await winrt::resume_background();
 
@@ -489,32 +488,20 @@ ServerView::BeginVoiceJoin() {
                     DirectoryError>(&result)) {
         const auto message =
             failure->message;
-        (void)queue.TryEnqueue(
-            [lifetime,
-             message,
-             requested_server_id] {
-                if (!lifetime->
-                        directory_server_ ||
-                    lifetime->
-                        directory_server_->id !=
-                        requested_server_id) {
-                    return;
-                }
-                lifetime->
-                    voice_join_pending_ =
-                    false;
-                lifetime->
-                    VoiceStateText().Text(
-                        L"Room authorization failed");
-                controls::ToolTipService::
-                    SetToolTip(
-                        lifetime->
-                            VoiceStateText(),
-                        box_value(
-                            to_hstring(message)));
-                lifetime->
-                    UpdateVoiceUi();
-            });
+        co_await ui_thread;
+        if (!lifetime->directory_server_ ||
+            lifetime->directory_server_->id !=
+                requested_server_id) {
+            co_return;
+        }
+
+        lifetime->voice_join_pending_ = false;
+        lifetime->VoiceStateText().Text(
+            L"Room authorization failed");
+        controls::ToolTipService::SetToolTip(
+            lifetime->VoiceStateText(),
+            box_value(to_hstring(message)));
+        lifetime->UpdateVoiceUi();
         co_return;
     }
 
@@ -522,24 +509,17 @@ ServerView::BeginVoiceJoin() {
         std::get<
             catro::platform::windows::
                 RtcProvisioning>(result);
-    (void)queue.TryEnqueue(
-        [lifetime,
-         requested_server_id,
-         provisioning =
-             std::move(provisioning)]() mutable {
-            if (!lifetime->
-                    directory_server_ ||
-                lifetime->
-                    directory_server_->id !=
-                    requested_server_id) {
-                return;
-            }
-            lifetime->
-                voice_join_pending_ =
-                false;
-            lifetime->StartVoice(
-                std::move(provisioning));
-        });
+
+    co_await ui_thread;
+    if (!lifetime->directory_server_ ||
+        lifetime->directory_server_->id !=
+            requested_server_id) {
+        co_return;
+    }
+
+    lifetime->voice_join_pending_ = false;
+    lifetime->StartVoice(
+        std::move(provisioning));
 }
 
 winrt::fire_and_forget
@@ -562,7 +542,7 @@ ServerView::BeginInvite() {
         directory_access_token_;
     const auto server_id =
         directory_server_->id;
-    const auto queue = DispatcherQueue();
+    winrt::apartment_context ui_thread;
 
     co_await winrt::resume_background();
 
@@ -579,27 +559,16 @@ ServerView::BeginInvite() {
                     DirectoryError>(&result)) {
         const auto message =
             failure->message;
-        (void)queue.TryEnqueue(
-            [lifetime, message] {
-                lifetime->
-                    invite_pending_ =
-                    false;
-                lifetime->
-                    InviteButton()
-                    .IsEnabled(
-                        lifetime->
-                            directory_server_ &&
-                        lifetime->
-                            directory_server_
-                            ->role ==
-                            "owner");
-                controls::ToolTipService::
-                    SetToolTip(
-                        lifetime->
-                            InviteButton(),
-                        box_value(
-                            to_hstring(message)));
-            });
+        co_await ui_thread;
+
+        lifetime->invite_pending_ = false;
+        lifetime->InviteButton().IsEnabled(
+            lifetime->directory_server_ &&
+            lifetime->directory_server_->role ==
+                "owner");
+        controls::ToolTipService::SetToolTip(
+            lifetime->InviteButton(),
+            box_value(to_hstring(message)));
         co_return;
     }
 
@@ -607,18 +576,12 @@ ServerView::BeginInvite() {
         std::get<
             catro::platform::windows::
                 DirectoryInvite>(result);
-    (void)queue.TryEnqueue(
-        [lifetime,
-         code = std::move(
-             invite.code)]() mutable {
-            lifetime->
-                invite_pending_ = false;
-            lifetime->
-                InviteButton()
-                .IsEnabled(true);
-            lifetime->ShowInviteCode(
-                std::move(code));
-        });
+
+    co_await ui_thread;
+    lifetime->invite_pending_ = false;
+    lifetime->InviteButton().IsEnabled(true);
+    lifetime->ShowInviteCode(
+        std::move(invite.code));
 }
 
 winrt::fire_and_forget
