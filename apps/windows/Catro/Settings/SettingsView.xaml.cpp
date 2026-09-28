@@ -7,6 +7,11 @@
 
 namespace winrt::Catro::implementation {
 
+SettingsView::SettingsView() {
+    InitializeComponent();
+}
+
+
 void SettingsView::InitializeComponent() {
     SettingsViewT<SettingsView>::InitializeComponent();
 }
