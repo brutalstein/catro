@@ -180,7 +180,7 @@
         <!-- Active channel -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
-                <RowDefinition Height="48" />
+                <RowDefinition x:Name="ChannelHeaderRow" Height="48" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -238,7 +238,7 @@
                 <Grid x:Name="TextPanel">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
+                        <RowDefinition x:Name="VoiceControlsRow" Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <StackPanel HorizontalAlignment="Center"
@@ -483,7 +483,8 @@
                         </StackPanel>
                     </Grid>
 
-                    <Border Grid.Row="1"
+                    <Border x:Name="VoiceControlsBar"
+                            Grid.Row="1"
                             Margin="14"
                             Padding="10"
                             CornerRadius="14"
