@@ -27,6 +27,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace winrt::Catro::implementation {
@@ -432,9 +433,28 @@ ServerView::BeginVoiceJoin() {
     if (!directory_service_ ||
         directory_access_token_.empty() ||
         !directory_server_) {
-        // Deliberate engineering fallback. Packaged production builds receive a directory session
-        // from MainWindow; local two-instance diagnostics can still exercise the direct UDP path.
-        StartVoice(std::nullopt);
+        const bool engineering_direct =
+            environment("CATRO_ENGINEERING_DIRECT")
+                    .value_or("") == "1" ||
+            environment("CATRO_VOICE_SLOT")
+                .has_value() ||
+            environment("CATRO_VOICE_BIND")
+                .has_value() ||
+            environment("CATRO_VOICE_PEER")
+                .has_value();
+        if (engineering_direct) {
+            StartVoice(std::nullopt);
+        } else {
+            VoiceStateText().Text(
+                L"Online service unavailable");
+            controls::ToolTipService::
+                SetToolTip(
+                    VoiceStateText(),
+                    box_value(
+                        hstring{
+                            L"Catro could not establish its shared-server session. Check the packaged network configuration and service connectivity."}));
+            UpdateVoiceUi();
+        }
         co_return;
     }
 
@@ -449,6 +469,8 @@ ServerView::BeginVoiceJoin() {
         directory_access_token_;
     const auto server =
         *directory_server_;
+    const auto requested_server_id =
+        server.id;
     const auto queue = DispatcherQueue();
 
     co_await winrt::resume_background();
@@ -468,7 +490,16 @@ ServerView::BeginVoiceJoin() {
         const auto message =
             failure->message;
         (void)queue.TryEnqueue(
-            [lifetime, message] {
+            [lifetime,
+             message,
+             requested_server_id] {
+                if (!lifetime->
+                        directory_server_ ||
+                    lifetime->
+                        directory_server_->id !=
+                        requested_server_id) {
+                    return;
+                }
                 lifetime->
                     voice_join_pending_ =
                     false;
@@ -493,8 +524,16 @@ ServerView::BeginVoiceJoin() {
                 RtcProvisioning>(result);
     (void)queue.TryEnqueue(
         [lifetime,
+         requested_server_id,
          provisioning =
              std::move(provisioning)]() mutable {
+            if (!lifetime->
+                    directory_server_ ||
+                lifetime->
+                    directory_server_->id !=
+                    requested_server_id) {
+                return;
+            }
             lifetime->
                 voice_join_pending_ =
                 false;
@@ -624,6 +663,10 @@ void ServerView::SetDirectorySession(
         directory_server_ &&
         directory_server_->id !=
             server.id;
+    if (server_changed) {
+        voice_join_pending_ = false;
+        invite_pending_ = false;
+    }
     if (server_changed &&
         voice_runtime_ != nullptr) {
         const auto snapshot =
