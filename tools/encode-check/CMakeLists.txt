@@ -9,7 +9,7 @@ catro_enable_warnings(catro_encode_check_cli)
 
 add_executable(catro_encode_check main.cpp)
 set_target_properties(catro_encode_check PROPERTIES OUTPUT_NAME "catro-encode-check")
-target_link_libraries(catro_encode_check PRIVATE catro_encode_check_cli)
+target_link_libraries(catro_encode_check PRIVATE catro_encode_check_cli Catro::Video)
 target_compile_definitions(catro_encode_check PRIVATE
     NOMINMAX
     UNICODE
