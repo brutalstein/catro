@@ -2,10 +2,14 @@ package main
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -144,10 +148,11 @@ func TestDirectoryInviteMembershipAndRTCTokenFlow(t *testing.T) {
 		"wss://rtc.example.test/v1/rtc",
 		[]string{
 			"stun:stun.example.test:3478",
-			"turn:turn.example.test:3478",
+			"turn:turn.example.test:3478?transport=udp",
 		},
 		false,
-		false)
+		false,
+		[]byte(strings.Repeat("t", 32)))
 
 	ownerToken := registerTestUser(
 		t, d, "owner-1", testCredential(0x11))
@@ -314,5 +319,66 @@ func TestDirectoryRegistrationIsCredentialBoundAndPersistent(t *testing.T) {
 	if conflictResponse.Code != http.StatusConflict {
 		t.Fatalf("credential takeover status = %d",
 			conflictResponse.Code)
+	}
+}
+
+
+func TestEphemeralTurnCredentialsAreBoundAndShortLived(t *testing.T) {
+	secret := []byte(strings.Repeat("q", 32))
+	expires := time.Now().Add(15 * time.Minute).Unix()
+	servers, err := ephemeralICEServers(
+		[]string{
+			"stun:stun.example.test:3478",
+			"turn:turn.example.test:3478?transport=udp",
+			"turns://turn.example.test:5349?transport=tls",
+		},
+		secret,
+		"peer-1",
+		expires)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(servers) != 3 {
+		t.Fatalf("ICE server count = %d", len(servers))
+	}
+	if servers[0] != "stun:stun.example.test:3478" {
+		t.Fatalf("STUN URL changed: %s", servers[0])
+	}
+
+	wantUser := fmt.Sprintf("%d:peer-1", expires)
+	for _, raw := range servers[1:] {
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if parsed.User == nil {
+			t.Fatalf("TURN URL has no credential: %s", raw)
+		}
+		gotUser := parsed.User.Username()
+		gotPassword, ok := parsed.User.Password()
+		if !ok {
+			t.Fatalf("TURN URL has no password: %s", raw)
+		}
+		if gotUser != wantUser {
+			t.Fatalf("TURN username = %q, want %q", gotUser, wantUser)
+		}
+
+		mac := hmac.New(sha1.New, secret)
+		_, _ = mac.Write([]byte(wantUser))
+		wantPassword := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+		if gotPassword != wantPassword {
+			t.Fatal("TURN REST password mismatch")
+		}
+	}
+}
+
+func TestTurnProvisioningRequiresSecret(t *testing.T) {
+	_, err := ephemeralICEServers(
+		[]string{"turn:turn.example.test:3478"},
+		nil,
+		"peer-1",
+		time.Now().Add(time.Minute).Unix())
+	if err == nil {
+		t.Fatal("TURN provisioning without secret must fail")
 	}
 }
