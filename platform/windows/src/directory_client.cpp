@@ -516,12 +516,18 @@ parse_server(const Json& value) {
                 .get<std::string>();
         server.role =
             value.at("role").get<std::string>();
+        server.member_count =
+            value.at("member_count")
+                .get<std::size_t>();
         if (server.id.empty() ||
             server.owner_id.empty() ||
             server.name.empty() ||
             server.voice_channel_id.empty() ||
             (server.role != "owner" &&
-             server.role != "member")) {
+             server.role != "member") ||
+            server.member_count == 0 ||
+            server.member_count >
+                community::kMaxMembers) {
             return std::nullopt;
         }
         return server;
