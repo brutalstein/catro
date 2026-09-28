@@ -71,6 +71,9 @@ struct CaptureSource {
     std::uintptr_t monitor_handle = 0;
     std::string title;
     std::string process_name;
+    // Owning process for window sources. Zero for displays. Kept separately from HWND because
+    // process-loopback audio capture is bound to the target process tree, not the window handle.
+    std::uint32_t process_id = 0;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     bool primary = false;
