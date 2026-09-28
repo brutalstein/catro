@@ -47,7 +47,7 @@ constexpr auto kFirstFrameTimeout = 3s;
 constexpr auto kGameFirstFrameTimeout = 30s;
 constexpr auto kRemoteInactiveTimeout = 2s;
 constexpr auto kReceiveWait = 20ms;
-constexpr std::uint32_t kPreviewMaxFps = 30;
+constexpr std::uint32_t kPreviewMaxFps = 10;
 constexpr std::size_t kReceiveDatagramBytes = 1500;
 constexpr std::size_t kReceiveDrainLimit = 512;
 
@@ -357,6 +357,13 @@ struct WindowsScreenShareRuntime::Impl {
         stop_sharing_locked();
     }
 
+    void set_local_preview_enabled(bool enabled) noexcept {
+        local_preview_enabled_.store(enabled, std::memory_order_release);
+        // Wake the sender so a hidden preview can release its GPU presentation resources promptly
+        // instead of waiting for an unrelated control event.
+        stop_cv_.notify_all();
+    }
+
     void stop_sharing_locked() noexcept {
         share_stop_requested_.store(
             true, std::memory_order_release);
@@ -498,8 +505,8 @@ struct WindowsScreenShareRuntime::Impl {
         WindowsH264HardwareEncoder encoder;
         D3D11CompositionVideoPresenter presenter(
             VideoPresenterConfig{
-                .max_width = 960,
-                .max_height = 540,
+                .max_width = 640,
+                .max_height = 360,
                 .frame_rate =
                     std::min(config.fps, kPreviewMaxFps),
             });
@@ -526,6 +533,7 @@ struct WindowsScreenShareRuntime::Impl {
         std::uint32_t current_source_width = 0;
         std::uint32_t current_source_height = 0;
         std::uint32_t preview_accumulator = 0;
+        bool preview_resources_live = false;
 
         const auto configure_encoder =
             [&](const GpuCaptureFrame& frame) -> bool {
@@ -606,28 +614,42 @@ struct WindowsScreenShareRuntime::Impl {
                 }
             }
 
-            preview_accumulator +=
-                std::min(config.fps, kPreviewMaxFps);
-            if (preview_accumulator >= config.fps) {
-                preview_accumulator -= config.fps;
-                if (const auto error =
-                        presenter.present(
-                            *frame.texture.Get())) {
-                    fail_share(
-                        ScreenShareErrorCode::preview_failed,
-                        platform::windows::name(error->code),
-                        error->native_code);
-                    return false;
+            if (!local_preview_enabled_.load(
+                    std::memory_order_acquire)) {
+                preview_accumulator = 0;
+                if (preview_resources_live) {
+                    presenter.reset();
+                    {
+                        std::scoped_lock lock(preview_mutex_);
+                        preview_swap_chain_.Reset();
+                    }
+                    preview_resources_live = false;
                 }
-                const auto preview_stats =
-                    presenter.statistics();
-                preview_frames_.store(
-                    preview_stats.frames_presented,
-                    std::memory_order_relaxed);
-                preview_drops_.store(
-                    preview_stats.frames_dropped,
-                    std::memory_order_relaxed);
-                publish_preview_swap_chain();
+            } else {
+                preview_accumulator +=
+                    std::min(config.fps, kPreviewMaxFps);
+                if (preview_accumulator >= config.fps) {
+                    preview_accumulator -= config.fps;
+                    if (const auto error =
+                            presenter.present(
+                                *frame.texture.Get())) {
+                        fail_share(
+                            ScreenShareErrorCode::preview_failed,
+                            platform::windows::name(error->code),
+                            error->native_code);
+                        return false;
+                    }
+                    preview_resources_live = true;
+                    const auto preview_stats =
+                        presenter.statistics();
+                    preview_frames_.store(
+                        preview_stats.frames_presented,
+                        std::memory_order_relaxed);
+                    preview_drops_.store(
+                        preview_stats.frames_dropped,
+                        std::memory_order_relaxed);
+                    publish_preview_swap_chain();
+                }
             }
 
             if (const auto error =
@@ -1268,6 +1290,7 @@ struct WindowsScreenShareRuntime::Impl {
     std::thread receiver_worker_;
     std::atomic_bool stop_requested_{false};
     std::atomic_bool share_stop_requested_{true};
+    std::atomic_bool local_preview_enabled_{true};
     std::atomic<ScreenShareState> state_{
         ScreenShareState::idle};
 
@@ -1325,6 +1348,11 @@ WindowsScreenShareRuntime::start(
 
 void WindowsScreenShareRuntime::stop_sharing() noexcept {
     impl_->stop_sharing();
+}
+
+void WindowsScreenShareRuntime::set_local_preview_enabled(
+    bool enabled) noexcept {
+    impl_->set_local_preview_enabled(enabled);
 }
 
 void WindowsScreenShareRuntime::stop() noexcept {
