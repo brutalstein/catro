@@ -18,6 +18,10 @@ TEST_CASE("Windows screen media runtime is inert until explicitly started") {
     CHECK_FALSE(runtime.preview_swap_chain());
     CHECK_FALSE(runtime.remote_swap_chain());
 
+    runtime.set_local_preview_enabled(false);
+    CHECK_FALSE(runtime.preview_swap_chain());
+    runtime.set_local_preview_enabled(true);
+
     runtime.stop_sharing();
     runtime.stop();
     runtime.stop();
