@@ -1,5 +1,6 @@
 #include <catro/audio/engine.hpp>
 #include <catro/platform/windows/audio_platform.hpp>
+#include <catro/platform/windows/process_loopback_audio.hpp>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -11,6 +12,8 @@ using namespace std::chrono_literals;
 using namespace catro::audio;
 using catro::capabilities::AudioEndpointId;
 using catro::capabilities::IdentityScope;
+using catro::platform::windows::ProcessLoopbackAudioCapture;
+using catro::platform::windows::StreamAudioErrorCode;
 using catro::platform::windows::WasapiAudioPlatform;
 
 // Real endpoints: machines without one (CI runners) report SKIP, never a pass.
@@ -83,4 +86,16 @@ TEST_CASE("unknown and wrong-direction endpoints are not found") {
     const auto input = probe.statistics().input->device;
     probe.stop();
     CHECK(engine.start({.mode = SessionMode::tone, .output = input}) == AudioError{AudioErrorCode::device_not_found});
+}
+
+TEST_CASE("process loopback stream audio rejects a zero process id") {
+    ProcessLoopbackAudioCapture capture;
+    const auto failure =
+        capture.start(
+            0,
+            [](std::span<const float>) noexcept {});
+    REQUIRE(failure);
+    CHECK(failure->code ==
+          StreamAudioErrorCode::initialization_failed);
+    CHECK_FALSE(capture.statistics().running);
 }
