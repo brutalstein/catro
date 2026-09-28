@@ -10,7 +10,9 @@ $buildDir = Join-Path $root 'out\build\windows-msvc'
 
 Push-Location $root
 try {
-    cmake --preset windows-msvc
+    # Let CMake select the newest installed Visual Studio. The local baseline is VS 2022,
+    # while current windows-2025 hosted runners provide VS 2026.
+    cmake -S $root -B $buildDir -A x64 -D CATRO_BUILD_TESTS=ON
     if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
     cmake --build $buildDir --config $Configuration
     if ($LASTEXITCODE -ne 0) { throw 'CMake build failed.' }

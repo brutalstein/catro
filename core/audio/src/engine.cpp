@@ -53,11 +53,14 @@ struct AudioEngine::Session final : CaptureSink, RenderSource {
 
 AudioEngine::AudioEngine(AudioPlatform& platform, FailureHandler on_failure)
     : platform_(platform), on_failure_(std::move(on_failure)),
-      failure_thread_([this](std::stop_token stop) { clean_up_failures(stop); }) {}
+      failure_thread_([this] { clean_up_failures(); }) {}
 
 AudioEngine::~AudioEngine() {
     stop();
-    failure_thread_.request_stop();
+    {
+        const std::scoped_lock lock(mutex_);
+        failure_stopping_ = true;
+    }
     failure_changed_.notify_all();
     failure_thread_.join();
 }
@@ -157,15 +160,15 @@ void AudioEngine::fail(std::uint64_t generation, AudioError error) {
     failure_changed_.notify_one();
 }
 
-void AudioEngine::clean_up_failures(std::stop_token stop) {
-    while (!stop.stop_requested()) {
+void AudioEngine::clean_up_failures() {
+    while (true) {
         std::uint64_t failed_generation = 0;
         AudioError failure;
         {
             std::unique_lock lock(mutex_);
             failure_changed_.wait(
-                lock, [&] { return stop.stop_requested() || pending_failure_generation_.has_value(); });
-            if (stop.stop_requested()) {
+                lock, [&] { return failure_stopping_ || pending_failure_generation_.has_value(); });
+            if (failure_stopping_) {
                 return;
             }
             failed_generation = *pending_failure_generation_;

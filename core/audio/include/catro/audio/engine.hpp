@@ -183,7 +183,7 @@ private:
     struct Session;
 
     void fail(std::uint64_t generation, AudioError error);
-    void clean_up_failures(std::stop_token stop);
+    void clean_up_failures();
 
     AudioPlatform& platform_;
     FailureHandler on_failure_;
@@ -193,10 +193,11 @@ private:
     std::unique_ptr<Session> session_;
     std::optional<std::uint64_t> pending_failure_generation_;
     AudioError pending_failure_error_;
+    bool failure_stopping_ = false;
     std::uint64_t generation_ = 0;
     EngineState state_ = EngineState::idle;
     std::optional<AudioError> error_;
-    std::jthread failure_thread_;
+    std::thread failure_thread_;
 };
 
 } // namespace catro::audio

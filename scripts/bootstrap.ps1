@@ -17,7 +17,7 @@ if (Test-Path $vswhere) {
         Select-Object -First 1
 }
 if (-not $msbuild) {
-    $missing += 'Visual Studio 2022 with the "Desktop development with C++" workload (MSVC x64 tools)'
+    $missing += 'Visual Studio 2022 or newer with the "Desktop development with C++" workload (MSVC x64 tools)'
 }
 
 $sdk = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots' -ErrorAction SilentlyContinue |
