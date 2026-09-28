@@ -74,7 +74,9 @@ int run_room_voice(
                 &pipeline_result)) {
         error_text =
             std::string{"voice codec: "} +
-            catro::voice::name(failure->code);
+            std::string{
+                catro::voice::name(
+                    failure->code)};
         return catro::tools::voice_peer_codec_failed;
     }
     auto pipeline =
@@ -115,7 +117,9 @@ int run_room_voice(
                 pipeline->render())) {
         error_text =
             std::string{"audio: "} +
-            catro::audio::name(failure->code);
+            std::string{
+                catro::audio::name(
+                    failure->code)};
         return catro::tools::voice_peer_audio_failed;
     }
 
@@ -179,8 +183,9 @@ int run_room_voice(
                         &encoded)) {
                 error_text =
                     std::string{"voice encode: "} +
-                    catro::voice::name(
-                        failure->code);
+                    std::string{
+                        catro::voice::name(
+                            failure->code)};
                 exit_code =
                     catro::tools::
                         voice_peer_codec_failed;
@@ -241,8 +246,9 @@ int run_room_voice(
                     error_text =
                         std::string{
                             "voice receive: "} +
-                        catro::voice::name(
-                            failure->code);
+                        std::string{
+                            catro::voice::name(
+                                failure->code)};
                     return false;
                 }
                 return true;
@@ -295,8 +301,9 @@ int run_room_voice(
                         &decoded)) {
                 error_text =
                     std::string{"voice decode: "} +
-                    catro::voice::name(
-                        failure->code);
+                    std::string{
+                        catro::voice::name(
+                            failure->code)};
                 exit_code =
                     catro::tools::
                         voice_peer_codec_failed;
@@ -319,8 +326,9 @@ int run_room_voice(
                     error_text =
                         std::string{
                             "voice resync: "} +
-                        catro::voice::name(
-                            failure->code);
+                        std::string{
+                            catro::voice::name(
+                                failure->code)};
                     exit_code =
                         catro::tools::
                             voice_peer_codec_failed;
@@ -342,8 +350,9 @@ int run_room_voice(
                         error_text =
                             std::string{
                                 "voice decode: "} +
-                            catro::voice::name(
-                                failure->code);
+                            std::string{
+                                catro::voice::name(
+                                    failure->code)};
                         exit_code =
                             catro::tools::
                                 voice_peer_codec_failed;
