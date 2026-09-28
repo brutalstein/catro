@@ -44,6 +44,7 @@ private:
     void CloseStreamWindow() noexcept;
     void UpdateStreamWindowLayout();
     void SetStreamWindowFullscreen(bool fullscreen);
+    void SetStreamWindowAlwaysOnTop(bool enabled);
     void DetachPreviewSwapChain() noexcept;
     void DetachRemoteSwapChain() noexcept;
     [[nodiscard]] std::uint32_t LocalStreamId() const noexcept;
@@ -63,8 +64,10 @@ private:
     Microsoft::UI::Xaml::Controls::Border stream_window_viewport_{nullptr};
     Microsoft::UI::Xaml::Controls::SwapChainPanel stream_window_swap_chain_panel_{nullptr};
     Microsoft::UI::Xaml::Controls::Button stream_window_mode_button_{nullptr};
+    Microsoft::UI::Xaml::Controls::Button stream_window_topmost_button_{nullptr};
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> stream_window_swap_chain_;
     bool stream_window_fullscreen_ = false;
+    bool stream_window_topmost_ = false;
 
     bool room_mode_active_ = false;
     bool share_dialog_open_ = false;
