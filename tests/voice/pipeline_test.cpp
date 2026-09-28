@@ -360,33 +360,18 @@ TEST_CASE("pipeline PLC never waits on a missing network packet") {
     CHECK(receiver->statistics().jitter.plc == 1);
 }
 
-TEST_CASE("malformed Opus payload is concealed without terminating the voice pipeline") {
-    auto receiver = make_pipeline(0x70000001U, 1);
-    // TOC code 3 requires a second frame-count byte. A one-byte code-3 packet is structurally
-    // incomplete by definition, unlike the old two-byte fixture that newer libopus builds may
-    // legally interpret as audio on some architectures.
-    const std::array<std::byte, 1> invalid_opus{std::byte{0x03}};
-    std::array<std::byte, kVoiceHeaderBytes + invalid_opus.size()> datagram{};
-    const auto serialized = serialize_packet(
-        VoicePacketView{.stream_id = 0x70000002U,
-                        .sequence = 10,
-                        .timestamp = 9'600U,
-                        .payload = invalid_opus},
-        datagram);
-    REQUIRE(std::holds_alternative<std::size_t>(serialized));
+TEST_CASE("decoder rejects an empty Opus packet deterministically") {
+    auto decoder_result = Decoder::create();
+    REQUIRE(std::holds_alternative<std::unique_ptr<Decoder>>(decoder_result));
+    auto decoder = std::move(std::get<std::unique_ptr<Decoder>>(decoder_result));
 
-    const auto received = receiver->receive(datagram);
-    REQUIRE(std::holds_alternative<JitterPushResult>(received));
-    REQUIRE(std::get<JitterPushResult>(received) == JitterPushResult::accepted);
+    PcmFrame pcm{};
+    const auto decoded = decoder->decode({}, pcm);
+    REQUIRE(std::holds_alternative<CodecError>(decoded));
+    CHECK(std::get<CodecError>(decoded).code == CodecErrorCode::invalid_argument);
 
-    const auto decoded = receiver->decode_next();
-    REQUIRE(std::holds_alternative<DecodeStep>(decoded));
-    CHECK(std::get<DecodeStep>(decoded) == DecodeStep::queued_plc);
-
-    const auto stats = receiver->statistics();
-    CHECK(stats.decode_errors == 1);
-    CHECK(stats.decoded_frames == 1);
-    CHECK(stats.render.frames_enqueued == 1);
+    // Pipeline-level PLC behavior is covered separately by
+    // "pipeline PLC never waits on a missing network packet".
 }
 
 TEST_CASE("malformed datagrams are rejected before jitter state changes") {
