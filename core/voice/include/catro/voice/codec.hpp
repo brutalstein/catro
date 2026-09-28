@@ -43,8 +43,15 @@ struct CodecError {
     return "codec failure";
 }
 
+enum class CodecApplication : std::uint8_t {
+    voice,
+    audio,
+};
+
 struct EncoderConfig {
     std::int32_t bitrate = 48'000;
+    std::uint32_t channels = 1;
+    CodecApplication application = CodecApplication::voice;
     int complexity = 10;
     int expected_packet_loss_percent = 5;
     bool inband_fec = true;
@@ -76,7 +83,8 @@ class Decoder {
 public:
     using CreateResult = std::variant<std::unique_ptr<Decoder>, CodecError>;
 
-    [[nodiscard]] static CreateResult create() noexcept;
+    [[nodiscard]] static CreateResult create(
+        std::uint32_t channels = 1) noexcept;
     ~Decoder();
 
     Decoder(const Decoder&) = delete;
