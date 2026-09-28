@@ -6,6 +6,8 @@
 #include <catro/video/geometry.hpp>
 #include <catro/video/rtp_h264.hpp>
 
+#include <Windows.h>
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -13,12 +15,15 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <new>
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <variant>
@@ -142,6 +147,58 @@ constexpr std::size_t kReceiveDrainLimit = 512;
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
                Clock::now().time_since_epoch())
         .count();
+}
+
+// Lifecycle-only diagnostic breadcrumbs. This never runs on every media frame: it is intentionally
+// limited to worker/capture/encoder/presenter transitions so production hot paths stay untouched.
+// The file is also useful for native access violations that bypass C++ exception handling.
+void trace_event(std::string_view event) noexcept {
+    wchar_t path[MAX_PATH + 64]{};
+    const auto length = GetTempPathW(MAX_PATH, path);
+    if (length == 0 || length >= MAX_PATH) {
+        return;
+    }
+    constexpr wchar_t suffix[] = L"catro-screen-runtime.log";
+    if (length + std::size(suffix) >= std::size(path)) {
+        return;
+    }
+    std::copy(std::begin(suffix), std::end(suffix), path + length);
+
+    const auto file = CreateFileW(
+        path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
+        nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    SYSTEMTIME now{};
+    GetLocalTime(&now);
+    char line[512]{};
+    const auto written = std::snprintf(
+        line, sizeof(line),
+        "%04u-%02u-%02u %02u:%02u:%02u.%03u pid=%lu tid=%lu %.*s\r\n",
+        static_cast<unsigned>(now.wYear),
+        static_cast<unsigned>(now.wMonth),
+        static_cast<unsigned>(now.wDay),
+        static_cast<unsigned>(now.wHour),
+        static_cast<unsigned>(now.wMinute),
+        static_cast<unsigned>(now.wSecond),
+        static_cast<unsigned>(now.wMilliseconds),
+        static_cast<unsigned long>(GetCurrentProcessId()),
+        static_cast<unsigned long>(GetCurrentThreadId()),
+        static_cast<int>(std::min<std::size_t>(event.size(), 300U)),
+        event.data());
+    if (written > 0) {
+        DWORD bytes_written = 0;
+        (void)WriteFile(
+            file,
+            line,
+            static_cast<DWORD>(std::min<int>(
+                written, static_cast<int>(sizeof(line) - 1))),
+            &bytes_written,
+            nullptr);
+    }
+    CloseHandle(file);
 }
 
 [[nodiscard]] std::string udp_error_text(const UdpError& error) {
@@ -280,7 +337,7 @@ struct WindowsScreenShareRuntime::Impl {
 
         try {
             sender_worker_ = std::thread(
-                [this, config] { run_sender(config); });
+                [this, config] { run_sender_guarded(config); });
         } catch (...) {
             share_stop_requested_.store(
                 true, std::memory_order_release);
@@ -338,7 +395,7 @@ struct WindowsScreenShareRuntime::Impl {
 
         try {
             receiver_worker_ = std::thread(
-                [this, config] { run_receiver(config); });
+                [this, config] { run_receiver_guarded(config); });
         } catch (...) {
             socket_.reset();
             transport_config_.reset();
@@ -430,7 +487,27 @@ struct WindowsScreenShareRuntime::Impl {
                share_stop_requested_.load(std::memory_order_acquire);
     }
 
-    void run_sender(ScreenShareConfig config) noexcept {
+    void run_sender_guarded(ScreenShareConfig config) noexcept {
+        trace_event("sender-worker-enter");
+        try {
+            run_sender(std::move(config));
+            trace_event("sender-worker-exit");
+        } catch (const std::exception& error) {
+            trace_event("sender-worker-cxx-exception");
+            fail_share(
+                ScreenShareErrorCode::worker_start_failed,
+                error.what() != nullptr
+                    ? std::string_view{error.what()}
+                    : std::string_view{"screen sender worker exception"});
+        } catch (...) {
+            trace_event("sender-worker-unknown-exception");
+            fail_share(
+                ScreenShareErrorCode::worker_start_failed,
+                "screen sender worker exception");
+        }
+    }
+
+    void run_sender(ScreenShareConfig config) {
         auto* const socket = socket_.get();
         if (socket == nullptr) {
             fail_share(
@@ -439,6 +516,7 @@ struct WindowsScreenShareRuntime::Impl {
             return;
         }
 
+        trace_event("sender-capture-configure");
         WindowsGraphicsCapture capture;
         platform::windows::ScreenCaptureConfig capture_config;
         capture_config.backend =
@@ -455,6 +533,11 @@ struct WindowsScreenShareRuntime::Impl {
                 error->native_code);
             return;
         }
+        trace_event(
+            capture_config.backend ==
+                    platform::windows::ScreenCaptureBackend::desktop_duplication
+                ? "sender-capture-started-dxgi"
+                : "sender-capture-started-wgc");
 
         GpuCaptureFrame first;
         const bool wait_for_game_restore =
@@ -500,6 +583,7 @@ struct WindowsScreenShareRuntime::Impl {
             capture.stop();
             return;
         }
+        trace_event("sender-first-frame-ready");
 
         WindowsH264HardwareEncoder encoder;
         D3D11CompositionVideoPresenter presenter(
@@ -575,6 +659,9 @@ struct WindowsScreenShareRuntime::Impl {
                 return false;
             }
 
+            if (current_source_width == 0 && current_source_height == 0) {
+                trace_event("sender-encoder-started");
+            }
             current_source_width = frame.width;
             current_source_height = frame.height;
             source_width_.store(
@@ -629,25 +716,47 @@ struct WindowsScreenShareRuntime::Impl {
                     std::min(config.fps, kPreviewMaxFps);
                 if (preview_accumulator >= config.fps) {
                     preview_accumulator -= config.fps;
-                    if (const auto error =
-                            presenter.present(
-                                *frame.texture.Get())) {
-                        fail_share(
-                            ScreenShareErrorCode::preview_failed,
-                            platform::windows::name(error->code),
-                            error->native_code);
-                        return false;
+                    if (!preview_resources_live) {
+                        trace_event("sender-local-preview-first-present");
                     }
-                    preview_resources_live = true;
-                    const auto preview_stats =
-                        presenter.statistics();
-                    preview_frames_.store(
-                        preview_stats.frames_presented,
-                        std::memory_order_relaxed);
-                    preview_drops_.store(
-                        preview_stats.frames_dropped,
-                        std::memory_order_relaxed);
-                    publish_preview_swap_chain();
+                    bool preview_ok = true;
+                    try {
+                        if (const auto error =
+                                presenter.present(
+                                    *frame.texture.Get())) {
+                            trace_event("sender-local-preview-disabled-error");
+                            preview_ok = false;
+                        }
+                    } catch (...) {
+                        trace_event("sender-local-preview-disabled-exception");
+                        preview_ok = false;
+                    }
+                    if (!preview_ok) {
+                        local_preview_enabled_.store(
+                            false, std::memory_order_release);
+                        presenter.reset();
+                        {
+                            std::scoped_lock lock(preview_mutex_);
+                            preview_swap_chain_.Reset();
+                        }
+                        preview_resources_live = false;
+                    } else {
+                        if (!preview_resources_live) {
+                            trace_event("sender-local-preview-ready");
+                        }
+                        preview_resources_live = true;
+                    }
+                    if (preview_ok) {
+                        const auto preview_stats =
+                            presenter.statistics();
+                        preview_frames_.store(
+                            preview_stats.frames_presented,
+                            std::memory_order_relaxed);
+                        preview_drops_.store(
+                            preview_stats.frames_dropped,
+                            std::memory_order_relaxed);
+                        publish_preview_swap_chain();
+                    }
                 }
             }
 
@@ -659,8 +768,12 @@ struct WindowsScreenShareRuntime::Impl {
                     error->native_code);
                 return false;
             }
-            frames_encoded_.fetch_add(
-                1, std::memory_order_relaxed);
+            const auto encoded_before =
+                frames_encoded_.fetch_add(
+                    1, std::memory_order_relaxed);
+            if (encoded_before == 0) {
+                trace_event("sender-first-frame-encoded");
+            }
 
             PacketContext context{
                 .socket = socket,
@@ -696,8 +809,12 @@ struct WindowsScreenShareRuntime::Impl {
                 return false;
             }
 
-            frames_sent_.fetch_add(
-                1, std::memory_order_relaxed);
+            const auto sent_before =
+                frames_sent_.fetch_add(
+                    1, std::memory_order_relaxed);
+            if (sent_before == 0) {
+                trace_event("sender-first-frame-sent");
+            }
             return true;
         };
 
@@ -801,7 +918,27 @@ struct WindowsScreenShareRuntime::Impl {
         }
     }
 
-    void run_receiver(ScreenTransportConfig config) noexcept {
+    void run_receiver_guarded(ScreenTransportConfig config) noexcept {
+        trace_event("receiver-worker-enter");
+        try {
+            run_receiver(std::move(config));
+            trace_event("receiver-worker-exit");
+        } catch (const std::exception& error) {
+            trace_event("receiver-worker-cxx-exception");
+            fail_session(
+                ScreenShareErrorCode::worker_start_failed,
+                error.what() != nullptr
+                    ? std::string_view{error.what()}
+                    : std::string_view{"screen receiver worker exception"});
+        } catch (...) {
+            trace_event("receiver-worker-unknown-exception");
+            fail_session(
+                ScreenShareErrorCode::worker_start_failed,
+                "screen receiver worker exception");
+        }
+    }
+
+    void run_receiver(ScreenTransportConfig config) {
         auto* const socket = socket_.get();
         if (socket == nullptr) {
             fail_session(
@@ -1086,9 +1223,9 @@ struct WindowsScreenShareRuntime::Impl {
 
     void fail_share(
         ScreenShareErrorCode,
-        std::string message,
+        std::string_view message,
         std::int64_t native_code = 0) noexcept {
-        set_error(std::move(message), native_code);
+        set_error(message, native_code);
         share_stop_requested_.store(
             true, std::memory_order_release);
         stop_cv_.notify_all();
@@ -1099,9 +1236,9 @@ struct WindowsScreenShareRuntime::Impl {
 
     void fail_session(
         ScreenShareErrorCode,
-        std::string message,
+        std::string_view message,
         std::int64_t native_code = 0) noexcept {
-        set_error(std::move(message), native_code);
+        set_error(message, native_code);
         share_stop_requested_.store(
             true, std::memory_order_release);
         stop_requested_.store(
@@ -1113,16 +1250,17 @@ struct WindowsScreenShareRuntime::Impl {
     }
 
     void set_error(
-        std::string message,
+        std::string_view message,
         std::int64_t native_code) noexcept {
         try {
+            std::string owned{message};
             if (native_code != 0) {
-                message += " (native ";
-                message += std::to_string(native_code);
-                message += ")";
+                owned += " (native ";
+                owned += std::to_string(native_code);
+                owned += ")";
             }
             std::scoped_lock lock(metadata_mutex_);
-            error_ = std::move(message);
+            error_ = std::move(owned);
         } catch (...) {
         }
     }
