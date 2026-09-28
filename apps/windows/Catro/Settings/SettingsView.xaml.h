@@ -5,7 +5,7 @@
 namespace winrt::Catro::implementation {
 
 struct SettingsView : SettingsViewT<SettingsView> {
-    SettingsView() = default;
+    SettingsView();
     void InitializeComponent();
 };
 
