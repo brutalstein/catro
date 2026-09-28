@@ -17,6 +17,11 @@
 #include <utility>
 
 namespace winrt::Catro::implementation {
+
+DiagnosticsView::DiagnosticsView() {
+    InitializeComponent();
+}
+
 namespace {
 
 namespace xaml = Microsoft::UI::Xaml;
