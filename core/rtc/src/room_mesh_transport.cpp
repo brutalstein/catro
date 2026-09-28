@@ -7,6 +7,8 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -303,10 +305,6 @@ struct RoomMeshTransport::Impl {
             }
             if (peers_.size() >=
                 config_.max_peers) {
-                fail_locked(
-                    RoomTransportErrorCode::
-                        capacity_reached,
-                    "RTC room peer capacity reached");
                 return nullptr;
             }
         }
@@ -441,13 +439,19 @@ struct RoomMeshTransport::Impl {
         }
 
         const auto label = channel->label();
-        if (label == kVoiceLabel) {
-            peer->voice = channel;
-        } else if (label == kVideoLabel) {
-            peer->video = channel;
-        } else {
+        if (label != kVoiceLabel &&
+            label != kVideoLabel) {
             channel->close();
             return;
+        }
+
+        {
+            std::scoped_lock lock(mutex_);
+            if (label == kVoiceLabel) {
+                peer->voice = channel;
+            } else {
+                peer->video = channel;
+            }
         }
 
         const bool voice = label == kVoiceLabel;
