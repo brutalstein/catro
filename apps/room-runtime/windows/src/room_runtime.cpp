@@ -25,6 +25,7 @@ namespace {
 constexpr std::size_t kMaxDatagramBytes = 2048;
 constexpr std::size_t kVoiceQueueCapacity = 256;
 constexpr std::size_t kVideoQueueCapacity = 4096;
+constexpr std::size_t kStreamAudioQueueCapacity = 512;
 
 struct Datagram {
     std::array<std::byte, kMaxDatagramBytes> bytes{};
@@ -105,7 +106,8 @@ class RoomRuntime final {
 public:
     RoomRuntime()
         : voice_(kVoiceQueueCapacity),
-          video_(kVideoQueueCapacity) {}
+          video_(kVideoQueueCapacity),
+          stream_audio_(kStreamAudioQueueCapacity) {}
 
     ~RoomRuntime() { stop(); }
 
@@ -160,6 +162,12 @@ public:
                     video_.push(data);
                     video_received_.fetch_add(1, std::memory_order_relaxed);
                 };
+            callbacks.on_stream_audio_datagram =
+                [this](std::string_view, std::span<const std::byte> data) {
+                    stream_audio_.push(data);
+                    stream_audio_received_.fetch_add(
+                        1, std::memory_order_relaxed);
+                };
             callbacks.on_state =
                 [this](catro::rtc::RoomTransportState next) {
                     switch (next) {
@@ -203,9 +211,11 @@ public:
         stopping_.store(true, std::memory_order_release);
         voice_.wake();
         video_.wake();
+        stream_audio_.wake();
         transport_.stop();
         voice_.clear();
         video_.clear();
+        stream_audio_.clear();
         state_.store(CATRO_ROOM_IDLE, std::memory_order_release);
     }
 
@@ -221,6 +231,17 @@ public:
         const auto peers = transport_.send_video(data);
         if (peers != 0) {
             video_sent_.fetch_add(1, std::memory_order_relaxed);
+        }
+        return peers;
+    }
+
+    std::size_t send_stream_audio(
+        std::span<const std::byte> data) noexcept {
+        const auto peers =
+            transport_.send_stream_audio(data);
+        if (peers != 0) {
+            stream_audio_sent_.fetch_add(
+                1, std::memory_order_relaxed);
         }
         return peers;
     }
@@ -243,6 +264,15 @@ public:
             stopping_);
     }
 
+    std::ptrdiff_t receive_stream_audio(
+        std::span<std::byte> destination,
+        std::uint32_t timeout_ms) noexcept {
+        return stream_audio_.pop(
+            destination,
+            std::chrono::milliseconds{timeout_ms},
+            stopping_);
+    }
+
     CatroRoomRuntimeSnapshot snapshot() const noexcept {
         CatroRoomRuntimeSnapshot result{};
         result.state = state_.load(std::memory_order_acquire);
@@ -259,8 +289,16 @@ public:
             video_sent_.load(std::memory_order_relaxed);
         result.video_received_datagrams =
             video_received_.load(std::memory_order_relaxed);
+        result.stream_audio_sent_datagrams =
+            stream_audio_sent_.load(
+                std::memory_order_relaxed);
+        result.stream_audio_received_datagrams =
+            stream_audio_received_.load(
+                std::memory_order_relaxed);
         result.voice_queue_drops = voice_.drops();
         result.video_queue_drops = video_.drops();
+        result.stream_audio_queue_drops =
+            stream_audio_.drops();
 
         std::scoped_lock lock(error_mutex_);
         if (!error_.empty()) {
@@ -289,6 +327,7 @@ private:
     catro::rtc::RoomMeshTransport transport_;
     DatagramQueue voice_;
     DatagramQueue video_;
+    DatagramQueue stream_audio_;
 
     std::atomic_bool stopping_{true};
     std::atomic<std::int32_t> state_{CATRO_ROOM_IDLE};
@@ -296,6 +335,8 @@ private:
     std::atomic<std::uint64_t> voice_received_{0};
     std::atomic<std::uint64_t> video_sent_{0};
     std::atomic<std::uint64_t> video_received_{0};
+    std::atomic<std::uint64_t> stream_audio_sent_{0};
+    std::atomic<std::uint64_t> stream_audio_received_{0};
 
     mutable std::mutex error_mutex_;
     std::string error_;
@@ -354,6 +395,17 @@ std::size_t catro_room_runtime_send_video(
         std::span<const std::byte>(data, size));
 }
 
+std::size_t catro_room_runtime_send_stream_audio(
+    CatroRoomRuntimeHandle handle,
+    const std::byte* data,
+    std::size_t size) noexcept {
+    if (handle == nullptr || data == nullptr || size == 0) {
+        return 0;
+    }
+    return runtime(handle)->send_stream_audio(
+        std::span<const std::byte>(data, size));
+}
+
 std::ptrdiff_t catro_room_runtime_receive_voice(
     CatroRoomRuntimeHandle handle,
     std::byte* destination,
@@ -376,6 +428,20 @@ std::ptrdiff_t catro_room_runtime_receive_video(
         return -1;
     }
     return runtime(handle)->receive_video(
+        std::span<std::byte>(destination, capacity),
+        timeout_ms);
+}
+
+std::ptrdiff_t catro_room_runtime_receive_stream_audio(
+    CatroRoomRuntimeHandle handle,
+    std::byte* destination,
+    std::size_t capacity,
+    std::uint32_t timeout_ms) noexcept {
+    if (handle == nullptr || destination == nullptr ||
+        capacity == 0) {
+        return -1;
+    }
+    return runtime(handle)->receive_stream_audio(
         std::span<std::byte>(destination, capacity),
         timeout_ms);
 }
