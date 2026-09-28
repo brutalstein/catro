@@ -32,13 +32,23 @@ Encoder::Encoder(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {
 Encoder::~Encoder() = default;
 
 Encoder::CreateResult Encoder::create(const EncoderConfig& config) noexcept {
-    if (config.bitrate <= 0 || config.complexity < 0 || config.complexity > 10 ||
+    if (config.bitrate <= 0 ||
+        (config.channels != 1 && config.channels != 2) ||
+        config.complexity < 0 || config.complexity > 10 ||
         config.expected_packet_loss_percent < 0 || config.expected_packet_loss_percent > 100) {
         return CodecError{CodecErrorCode::invalid_argument};
     }
 
     int error = OPUS_OK;
-    auto* handle = opus_encoder_create(static_cast<opus_int32>(kSampleRate), 1, OPUS_APPLICATION_VOIP, &error);
+    const auto opus_application =
+        config.application == CodecApplication::audio
+            ? OPUS_APPLICATION_AUDIO
+            : OPUS_APPLICATION_VOIP;
+    auto* handle = opus_encoder_create(
+        static_cast<opus_int32>(kSampleRate),
+        static_cast<int>(config.channels),
+        opus_application,
+        &error);
     if (handle == nullptr || error != OPUS_OK) {
         return error == OPUS_ALLOC_FAIL ? CodecError{CodecErrorCode::allocation_failed, error} : opus_error(error);
     }
@@ -78,7 +88,8 @@ Encoder::CreateResult Encoder::create(const EncoderConfig& config) noexcept {
 
 std::variant<std::size_t, CodecError> Encoder::encode(std::span<const float> pcm,
                                                        std::span<std::byte> output) noexcept {
-    if (pcm.size() != kFrameSamples) {
+    if (pcm.size() !=
+        kFrameSamples * impl_->config.channels) {
         return CodecError{CodecErrorCode::invalid_argument};
     }
     if (output.empty()) {
@@ -129,7 +140,8 @@ std::optional<CodecError> Encoder::reset() noexcept {
 }
 
 struct Decoder::Impl {
-    explicit Impl(OpusDecoder* value) noexcept : handle(value) {}
+    Impl(OpusDecoder* value, std::uint32_t channel_count) noexcept
+        : handle(value), channels(channel_count) {}
     ~Impl() {
         if (handle != nullptr) {
             opus_decoder_destroy(handle);
@@ -137,18 +149,29 @@ struct Decoder::Impl {
     }
 
     OpusDecoder* handle = nullptr;
+    std::uint32_t channels = 1;
 };
 
 Decoder::Decoder(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
 Decoder::~Decoder() = default;
 
-Decoder::CreateResult Decoder::create() noexcept {
+Decoder::CreateResult Decoder::create(
+    std::uint32_t channels) noexcept {
+    if (channels != 1 && channels != 2) {
+        return CodecError{
+            CodecErrorCode::invalid_argument};
+    }
+
     int error = OPUS_OK;
-    auto* handle = opus_decoder_create(static_cast<opus_int32>(kSampleRate), 1, &error);
+    auto* handle = opus_decoder_create(
+        static_cast<opus_int32>(kSampleRate),
+        static_cast<int>(channels),
+        &error);
     if (handle == nullptr || error != OPUS_OK) {
         return error == OPUS_ALLOC_FAIL ? CodecError{CodecErrorCode::allocation_failed, error} : opus_error(error);
     }
-    auto impl = std::unique_ptr<Impl>(new (std::nothrow) Impl(handle));
+    auto impl = std::unique_ptr<Impl>(
+        new (std::nothrow) Impl(handle, channels));
     if (!impl) {
         opus_decoder_destroy(handle);
         return CodecError{CodecErrorCode::allocation_failed, OPUS_ALLOC_FAIL};
@@ -165,8 +188,10 @@ std::variant<std::size_t, CodecError> Decoder::decode(std::span<const std::byte>
     if (packet.empty() || packet.size() > kMaxOpusPacketBytes) {
         return CodecError{CodecErrorCode::invalid_argument};
     }
-    if (pcm.size() < kFrameSamples) {
-        return CodecError{CodecErrorCode::output_too_small};
+    if (pcm.size() <
+        kFrameSamples * impl_->channels) {
+        return CodecError{
+            CodecErrorCode::output_too_small};
     }
     const auto decoded = opus_decode_float(impl_->handle,
                                            reinterpret_cast<const unsigned char*>(packet.data()),
@@ -179,8 +204,10 @@ std::variant<std::size_t, CodecError> Decoder::decode(std::span<const std::byte>
 }
 
 std::variant<std::size_t, CodecError> Decoder::conceal(std::span<float> pcm) noexcept {
-    if (pcm.size() < kFrameSamples) {
-        return CodecError{CodecErrorCode::output_too_small};
+    if (pcm.size() <
+        kFrameSamples * impl_->channels) {
+        return CodecError{
+            CodecErrorCode::output_too_small};
     }
     const auto decoded =
         opus_decode_float(impl_->handle, nullptr, 0, pcm.data(), static_cast<int>(kFrameSamples), 0);
