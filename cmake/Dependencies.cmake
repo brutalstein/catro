@@ -37,6 +37,11 @@ FetchContent_Declare(
 function(catro_enable_voice_dependency)
     # Keep the embedded reference codec minimal; Catro owns its own tests and tools.
     set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+    if(MSVC)
+        # Opus defaults to the DLL CRT even when the parent project uses /MT. Keep every native
+        # dependency on the same self-contained runtime to avoid Debug unresolved __imp_* symbols.
+        set(OPUS_STATIC_RUNTIME ON CACHE BOOL "" FORCE)
+    endif()
     set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
     set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
     set(OPUS_CUSTOM_MODES OFF CACHE BOOL "" FORCE)
@@ -76,6 +81,13 @@ if(WIN32 AND MSVC)
         set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)
         set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "" FORCE)
         FetchContent_MakeAvailable(mbedtls)
+
+        # libdatachannel's DTLS transport always references the RFC 5764 SRTP profile helpers,
+        # including for data-channel-only builds. Mbed TLS 3 keeps that API behind this config
+        # macro, so compile and export the feature consistently through its public TLS target.
+        if(TARGET mbedtls)
+            target_compile_definitions(mbedtls PUBLIC MBEDTLS_SSL_DTLS_SRTP)
+        endif()
 
         # libdatachannel's Mbed TLS lookup accepts this compatibility target.
         if(TARGET mbedtls AND NOT TARGET MbedTLS::MbedTLS)
