@@ -159,6 +159,111 @@ TEST_CASE("opus voice codec encodes decodes and conceals fixed 20 ms frames") {
     CHECK(std::ranges::all_of(decoded, [](float sample) { return std::isfinite(sample); }));
 }
 
+TEST_CASE("opus audio codec preserves stereo 20 ms frames") {
+    EncoderConfig config;
+    config.bitrate = 128'000;
+    config.channels = 2;
+    config.application = CodecApplication::audio;
+    config.inband_fec = true;
+
+    auto encoder_result = Encoder::create(config);
+    REQUIRE(std::holds_alternative<std::unique_ptr<Encoder>>(encoder_result));
+    auto encoder = std::move(
+        std::get<std::unique_ptr<Encoder>>(encoder_result));
+
+    auto decoder_result = Decoder::create(2);
+    REQUIRE(std::holds_alternative<std::unique_ptr<Decoder>>(decoder_result));
+    auto decoder = std::move(
+        std::get<std::unique_ptr<Decoder>>(decoder_result));
+
+    std::array<float, kFrameSamples * 2U> input{};
+    std::array<float, kFrameSamples * 2U> decoded{};
+    std::array<std::byte, kMaxOpusPacketBytes> encoded{};
+
+    double left_phase = 0.0;
+    double right_phase = 0.0;
+    double left_energy = 0.0;
+    double right_energy = 0.0;
+
+    for (int frame = 0; frame < 20; ++frame) {
+        for (std::size_t sample = 0;
+             sample < kFrameSamples;
+             ++sample) {
+            input[sample * 2U] =
+                static_cast<float>(
+                    0.2 * std::sin(left_phase));
+            input[sample * 2U + 1U] =
+                static_cast<float>(
+                    0.15 * std::sin(right_phase));
+            left_phase +=
+                2.0 * 3.14159265358979323846 *
+                440.0 /
+                static_cast<double>(kSampleRate);
+            right_phase +=
+                2.0 * 3.14159265358979323846 *
+                660.0 /
+                static_cast<double>(kSampleRate);
+        }
+
+        const auto encoded_result =
+            encoder->encode(input, encoded);
+        REQUIRE(std::holds_alternative<std::size_t>(
+            encoded_result));
+        const auto size =
+            std::get<std::size_t>(encoded_result);
+        REQUIRE(size > 0);
+
+        const auto decoded_result =
+            decoder->decode(
+                std::span<const std::byte>(encoded)
+                    .first(size),
+                decoded);
+        REQUIRE(std::holds_alternative<std::size_t>(
+            decoded_result));
+        CHECK(std::get<std::size_t>(decoded_result) ==
+              kFrameSamples);
+
+        for (std::size_t sample = 0;
+             sample < kFrameSamples;
+             ++sample) {
+            const auto left =
+                decoded[sample * 2U];
+            const auto right =
+                decoded[sample * 2U + 1U];
+            REQUIRE(std::isfinite(left));
+            REQUIRE(std::isfinite(right));
+            left_energy +=
+                static_cast<double>(left) * left;
+            right_energy +=
+                static_cast<double>(right) * right;
+        }
+    }
+
+    CHECK(left_energy > 0.01);
+    CHECK(right_energy > 0.01);
+
+    const auto concealed =
+        decoder->conceal(decoded);
+    REQUIRE(std::holds_alternative<std::size_t>(
+        concealed));
+    CHECK(std::get<std::size_t>(concealed) ==
+          kFrameSamples);
+}
+
+TEST_CASE("opus wrapper rejects unsupported channel counts") {
+    EncoderConfig config;
+    config.channels = 3;
+    const auto encoder = Encoder::create(config);
+    REQUIRE(std::holds_alternative<CodecError>(encoder));
+    CHECK(std::get<CodecError>(encoder).code ==
+          CodecErrorCode::invalid_argument);
+
+    const auto decoder = Decoder::create(3);
+    REQUIRE(std::holds_alternative<CodecError>(decoder));
+    CHECK(std::get<CodecError>(decoder).code ==
+          CodecErrorCode::invalid_argument);
+}
+
 TEST_CASE("opus wrapper validates frame and output sizes") {
     auto encoder_result = Encoder::create();
     REQUIRE(std::holds_alternative<std::unique_ptr<Encoder>>(encoder_result));
