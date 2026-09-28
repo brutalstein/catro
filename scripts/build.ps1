@@ -272,9 +272,10 @@ function New-CatroPinnedCppWinRTProjection([string] $MSBuildPath) {
 
     Write-Host '[catro] Restoring pinned Windows packages'
     & $MSBuildPath $solution -t:Restore -p:RestorePackagesConfig=true `
-        "-p:Configuration=$Configuration" -p:Platform=x64 -nologo -v:m
-    if ($LASTEXITCODE -ne 0) {
-        throw 'NuGet restore for the pinned C++/WinRT projection failed.'
+        "-p:Configuration=$Configuration" -p:Platform=x64 -nologo -v:m | Out-Host
+    $restoreExitCode = $LASTEXITCODE
+    if ($restoreExitCode -ne 0) {
+        throw "NuGet restore for the pinned C++/WinRT projection failed with code $restoreExitCode."
     }
 
     [xml] $packageXml = Get-Content -Raw $packagesConfig
@@ -298,9 +299,10 @@ function New-CatroPinnedCppWinRTProjection([string] $MSBuildPath) {
     New-Item -ItemType Directory -Force -Path $generated | Out-Null
 
     Write-Host "[catro] Generating C++/WinRT $($cppwinrtPackage.version) platform projection"
-    & $cppwinrtExe -input sdk+ -output $generated
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Pinned cppwinrt.exe platform projection generation failed.'
+    & $cppwinrtExe -input sdk+ -output $generated | Out-Host
+    $cppwinrtExitCode = $LASTEXITCODE
+    if ($cppwinrtExitCode -ne 0) {
+        throw "Pinned cppwinrt.exe platform projection generation failed with code $cppwinrtExitCode."
     }
 
     $baseHeader = Join-Path $generated 'winrt\base.h'
