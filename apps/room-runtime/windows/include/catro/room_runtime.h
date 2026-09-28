@@ -45,8 +45,11 @@ struct CatroRoomRuntimeSnapshot {
     std::uint64_t voice_received_datagrams;
     std::uint64_t video_sent_datagrams;
     std::uint64_t video_received_datagrams;
+    std::uint64_t stream_audio_sent_datagrams;
+    std::uint64_t stream_audio_received_datagrams;
     std::uint64_t voice_queue_drops;
     std::uint64_t video_queue_drops;
+    std::uint64_t stream_audio_queue_drops;
     char error[256];
 };
 
@@ -67,6 +70,10 @@ CATRO_ROOM_API std::size_t catro_room_runtime_send_video(
     CatroRoomRuntimeHandle handle,
     const std::byte* data,
     std::size_t size) noexcept;
+CATRO_ROOM_API std::size_t catro_room_runtime_send_stream_audio(
+    CatroRoomRuntimeHandle handle,
+    const std::byte* data,
+    std::size_t size) noexcept;
 
 // Returns bytes copied, 0 on timeout/no data, and -1 on invalid arguments.
 // Receive queues are bounded and latest-edge oriented: overflow drops the oldest complete datagram.
@@ -76,6 +83,11 @@ CATRO_ROOM_API std::ptrdiff_t catro_room_runtime_receive_voice(
     std::size_t capacity,
     std::uint32_t timeout_ms) noexcept;
 CATRO_ROOM_API std::ptrdiff_t catro_room_runtime_receive_video(
+    CatroRoomRuntimeHandle handle,
+    std::byte* destination,
+    std::size_t capacity,
+    std::uint32_t timeout_ms) noexcept;
+CATRO_ROOM_API std::ptrdiff_t catro_room_runtime_receive_stream_audio(
     CatroRoomRuntimeHandle handle,
     std::byte* destination,
     std::size_t capacity,
