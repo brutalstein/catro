@@ -223,8 +223,10 @@ void trace_event(std::string_view event) noexcept {
 struct WindowsScreenShareRuntime::Impl {
     struct PacketContext {
         UdpPeerSocket* socket = nullptr;
+        CatroRoomRuntimeHandle room_runtime = nullptr;
         Impl* owner = nullptr;
         bool soft_drop = false;
+        bool room_failed = false;
         std::optional<UdpError> fatal_error;
 
         static bool send(
@@ -232,6 +234,62 @@ struct WindowsScreenShareRuntime::Impl {
             const video::RtpPacketSlice& packet) noexcept {
             auto& context =
                 *static_cast<PacketContext*>(opaque);
+
+            if (context.room_runtime != nullptr) {
+                const auto prefix =
+                    std::span<const std::byte>(
+                        packet.prefix.data(),
+                        static_cast<std::size_t>(
+                            packet.prefix_size));
+                if (prefix.size() + packet.payload.size() >
+                    kReceiveDatagramBytes) {
+                    context.soft_drop = true;
+                    return false;
+                }
+
+                std::array<std::byte, kReceiveDatagramBytes>
+                    datagram{};
+                std::memcpy(
+                    datagram.data(),
+                    prefix.data(),
+                    prefix.size());
+                std::memcpy(
+                    datagram.data() + prefix.size(),
+                    packet.payload.data(),
+                    packet.payload.size());
+                const auto size =
+                    prefix.size() + packet.payload.size();
+
+                const auto peers =
+                    catro_room_runtime_send_video(
+                        context.room_runtime,
+                        datagram.data(),
+                        size);
+                const auto room =
+                    catro_room_runtime_snapshot(
+                        context.room_runtime);
+                if (room.state == CATRO_ROOM_FAILED) {
+                    context.room_failed = true;
+                    return false;
+                }
+
+                // Zero viewers is not a media failure. The stream stays live and starts fanning
+                // out immediately when a room peer arrives.
+                if (peers != 0) {
+                    context.owner->packets_sent_.fetch_add(
+                        1, std::memory_order_relaxed);
+                    context.owner->wire_bytes_.fetch_add(
+                        size * peers,
+                        std::memory_order_relaxed);
+                }
+                return true;
+            }
+
+            if (context.socket == nullptr) {
+                context.room_failed = true;
+                return false;
+            }
+
             const std::array<std::span<const std::byte>, 2>
                 segments{
                     std::span<const std::byte>(
@@ -572,7 +630,8 @@ struct WindowsScreenShareRuntime::Impl {
 
     void run_sender(ScreenShareConfig config) {
         auto* const socket = socket_.get();
-        if (socket == nullptr) {
+        if (socket == nullptr &&
+            config.room_runtime == nullptr) {
             fail_share(
                 ScreenShareErrorCode::network_failed,
                 "video transport is not running");
@@ -840,6 +899,7 @@ struct WindowsScreenShareRuntime::Impl {
 
             PacketContext context{
                 .socket = socket,
+                .room_runtime = config.room_runtime,
                 .owner = this,
             };
             const auto packetized =
@@ -854,6 +914,19 @@ struct WindowsScreenShareRuntime::Impl {
             next_sequence = packetized.next_sequence;
 
             if (!packetized) {
+                if (context.room_failed) {
+                    const auto room =
+                        config.room_runtime != nullptr
+                            ? catro_room_runtime_snapshot(
+                                  config.room_runtime)
+                            : CatroRoomRuntimeSnapshot{};
+                    fail_session(
+                        ScreenShareErrorCode::network_failed,
+                        room.error[0] != '\0'
+                            ? room.error
+                            : "RTC room video transport failed");
+                    return false;
+                }
                 if (context.fatal_error) {
                     fail_session(
                         ScreenShareErrorCode::network_failed,
