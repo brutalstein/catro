@@ -26,6 +26,11 @@
 #include <vector>
 
 namespace winrt::Catro::implementation {
+
+ServerView::ServerView() {
+    InitializeComponent();
+}
+
 namespace {
 
 namespace xaml = Microsoft::UI::Xaml;
