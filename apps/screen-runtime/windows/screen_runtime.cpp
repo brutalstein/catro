@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <exception>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <new>
