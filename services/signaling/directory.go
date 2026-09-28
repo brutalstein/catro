@@ -25,6 +25,12 @@ const (
 	defaultInviteTTL       = 7 * 24 * time.Hour
 	maxInviteTTL           = 30 * 24 * time.Hour
 	defaultRTCTokenTTL     = 15 * time.Minute
+	maxDirectoryUsers      = 4096
+	maxDirectoryServers    = 1024
+	maxDirectoryInvites    = 4096
+	maxInvitesPerServer    = 32
+	maxDirectoryMembers    = 256
+	maxDirectoryStateBytes = 32 * 1024 * 1024
 )
 
 type directoryUser struct {
@@ -117,8 +123,8 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 	if len(raw) == 0 {
 		return d, nil
 	}
-	if len(raw) > 4*1024*1024 {
-		return nil, errors.New("directory state exceeds 4 MiB bound")
+	if len(raw) > maxDirectoryStateBytes {
+		return nil, errors.New("directory state exceeds configured bound")
 	}
 	if err := json.Unmarshal(raw, &d.state); err != nil {
 		return nil, fmt.Errorf("decode directory state: %w", err)
@@ -132,13 +138,37 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 	if d.state.Invites == nil {
 		d.state.Invites = make(map[string]directoryInvite)
 	}
+	if len(d.state.Users) > maxDirectoryUsers ||
+		len(d.state.Servers) > maxDirectoryServers ||
+		len(d.state.Invites) > maxDirectoryInvites {
+		return nil, errors.New("directory state exceeds object-count bounds")
+	}
 	for id, server := range d.state.Servers {
 		if server.Members == nil {
 			server.Members = make(map[string]directoryMember)
 			d.state.Servers[id] = server
 		}
+		if len(server.Members) > maxDirectoryMembers {
+			return nil, errors.New("directory server exceeds member bound")
+		}
 	}
 	return d, nil
+}
+
+func cloneMembers(source map[string]directoryMember) map[string]directoryMember {
+	result := make(map[string]directoryMember, len(source))
+	for id, member := range source {
+		result[id] = member
+	}
+	return result
+}
+
+func (d *directory) pruneExpiredInvitesLocked(now int64) {
+	for code, invite := range d.state.Invites {
+		if invite.Expires <= now {
+			delete(d.state.Invites, code)
+		}
+	}
 }
 
 func (d *directory) persistLocked() error {
@@ -303,9 +333,11 @@ func (d *directory) handleRegister(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if existing.DisplayName != request.DisplayName {
+			previous := existing
 			existing.DisplayName = request.DisplayName
 			d.state.Users[request.UserID] = existing
 			if err := d.persistLocked(); err != nil {
+				d.state.Users[request.UserID] = previous
 				writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
 				return
 			}
@@ -314,6 +346,11 @@ func (d *directory) handleRegister(w http.ResponseWriter, r *http.Request) {
 			"user_id": request.UserID,
 			"access_token": bearerToken(request.UserID, request.Credential),
 		})
+		return
+	}
+
+	if len(d.state.Users) >= maxDirectoryUsers {
+		writeAPIError(w, http.StatusServiceUnavailable, "directory user capacity reached")
 		return
 	}
 
@@ -360,6 +397,7 @@ func (d *directory) handleServerSync(w http.ResponseWriter, r *http.Request) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if existing, exists := d.state.Servers[request.ServerID]; exists {
+		previous := existing
 		member, memberExists := existing.Members[user.ID]
 		if !memberExists || member.Role != "owner" || existing.OwnerID != user.ID {
 			writeAPIError(w, http.StatusForbidden, "server owner required")
@@ -369,10 +407,16 @@ func (d *directory) handleServerSync(w http.ResponseWriter, r *http.Request) {
 		existing.VoiceChannelID = request.VoiceChannelID
 		d.state.Servers[request.ServerID] = existing
 		if err := d.persistLocked(); err != nil {
+			d.state.Servers[request.ServerID] = previous
 			writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, descriptorFor(existing, user.ID))
+		return
+	}
+
+	if len(d.state.Servers) >= maxDirectoryServers {
+		writeAPIError(w, http.StatusServiceUnavailable, "directory server capacity reached")
 		return
 	}
 
@@ -472,11 +516,27 @@ func (d *directory) handleInvites(w http.ResponseWriter, r *http.Request) {
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.pruneExpiredInvitesLocked(time.Now().Unix())
 	server, exists := d.state.Servers[request.ServerID]
 	if !exists || server.OwnerID != user.ID {
 		writeAPIError(w, http.StatusForbidden, "server owner required")
 		return
 	}
+	if len(d.state.Invites) >= maxDirectoryInvites {
+		writeAPIError(w, http.StatusTooManyRequests, "directory invite capacity reached")
+		return
+	}
+	activeForServer := 0
+	for _, invite := range d.state.Invites {
+		if invite.ServerID == server.ID {
+			activeForServer++
+		}
+	}
+	if activeForServer >= maxInvitesPerServer {
+		writeAPIError(w, http.StatusTooManyRequests, "server invite capacity reached")
+		return
+	}
+
 	code, err := randomInviteCode()
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "invite entropy failed")
@@ -544,10 +604,20 @@ func (d *directory) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 	if server.Members == nil {
 		server.Members = make(map[string]directoryMember)
 	}
+	if _, alreadyMember := server.Members[user.ID]; !alreadyMember &&
+		len(server.Members) >= maxDirectoryMembers {
+		writeAPIError(w, http.StatusConflict, "server member capacity reached")
+		return
+	}
+
+	previousMembers := cloneMembers(server.Members)
 	server.Members[user.ID] = directoryMember{UserID: user.ID, Role: "member"}
 	d.state.Servers[server.ID] = server
 	delete(d.state.Invites, request.Code)
 	if err := d.persistLocked(); err != nil {
+		server.Members = previousMembers
+		d.state.Servers[server.ID] = server
+		d.state.Invites[request.Code] = invite
 		writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
 		return
 	}
