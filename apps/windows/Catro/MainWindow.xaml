@@ -71,13 +71,19 @@
                             </Button>
                         </Grid>
 
-                        <Button Width="40"
+                        <StackPanel x:Name="JoinedServersPanel"
+                                    HorizontalAlignment="Center"
+                                    Spacing="8" />
+
+                        <Button x:Name="JoinServerButton"
+                                Width="40"
                                 Height="40"
                                 Padding="0"
                                 CornerRadius="14"
                                 Background="{ThemeResource CatroSurfaceAltBrush}"
                                 BorderThickness="0"
                                 IsEnabled="False"
+                                Click="OnJoinServer"
                                 ToolTipService.ToolTip="Join with invite code"
                                 AutomationProperties.Name="Join server">
                             <FontIcon Glyph="&#xE710;" FontSize="15" />
