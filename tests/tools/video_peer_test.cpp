@@ -53,10 +53,39 @@ TEST_CASE("video peer parser keeps conservative media defaults") {
     CHECK(parsed->max_height == 1080);
     CHECK(parsed->fps == 30);
     CHECK(parsed->bitrate == 6'000'000);
-    CHECK(parsed->ssrc == 1);
+    CHECK(parsed->ssrc == 0);
     CHECK(parsed->payload_type == 96);
     CHECK(parsed->mtu_bytes == 1200);
     CHECK(parsed->max_access_unit_bytes == 4U * 1024U * 1024U);
+}
+
+
+TEST_CASE("video peer parser keeps a nonzero sender default and receiver auto-lock") {
+    const std::array<std::string_view, 6> sender_arguments{
+        "--mode", "send",
+        "--bind", "127.0.0.1:54110",
+        "--peer", "127.0.0.1:54111",
+    };
+    const auto sender = parse_video_peer_arguments(sender_arguments);
+    REQUIRE(sender);
+    CHECK(sender->ssrc == 1);
+
+    const std::array<std::string_view, 8> receiver_arguments{
+        "--mode", "receive",
+        "--bind", "127.0.0.1:54111",
+        "--peer", "127.0.0.1:54110",
+        "--ssrc", "0",
+    };
+    const auto receiver = parse_video_peer_arguments(receiver_arguments);
+    REQUIRE(receiver);
+    CHECK(receiver->ssrc == 0);
+
+    CHECK_FALSE(parse_video_peer_arguments(
+        std::array<std::string_view, 8>{
+            "--mode", "send",
+            "--bind", "127.0.0.1:54110",
+            "--peer", "127.0.0.1:54111",
+            "--ssrc", "0"}));
 }
 
 TEST_CASE("video peer parser rejects unsafe or incomplete settings") {
