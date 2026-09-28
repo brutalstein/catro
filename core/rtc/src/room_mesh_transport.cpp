@@ -4,6 +4,7 @@
 #include <rtc/rtc.hpp>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -25,6 +26,9 @@ using Json = nlohmann::json;
 constexpr std::size_t kMaximumPeers = 64;
 constexpr std::size_t kMaximumMediaDatagram = 2048;
 constexpr std::size_t kMaximumSignalMessage = 64U * 1024U;
+constexpr std::size_t kVoiceBufferedBytes = 8U * 1024U;
+constexpr std::size_t kStreamAudioBufferedBytes = 16U * 1024U;
+constexpr std::size_t kVideoBufferedBytes = 128U * 1024U;
 constexpr std::string_view kVoiceLabel = "catro.voice.v1";
 constexpr std::string_view kVideoLabel = "catro.video.v1";
 constexpr std::string_view kStreamAudioLabel =
@@ -248,12 +252,16 @@ struct RoomMeshTransport::Impl {
             return 0;
         }
 
-        std::vector<
-            std::shared_ptr<::rtc::DataChannel>>
-            channels;
+        // Media send is a hot path: video can call this hundreds of times per second. Snapshot
+        // shared channel handles into fixed stack storage instead of allocating a vector for every
+        // RTP/Opus datagram. The room itself is already hard-bounded by kMaximumPeers.
+        std::array<
+            std::shared_ptr<::rtc::DataChannel>,
+            kMaximumPeers>
+            channels{};
+        std::size_t channel_count = 0;
         {
             std::scoped_lock lock(mutex_);
-            channels.reserve(peers_.size());
             for (const auto& [id, peer] : peers_) {
                 (void)id;
                 const auto channel =
@@ -262,15 +270,35 @@ struct RoomMeshTransport::Impl {
                         : (label == kVideoLabel
                                ? peer->video
                                : peer->stream_audio);
-                if (channel && channel->isOpen()) {
-                    channels.push_back(channel);
+                if (channel &&
+                    channel->isOpen() &&
+                    channel_count < channels.size()) {
+                    channels[channel_count++] =
+                        channel;
                 }
             }
         }
 
+        const auto buffered_limit =
+            label == kVoiceLabel
+                ? kVoiceBufferedBytes
+                : (label == kVideoLabel
+                       ? kVideoBufferedBytes
+                       : kStreamAudioBufferedBytes);
+
         std::size_t sent = 0;
-        for (const auto& channel : channels) {
+        for (std::size_t index = 0;
+             index < channel_count;
+             ++index) {
+            const auto& channel = channels[index];
             try {
+                // Unordered/unreliable SCTP prevents retransmission head-of-line blocking, but an
+                // application can still enqueue faster than a path can drain. Bound that queue
+                // explicitly; stale realtime media is less valuable than increasing latency.
+                if (channel->bufferedAmount() >
+                    buffered_limit) {
+                    continue;
+                }
                 if (channel->send(
                         reinterpret_cast<
                             const ::rtc::byte*>(
