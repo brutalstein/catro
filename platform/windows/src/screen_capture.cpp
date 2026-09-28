@@ -1173,12 +1173,12 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
                     return TRUE;
                 }
 
-                RECT bounds{};
-                if (!GetWindowRect(window, &bounds)) {
+                RECT client{};
+                if (!GetClientRect(window, &client)) {
                     return TRUE;
                 }
-                const auto width = bounds.right - bounds.left;
-                const auto height = bounds.bottom - bounds.top;
+                const auto width = client.right - client.left;
+                const auto height = client.bottom - client.top;
                 if (width <= 1 || height <= 1) {
                     return TRUE;
                 }
@@ -1234,6 +1234,10 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
 
 ScreenCaptureBackend recommended_capture_backend(
     const CaptureSource& source) noexcept {
+    if (source.kind == CaptureSourceKind::display &&
+        source.native_handle != 0) {
+        return ScreenCaptureBackend::desktop_duplication;
+    }
     if (source.kind == CaptureSourceKind::window &&
         source.monitor_handle != 0 &&
         (source.fullscreen_like || source.process_name == "cs2.exe")) {

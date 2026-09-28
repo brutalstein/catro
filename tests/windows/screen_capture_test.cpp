@@ -60,7 +60,7 @@ TEST_CASE("CS2 and fullscreen window sources use the game-compatible capture bac
         .primary = true,
     };
     CHECK(recommended_capture_backend(display) ==
-          ScreenCaptureBackend::windows_graphics_capture);
+          ScreenCaptureBackend::desktop_duplication);
 }
 
 TEST_CASE("capture source descriptors are inert value objects") {

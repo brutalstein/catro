@@ -503,11 +503,13 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
 
         controls::TextBlock game_note;
         game_note.Text(
-            L"Fullscreen/game sources automatically use DXGI Desktop Duplication. "
-            L"This is the GPU-only path used for fullscreen DirectX games such as Counter-Strike 2.");
+            L"Border-free display/game capture uses GPU-only DXGI Desktop Duplication for full "
+            L"displays and Counter-Strike 2, including fullscreen mode changes, without injecting "
+            L"code into the game process.");
         game_note.TextWrapping(xaml::TextWrapping::Wrap);
         game_note.Visibility(
-            sources.front().fullscreen_like
+            catro::platform::windows::recommended_capture_backend(sources.front()) ==
+                    catro::platform::windows::ScreenCaptureBackend::desktop_duplication
                 ? xaml::Visibility::Visible
                 : xaml::Visibility::Collapsed);
         form.Children().Append(game_note);
@@ -539,7 +541,9 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
                 const bool game_visible =
                     selected >= 0 &&
                     static_cast<std::size_t>(selected) < sources.size() &&
-                    sources[static_cast<std::size_t>(selected)].fullscreen_like;
+                    catro::platform::windows::recommended_capture_backend(
+                        sources[static_cast<std::size_t>(selected)]) ==
+                        catro::platform::windows::ScreenCaptureBackend::desktop_duplication;
                 game_note.Visibility(
                     game_visible ? xaml::Visibility::Visible
                                  : xaml::Visibility::Collapsed);

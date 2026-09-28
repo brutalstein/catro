@@ -357,6 +357,23 @@ try {
         "-p:Configuration=$Configuration" -p:Platform=x64 "-p:CatroCoreRoot=$buildDir" -m -nologo -v:m
     if ($LASTEXITCODE -ne 0) { throw 'WinUI shell build failed.' }
 
+    $builtShell = Join-Path $root "out\apps\windows\x64\$Configuration\Catro.exe"
+    $builtIcon = Join-Path $root "out\apps\windows\x64\$Configuration\Assets\Catro.ico"
+    if (-not (Test-Path $builtShell)) {
+        throw "WinUI shell output missing after successful MSBuild: $builtShell"
+    }
+    if (-not (Test-Path $builtIcon)) {
+        throw "Catro icon asset missing from shell output: $builtIcon"
+    }
+
+    Add-Type -AssemblyName System.Drawing
+    $associatedIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($builtShell)
+    if ($null -eq $associatedIcon) {
+        throw 'Catro.exe does not expose an associated native icon resource.'
+    }
+    $associatedIcon.Dispose()
+
+    Write-Host "[catro] Verified native icon resource and deployed Catro.ico"
     Write-Host "[catro] Shell: out\apps\windows\x64\$Configuration\Catro.exe"
 } finally {
     Pop-Location
