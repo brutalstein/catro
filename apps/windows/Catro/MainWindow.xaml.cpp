@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "MainWindow.xaml.h"
+#include "resource.h"
 #if __has_include("MainWindow.g.cpp")
 #include "MainWindow.g.cpp"
 #endif
@@ -63,12 +64,31 @@ void MainWindow::InitializeComponent() {
         const auto icon_path =
             std::filesystem::path{module_path}.parent_path() /
             L"Assets" / L"Catro.ico";
-        if (std::filesystem::exists(icon_path)) {
+        std::error_code icon_error;
+        if (std::filesystem::exists(icon_path, icon_error) &&
+            !icon_error) {
             try {
                 AppWindow().SetIcon(hstring{icon_path.wstring()});
             } catch (const winrt::hresult_error&) {
             }
         }
+    }
+
+    const auto icon = reinterpret_cast<HICON>(
+        LoadImageW(
+            GetModuleHandleW(nullptr),
+            MAKEINTRESOURCEW(IDI_CATRO_APP),
+            IMAGE_ICON,
+            0,
+            0,
+            LR_DEFAULTSIZE | LR_SHARED));
+    if (icon != nullptr && hwnd != nullptr) {
+        (void)SendMessageW(
+            hwnd, WM_SETICON, ICON_BIG,
+            reinterpret_cast<LPARAM>(icon));
+        (void)SendMessageW(
+            hwnd, WM_SETICON, ICON_SMALL,
+            reinterpret_cast<LPARAM>(icon));
     }
 
     const auto scale = GetDpiForWindow(hwnd) / 96.0;
