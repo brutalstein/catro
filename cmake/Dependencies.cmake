@@ -44,3 +44,55 @@ function(catro_enable_voice_dependency)
     set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(opus)
 endfunction()
+
+
+# Production Windows RTC transport.
+#
+# libdatachannel provides ICE/STUN/TURN, DTLS-SRTP media transport, and WebSocket signaling.
+# Pin every third-party revision; do not follow a moving branch in reproducible Release builds.
+if(WIN32 AND MSVC)
+    FetchContent_Declare(
+        mbedtls
+        GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
+        GIT_TAG v3.6.5
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+        GIT_SUBMODULES_RECURSE TRUE
+    )
+
+    FetchContent_Declare(
+        libdatachannel
+        GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
+        GIT_TAG 443f6934d9007eb7076ab7825ba330f355fcbead
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+        GIT_SUBMODULES_RECURSE TRUE
+    )
+
+    function(catro_enable_rtc_dependency)
+        # Mbed TLS is built into Catro so target PCs do not need a separately installed TLS stack.
+        set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+        set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+        set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)
+        set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(mbedtls)
+
+        # libdatachannel's Mbed TLS lookup accepts this compatibility target.
+        if(TARGET mbedtls AND NOT TARGET MbedTLS::MbedTLS)
+            add_library(MbedTLS::MbedTLS ALIAS mbedtls)
+        endif()
+
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+        set(BUILD_SHARED_DEPS_LIBS OFF CACHE BOOL "" FORCE)
+        set(USE_MBEDTLS ON CACHE BOOL "" FORCE)
+        set(USE_GNUTLS OFF CACHE BOOL "" FORCE)
+        set(USE_NICE OFF CACHE BOOL "" FORCE)
+        set(PREFER_SYSTEM_LIB OFF CACHE BOOL "" FORCE)
+        set(NO_WEBSOCKET OFF CACHE BOOL "" FORCE)
+        set(NO_MEDIA OFF CACHE BOOL "" FORCE)
+        set(NO_EXAMPLES ON CACHE BOOL "" FORCE)
+        set(NO_TESTS ON CACHE BOOL "" FORCE)
+        set(WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(libdatachannel)
+    endfunction()
+endif()
