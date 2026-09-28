@@ -901,14 +901,6 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         audio_note.TextWrapping(
             xaml::TextWrapping::Wrap);
         audio_note.FontSize(11);
-        audio_note.Foreground(
-            Application::Current()
-                .Resources()
-                .Lookup(
-                    box_value(
-                        hstring{
-                            L"CatroTextTertiaryBrush"}))
-                .as<Microsoft::UI::Xaml::Media::Brush>());
         form.Children().Append(audio_note);
 
         source_box.SelectionChanged(
