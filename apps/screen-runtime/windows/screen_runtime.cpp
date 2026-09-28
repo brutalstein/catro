@@ -1,10 +1,15 @@
 #include <catro/screen_runtime.hpp>
 
+#include <catro/audio/realtime.hpp>
+#include <catro/platform/windows/process_loopback_audio.hpp>
 #include <catro/platform/windows/video_decoder.hpp>
 #include <catro/platform/windows/video_encoder.hpp>
 #include <catro/platform/windows/video_presenter.hpp>
 #include <catro/video/geometry.hpp>
 #include <catro/video/rtp_h264.hpp>
+#include <catro/voice/codec.hpp>
+#include <catro/voice/jitter.hpp>
+#include <catro/voice/packet.hpp>
 
 #include <Windows.h>
 
@@ -57,6 +62,142 @@ constexpr auto kReceiveWait = 20ms;
 constexpr std::uint32_t kPreviewMaxFps = 10;
 constexpr std::size_t kReceiveDatagramBytes = 1500;
 constexpr std::size_t kReceiveDrainLimit = 512;
+
+constexpr auto kStreamAudioFramePeriod = 20ms;
+constexpr std::size_t kStreamAudioChannels = 2;
+constexpr std::size_t kStreamAudioFrameSamples =
+    static_cast<std::size_t>(voice::kFrameSamples) *
+    kStreamAudioChannels;
+constexpr std::size_t kStreamAudioQueueFrames = 8;
+constexpr std::size_t kStreamAudioJitterPackets = 3;
+constexpr std::size_t kStreamAudioReceiveDrainLimit = 64;
+using StreamAudioPcmFrame =
+    std::array<float, kStreamAudioFrameSamples>;
+
+class StreamAudioCaptureBridge final {
+public:
+    StreamAudioCaptureBridge()
+        : ring_(kStreamAudioFrameSamples *
+                kStreamAudioQueueFrames) {}
+
+    void on_captured(
+        std::span<const float> samples) noexcept {
+        if (samples.empty()) {
+            return;
+        }
+        if (!ring_.write_exact(samples)) {
+            dropped_callbacks_.fetch_add(
+                1, std::memory_order_relaxed);
+            resync_requested_.store(
+                true, std::memory_order_release);
+        }
+    }
+
+    [[nodiscard]] bool try_pop(
+        StreamAudioPcmFrame& frame) noexcept {
+        if (resync_requested_.exchange(
+                false, std::memory_order_acq_rel)) {
+            ring_.discard(ring_.size());
+            resync_events_.fetch_add(
+                1, std::memory_order_relaxed);
+            return false;
+        }
+
+        const auto buffered = ring_.size();
+        const auto keep =
+            kStreamAudioFrameSamples * 3U;
+        if (buffered > keep) {
+            const auto stale =
+                ((buffered - keep) /
+                 kStreamAudioFrameSamples) *
+                kStreamAudioFrameSamples;
+            if (stale != 0) {
+                ring_.discard(stale);
+                stale_samples_.fetch_add(
+                    stale,
+                    std::memory_order_relaxed);
+            }
+        }
+
+        return ring_.read_exact(
+            std::span<float>(frame));
+    }
+
+    [[nodiscard]] std::uint64_t dropped_callbacks()
+        const noexcept {
+        return dropped_callbacks_.load(
+            std::memory_order_relaxed);
+    }
+
+private:
+    audio::SpscRing<float> ring_;
+    std::atomic_bool resync_requested_{false};
+    std::atomic<std::uint64_t> dropped_callbacks_{0};
+    std::atomic<std::uint64_t> resync_events_{0};
+    std::atomic<std::uint64_t> stale_samples_{0};
+};
+
+class StreamAudioRenderBridge final {
+public:
+    StreamAudioRenderBridge()
+        : ring_(kStreamAudioFrameSamples *
+                kStreamAudioQueueFrames) {}
+
+    [[nodiscard]] bool try_push(
+        const StreamAudioPcmFrame& frame) noexcept {
+        if (!ring_.write_exact(
+                std::span<const float>(frame))) {
+            push_rejections_.fetch_add(
+                1, std::memory_order_relaxed);
+            request_resync_.store(
+                true, std::memory_order_release);
+            return false;
+        }
+        primed_.store(
+            true, std::memory_order_relaxed);
+        return true;
+    }
+
+    void on_render(
+        std::span<float> samples) noexcept {
+        if (request_resync_.exchange(
+                false, std::memory_order_acq_rel)) {
+            ring_.discard(ring_.size());
+        }
+
+        const auto read = ring_.read(samples);
+        if (read < samples.size()) {
+            std::fill(
+                samples.begin() +
+                    static_cast<std::ptrdiff_t>(read),
+                samples.end(),
+                0.0F);
+            if (primed_.load(
+                    std::memory_order_relaxed)) {
+                underruns_.fetch_add(
+                    1, std::memory_order_relaxed);
+            }
+        }
+    }
+
+    void request_resync() noexcept {
+        request_resync_.store(
+            true, std::memory_order_release);
+    }
+
+    [[nodiscard]] std::uint64_t push_rejections()
+        const noexcept {
+        return push_rejections_.load(
+            std::memory_order_relaxed);
+    }
+
+private:
+    audio::SpscRing<float> ring_;
+    std::atomic_bool primed_{false};
+    std::atomic_bool request_resync_{false};
+    std::atomic<std::uint64_t> push_rejections_{0};
+    std::atomic<std::uint64_t> underruns_{0};
+};
 
 [[nodiscard]] bool valid_media_bounds(
     std::uint8_t payload_type,
