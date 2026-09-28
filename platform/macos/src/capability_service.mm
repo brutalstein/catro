@@ -4,6 +4,7 @@
 #import <Foundation/Foundation.h>
 #include <CoreAudio/CoreAudio.h>
 #include <CoreGraphics/CoreGraphics.h>
+#include <IOKit/ps/IOPowerSources.h>
 #include <IOKit/ps/IOPSKeys.h>
 #include <dispatch/dispatch.h>
 #include <notify.h>
