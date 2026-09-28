@@ -24,11 +24,15 @@ try {
 
     $exe = Join-Path $source 'Catro.exe'
     $voice = Join-Path $source 'catro-voice-runtime.dll'
+    $room = Join-Path $source 'catro-room-runtime.dll'
     if (-not (Test-Path $exe)) {
         throw "Catro executable not found: $exe"
     }
     if (-not (Test-Path $voice)) {
         throw "Voice runtime not found: $voice"
+    }
+    if (-not (Test-Path $room)) {
+        throw "Room runtime not found: $room"
     }
 
     # Self-contained Windows App SDK output must contain its native runtime beside the executable.
@@ -61,9 +65,9 @@ Minimum OS: Windows 10 version 2004 (build 19041) or newer.
 For screen sharing and hardware video acceleration, current Windows 11 and current GPU drivers are
 recommended.
 
-Production RTC service settings will be read from Catro's persisted configuration once the secure
-room service is enabled. Engineering CATRO_* direct-peer environment variables are not part of the
-production distribution contract.
+Production RTC uses secure WebRTC room transport (WSS + ICE/STUN/TURN). A deployed signaling
+service, room access token, and ICE/TURN configuration are required before Internet rooms can be
+joined. Engineering CATRO_* direct-peer variables remain a local validation fallback only.
 "@
     Set-Content -Path (Join-Path $staging 'README.txt') -Value $readme -Encoding UTF8
 
