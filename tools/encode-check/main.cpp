@@ -2,6 +2,7 @@
 
 #include <catro/platform/windows/screen_capture.hpp>
 #include <catro/platform/windows/video_encoder.hpp>
+#include <catro/video/geometry.hpp>
 
 #include <Windows.h>
 
@@ -91,6 +92,17 @@ int wmain(int argc, wchar_t** argv) {
     }
 
     auto config = options->encoder;
+    const auto requested_width = config.width;
+    const auto requested_height = config.height;
+    const auto fitted = catro::video::fit_even_video_extent(
+        first.width, first.height, requested_width, requested_height);
+    if (!fitted) {
+        std::cerr << "catro-encode-check: source cannot be fitted inside the requested encode ceiling\n";
+        capture.stop();
+        return 7;
+    }
+    config.width = fitted->width;
+    config.height = fitted->height;
     config.adapter_luid = capture.statistics().adapter_luid;
 
     catro::platform::windows::WindowsH264HardwareEncoder encoder;
@@ -103,6 +115,7 @@ int wmain(int argc, wchar_t** argv) {
     const auto initial = encoder.statistics();
     std::cout << "source: primary display "
               << first.width << "x" << first.height << " BGRA8\n";
+    std::cout << "ceiling: " << requested_width << "x" << requested_height << "\n";
     std::cout << "target: " << config.width << "x" << config.height
               << "@" << config.frame_rate_numerator
               << " H264 " << config.bitrate << " bit/s\n";
