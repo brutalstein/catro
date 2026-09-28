@@ -57,17 +57,11 @@ constexpr std::uint32_t kPreviewMaxFps = 10;
 constexpr std::size_t kReceiveDatagramBytes = 1500;
 constexpr std::size_t kReceiveDrainLimit = 512;
 
-[[nodiscard]] bool valid_transport_fields(
-    const transport::UdpEndpoint& bind,
-    const transport::UdpEndpoint& peer,
+[[nodiscard]] bool valid_media_bounds(
     std::uint8_t payload_type,
     std::uint16_t mtu_bytes,
     std::size_t max_access_unit_bytes) noexcept {
-    return !bind.address.empty() &&
-           !peer.address.empty() &&
-           bind.port != 0 &&
-           peer.port != 0 &&
-           payload_type >= 96 &&
+    return payload_type >= 96 &&
            payload_type <= 127 &&
            mtu_bytes >= 576 &&
            mtu_bytes <= 1400 &&
@@ -75,19 +69,30 @@ constexpr std::size_t kReceiveDrainLimit = 512;
            max_access_unit_bytes <= 16U * 1024U * 1024U;
 }
 
+[[nodiscard]] bool valid_direct_endpoints(
+    const transport::UdpEndpoint& bind,
+    const transport::UdpEndpoint& peer) noexcept {
+    return !bind.address.empty() &&
+           !peer.address.empty() &&
+           bind.port != 0 &&
+           peer.port != 0;
+}
+
 [[nodiscard]] bool valid_transport(
     const ScreenTransportConfig& config) noexcept {
-    return valid_transport_fields(
-        config.bind,
-        config.peer,
-        config.payload_type,
-        config.mtu_bytes,
-        config.max_access_unit_bytes);
+    return valid_media_bounds(
+               config.payload_type,
+               config.mtu_bytes,
+               config.max_access_unit_bytes) &&
+           (config.room_runtime != nullptr ||
+            valid_direct_endpoints(
+                config.bind, config.peer));
 }
 
 [[nodiscard]] ScreenTransportConfig transport_from_share(
     const ScreenShareConfig& config) {
     return ScreenTransportConfig{
+        .room_runtime = config.room_runtime,
         .bind = config.bind,
         .peer = config.peer,
         .payload_type = config.payload_type,
@@ -99,12 +104,13 @@ constexpr std::size_t kReceiveDrainLimit = 512;
 [[nodiscard]] bool valid_share(
     const ScreenShareConfig& config) noexcept {
     return config.source.native_handle != 0 &&
-           valid_transport_fields(
-               config.bind,
-               config.peer,
+           valid_media_bounds(
                config.payload_type,
                config.mtu_bytes,
                config.max_access_unit_bytes) &&
+           (config.room_runtime != nullptr ||
+            valid_direct_endpoints(
+                config.bind, config.peer)) &&
            config.max_width >= 320 &&
            config.max_width <= 7680 &&
            config.max_height >= 180 &&
@@ -306,7 +312,7 @@ struct WindowsScreenShareRuntime::Impl {
         }
 
         const bool reuse_transport =
-            socket_ &&
+            (socket_ || transport.room_runtime != nullptr) &&
             receiver_worker_.joinable() &&
             !stop_requested_.load(std::memory_order_acquire) &&
             transport_config_ &&
@@ -359,6 +365,49 @@ struct WindowsScreenShareRuntime::Impl {
             std::scoped_lock lock(metadata_mutex_);
             source_title_.clear();
             error_.clear();
+        }
+
+        if (config.room_runtime != nullptr) {
+            const auto room =
+                catro_room_runtime_snapshot(
+                    config.room_runtime);
+            if (room.state == CATRO_ROOM_FAILED ||
+                room.state == CATRO_ROOM_IDLE) {
+                state_.store(
+                    ScreenShareState::failed,
+                    std::memory_order_release);
+                return ScreenShareError{
+                    ScreenShareErrorCode::network_failed,
+                    room.error[0] != '\0'
+                        ? room.error
+                        : "RTC room transport is not connected"};
+            }
+
+            socket_.reset();
+            transport_config_ = config;
+            stop_requested_.store(
+                false, std::memory_order_release);
+            share_stop_requested_.store(
+                true, std::memory_order_release);
+            state_.store(
+                ScreenShareState::listening,
+                std::memory_order_release);
+
+            try {
+                receiver_worker_ = std::thread(
+                    [this, config] {
+                        run_receiver_guarded(config);
+                    });
+            } catch (...) {
+                transport_config_.reset();
+                state_.store(
+                    ScreenShareState::failed,
+                    std::memory_order_release);
+                return ScreenShareError{
+                    ScreenShareErrorCode::worker_start_failed,
+                    "screen receive worker could not start"};
+            }
+            return std::nullopt;
         }
 
         auto opened = UdpPeerSocket::bind(config.bind);
