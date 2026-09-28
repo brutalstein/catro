@@ -104,6 +104,15 @@ func main() {
 	maxRoom := flag.Int("max-room-peers", defaultMaxRoom, "maximum peers per voice room")
 	origin := flag.String("allowed-origin", "", "optional exact browser Origin")
 	allowHTTP := flag.Bool("allow-insecure-http", false, "engineering only: plaintext HTTP/WebSocket")
+	allowNoTURN := flag.Bool("allow-no-turn", false, "engineering only: permit RTC provisioning without TURN")
+	publicSignalingURL := flag.String(
+		"public-signaling-url",
+		os.Getenv("CATRO_PUBLIC_SIGNALING_URL"),
+		"public wss:// signaling endpoint returned to authenticated clients")
+	iceServerList := flag.String(
+		"ice-servers",
+		os.Getenv("CATRO_ICE_SERVERS"),
+		"semicolon/comma separated STUN/TURN URLs returned to authenticated clients")
 	mint := flag.Bool("mint-token", false, "mint one room token and exit")
 	serverID := flag.String("server-id", "", "token server id")
 	channelID := flag.String("channel-id", "", "token voice channel id")
@@ -137,10 +146,52 @@ func main() {
 		log.Fatal("TLS certificate/key required unless --allow-insecure-http is explicitly set")
 	}
 
+	iceServers := strings.FieldsFunc(
+		*iceServerList,
+		func(r rune) bool {
+			return r == ';' || r == ','
+		})
+	for index := range iceServers {
+		iceServers[index] = strings.TrimSpace(iceServers[index])
+	}
+	filteredICE := iceServers[:0]
+	hasTURN := false
+	for _, value := range iceServers {
+		if value == "" {
+			continue
+		}
+		if strings.HasPrefix(value, "turn:") ||
+			strings.HasPrefix(value, "turns:") {
+			hasTURN = true
+		}
+		filteredICE = append(filteredICE, value)
+	}
+	iceServers = filteredICE
+
+	if *publicSignalingURL == "" || len(iceServers) == 0 {
+		log.Fatal("--public-signaling-url and --ice-servers are required")
+	}
+	if *allowHTTP {
+		if !strings.HasPrefix(*publicSignalingURL, "ws://") &&
+			!strings.HasPrefix(*publicSignalingURL, "wss://") {
+			log.Fatal("public signaling URL must use ws:// or wss://")
+		}
+	} else if !strings.HasPrefix(*publicSignalingURL, "wss://") {
+		log.Fatal("production public signaling URL must use wss://")
+	}
+	if !*allowNoTURN && !hasTURN {
+		log.Fatal("production ICE provisioning requires at least one TURN URL")
+	}
+
 	directory, err := openDirectory(*stateFile, []byte(*secret))
 	if err != nil {
 		log.Fatalf("directory: %v", err)
 	}
+	directory.setRTCProvisioning(
+		*publicSignalingURL,
+		iceServers,
+		*allowHTTP,
+		*allowNoTURN)
 
 	s := &service{
 		secret: []byte(*secret), maxRoomPeers: *maxRoom,
