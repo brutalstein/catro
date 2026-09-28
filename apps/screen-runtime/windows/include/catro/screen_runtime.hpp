@@ -94,6 +94,10 @@ struct ScreenShareSnapshot {
     std::uint64_t encoder_timeouts = 0;
     std::uint64_t capture_contention_drops = 0;
 
+    // A remote stream can be present in the voice room without being watched. This mirrors
+    // Discord's voice/Go Live split and keeps decode/presentation GPU work opt-in.
+    bool remote_available = false;
+    bool remote_viewing = false;
     bool remote_active = false;
     std::uint32_t remote_width = 0;
     std::uint32_t remote_height = 0;
@@ -136,6 +140,10 @@ public:
     // disables it while the voice page is hidden so screen sharing does not spend GPU time on an
     // invisible D3D11 VideoProcessor/swap-chain path.
     void set_local_preview_enabled(bool enabled) noexcept;
+
+    // Receiving RTP is room state; decoding/presentation is viewer state. Keeping these separate
+    // means a user can stay in voice while choosing whether to spend GPU time watching a stream.
+    void set_remote_viewing_enabled(bool enabled) noexcept;
 
     // Stops both directions and releases the transport.
     void stop() noexcept;
