@@ -742,7 +742,9 @@ load_or_create_credential_bytes() {
             FILE_ATTRIBUTE_HIDDEN |
                 FILE_FLAG_WRITE_THROUGH,
             nullptr)};
-    if (!output) {
+    if (!output ||
+        output.get() ==
+            INVALID_HANDLE_VALUE) {
         return error(
             DirectoryErrorCode::credential_failure,
             "credential staging file failed",
