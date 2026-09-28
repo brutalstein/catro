@@ -5,6 +5,7 @@
 #include <audioclientactivationparams.h>
 #include <avrt.h>
 #include <mmdeviceapi.h>
+#include <mmreg.h>
 #include <wrl/client.h>
 #include <wrl/implements.h>
 
@@ -18,6 +19,7 @@
 #include <new>
 #include <span>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
