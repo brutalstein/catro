@@ -444,6 +444,10 @@ func mintToken(secret []byte, value claims) (string, error) {
 }
 
 func verifyToken(secret []byte, token string, expected claims) error {
+	return verifyTokenAt(secret, token, expected, time.Now())
+}
+
+func verifyTokenAt(secret []byte, token string, expected claims, now time.Time) error {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 || parts[0] != "v1" {
 		return errors.New("bad token")
@@ -465,7 +469,7 @@ func verifyToken(secret []byte, token string, expected claims) error {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		return err
 	}
-	if got.Expires <= time.Now().Unix() ||
+	if got.Expires <= now.Unix() ||
 		got.ServerID != expected.ServerID ||
 		got.ChannelID != expected.ChannelID ||
 		got.PeerID != expected.PeerID {
