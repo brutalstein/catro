@@ -28,7 +28,7 @@ TEST_CASE("stopping an idle Windows screen capture is idempotent") {
     CHECK(capture.statistics().state == ScreenCaptureState::idle);
 }
 
-TEST_CASE("fullscreen window sources use the game-compatible capture backend") {
+TEST_CASE("CS2 and fullscreen window sources use the game-compatible capture backend") {
     CaptureSource windowed{
         .kind = CaptureSourceKind::window,
         .native_handle = 1,
@@ -39,6 +39,10 @@ TEST_CASE("fullscreen window sources use the game-compatible capture backend") {
         .height = 1080,
         .fullscreen_like = false,
     };
+    CHECK(recommended_capture_backend(windowed) ==
+          ScreenCaptureBackend::desktop_duplication);
+
+    windowed.process_name = "notepad.exe";
     CHECK(recommended_capture_backend(windowed) ==
           ScreenCaptureBackend::windows_graphics_capture);
 

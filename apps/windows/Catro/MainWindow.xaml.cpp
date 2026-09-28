@@ -68,7 +68,10 @@ void MainWindow::InitializeComponent() {
         if (std::filesystem::exists(icon_path, icon_error) &&
             !icon_error) {
             try {
-                AppWindow().SetIcon(hstring{icon_path.wstring()});
+                const hstring resolved_icon{icon_path.wstring()};
+                AppWindow().SetIcon(resolved_icon);
+                AppWindow().SetTaskbarIcon(resolved_icon);
+                AppWindow().SetTitleBarIcon(resolved_icon);
             } catch (const winrt::hresult_error&) {
             }
         }
