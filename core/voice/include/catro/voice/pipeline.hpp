@@ -17,6 +17,7 @@
 namespace catro::voice {
 
 inline constexpr std::size_t kMaxVoiceDatagramBytes = kVoiceHeaderBytes + kVoiceMaxPayloadBytes;
+inline constexpr std::size_t kMaxRemoteVoiceStreams = 64;
 static_assert(kMaxVoiceDatagramBytes < 1400, "voice datagrams must stay below a conservative MTU payload budget");
 
 struct VoicePipelineConfig {
@@ -51,7 +52,7 @@ enum class DecodeStep {
     render_queue_full,
 };
 
-using ReceiveResult = std::variant<JitterPushResult, PacketError>;
+using ReceiveResult = std::variant<JitterPushResult, PacketError, CodecError>;
 
 struct VoicePipelineStatistics {
     std::uint64_t encoded_frames = 0;
@@ -63,6 +64,10 @@ struct VoicePipelineStatistics {
     std::uint64_t decoded_frames = 0;
     std::uint64_t decode_errors = 0;
     std::uint64_t render_queue_full = 0;
+    std::uint64_t remote_stream_capacity_drops = 0;
+    std::uint64_t mixed_frames = 0;
+    std::uint64_t limiter_frames = 0;
+    std::size_t remote_streams_active = 0;
     CaptureBridgeStatistics capture;
     RenderBridgeStatistics render;
     JitterStatistics jitter;
@@ -75,6 +80,8 @@ public:
     using CreateResult = std::variant<std::unique_ptr<VoicePipeline>, CodecError>;
 
     [[nodiscard]] static CreateResult create(const VoicePipelineConfig& config) noexcept;
+
+    ~VoicePipeline();
 
     VoicePipeline(const VoicePipeline&) = delete;
     VoicePipeline& operator=(const VoicePipeline&) = delete;
@@ -96,16 +103,21 @@ public:
     [[nodiscard]] VoicePipelineStatistics statistics() const noexcept;
 
 private:
-    VoicePipeline(const VoicePipelineConfig& config, std::unique_ptr<Encoder> encoder,
-                  std::unique_ptr<Decoder> decoder);
+    struct RemoteStream;
+
+    VoicePipeline(const VoicePipelineConfig& config, std::unique_ptr<Encoder> encoder);
+
+    [[nodiscard]] RemoteStream* find_remote(std::uint32_t stream_id) noexcept;
+    [[nodiscard]] const RemoteStream* find_remote(std::uint32_t stream_id) const noexcept;
+    [[nodiscard]] JitterStatistics aggregate_jitter_statistics() const noexcept;
 
     CaptureBridge capture_;
     RenderBridge render_;
     std::unique_ptr<Encoder> encoder_;
-    std::unique_ptr<Decoder> decoder_;
-    JitterBuffer jitter_;
+    std::array<std::unique_ptr<RemoteStream>, kMaxRemoteVoiceStreams> remotes_{};
+    std::uint16_t jitter_target_packets_ = kDefaultJitterTargetPackets;
     PcmFrame capture_frame_{};
-    PcmFrame decoded_frame_{};
+    PcmFrame mix_frame_{};
     std::uint32_t stream_id_ = 0;
     std::uint16_t next_sequence_ = 0;
     std::uint32_t next_timestamp_ = 0;
@@ -120,6 +132,11 @@ private:
     std::atomic<std::uint64_t> decoded_frames_{0};
     std::atomic<std::uint64_t> decode_errors_{0};
     std::atomic<std::uint64_t> render_queue_full_{0};
+    std::atomic<std::uint64_t> remote_stream_capacity_drops_{0};
+    std::atomic<std::uint64_t> mixed_frames_{0};
+    std::atomic<std::uint64_t> limiter_frames_{0};
+    std::uint64_t playout_tick_ = 0;
+    float limiter_gain_ = 1.0F;
 };
 
 } // namespace catro::voice
