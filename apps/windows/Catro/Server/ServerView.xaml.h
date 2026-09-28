@@ -65,6 +65,7 @@ private:
     bool stream_window_fullscreen_ = false;
 
     bool share_dialog_open_ = false;
+    bool stream_fullscreen_ = false;
     bool muted_ = false;
     bool deafened_ = false;
 };
