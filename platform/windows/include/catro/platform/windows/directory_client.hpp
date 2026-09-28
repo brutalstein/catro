@@ -2,6 +2,7 @@
 
 #include <catro/community/model.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -38,6 +39,7 @@ struct DirectoryServer {
     std::string name;
     std::string voice_channel_id;
     std::string role;
+    std::size_t member_count = 0;
 };
 
 struct DirectoryInvite {
