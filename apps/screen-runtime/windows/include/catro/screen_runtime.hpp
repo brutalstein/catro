@@ -70,6 +70,11 @@ struct ScreenShareConfig {
     std::uint32_t fps = 30;
     std::uint32_t bitrate = 6'000'000;
 
+    // Window shares can capture only the selected process tree's rendered audio. The production
+    // room transport carries it independently from microphone voice.
+    bool share_audio = true;
+    std::int32_t stream_audio_bitrate = 128'000;
+
     std::uint32_t ssrc = 1;
     std::uint8_t payload_type = 96;
     std::uint16_t mtu_bytes = 1200;
@@ -100,6 +105,13 @@ struct ScreenShareSnapshot {
     std::uint64_t encoder_timeouts = 0;
     std::uint64_t capture_contention_drops = 0;
 
+    bool stream_audio_enabled = false;
+    bool stream_audio_active = false;
+    std::uint64_t stream_audio_frames_encoded = 0;
+    std::uint64_t stream_audio_packets_sent = 0;
+    std::uint64_t stream_audio_capture_drops = 0;
+    std::uint64_t stream_audio_encode_failures = 0;
+
     // A remote stream can be present in the voice room without being watched. This mirrors
     // Discord's voice/Go Live split and keeps decode/presentation GPU work opt-in.
     bool remote_available = false;
@@ -117,6 +129,12 @@ struct ScreenShareSnapshot {
     std::uint64_t remote_decode_failures = 0;
     std::uint64_t remote_present_drops = 0;
     std::uint64_t remote_stream_resets = 0;
+
+    bool remote_stream_audio_active = false;
+    std::uint64_t remote_stream_audio_packets = 0;
+    std::uint64_t remote_stream_audio_frames = 0;
+    std::uint64_t remote_stream_audio_decode_failures = 0;
+    std::uint64_t remote_stream_audio_render_drops = 0;
 };
 
 // One full-duplex video transport per voice-room membership. The connected UDP socket is shared by
