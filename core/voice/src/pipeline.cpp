@@ -99,17 +99,6 @@ VoicePipeline::RemoteStream* VoicePipeline::find_remote(
     return nullptr;
 }
 
-const VoicePipeline::RemoteStream*
-VoicePipeline::find_remote(
-    std::uint32_t stream_id) const noexcept {
-    for (const auto& remote : remotes_) {
-        if (remote && remote->stream_id == stream_id) {
-            return remote.get();
-        }
-    }
-    return nullptr;
-}
-
 std::variant<EncodeStep, CodecError>
 VoicePipeline::encode_next(
     OutboundDatagram& datagram) noexcept {
