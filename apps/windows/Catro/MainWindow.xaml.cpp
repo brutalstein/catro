@@ -235,7 +235,7 @@ MainWindow::BeginDirectoryBootstrap() {
     }
 
     const auto state = *local_state_;
-    const auto queue = DispatcherQueue();
+    winrt::apartment_context ui_thread;
 
     co_await winrt::resume_background();
 
@@ -252,16 +252,10 @@ MainWindow::BeginDirectoryBootstrap() {
                 DirectoryErrorCode::
                     not_configured) {
             const auto message = failure->message;
-            (void)queue.TryEnqueue(
-                [lifetime, message] {
-                    controls::ToolTipService::
-                        SetToolTip(
-                            lifetime->
-                                JoinServerButton(),
-                            box_value(
-                                to_hstring(
-                                    message)));
-                });
+            co_await ui_thread;
+            controls::ToolTipService::SetToolTip(
+                lifetime->JoinServerButton(),
+                box_value(to_hstring(message)));
         }
         co_return;
     }
@@ -280,15 +274,10 @@ MainWindow::BeginDirectoryBootstrap() {
                     DirectoryError>(
                 &credential_result)) {
         const auto message = failure->message;
-        (void)queue.TryEnqueue(
-            [lifetime, message] {
-                controls::ToolTipService::
-                    SetToolTip(
-                        lifetime->
-                            JoinServerButton(),
-                        box_value(
-                            to_hstring(message)));
-            });
+        co_await ui_thread;
+        controls::ToolTipService::SetToolTip(
+            lifetime->JoinServerButton(),
+            box_value(to_hstring(message)));
         co_return;
     }
     const auto credential =
@@ -307,15 +296,10 @@ MainWindow::BeginDirectoryBootstrap() {
                     DirectoryError>(
                 &registration)) {
         const auto message = failure->message;
-        (void)queue.TryEnqueue(
-            [lifetime, message] {
-                controls::ToolTipService::
-                    SetToolTip(
-                        lifetime->
-                            JoinServerButton(),
-                        box_value(
-                            to_hstring(message)));
-            });
+        co_await ui_thread;
+        controls::ToolTipService::SetToolTip(
+            lifetime->JoinServerButton(),
+            box_value(to_hstring(message)));
         co_return;
     }
     const auto access_token =
@@ -334,15 +318,10 @@ MainWindow::BeginDirectoryBootstrap() {
                     DirectoryError>(
                 &synced)) {
         const auto message = failure->message;
-        (void)queue.TryEnqueue(
-            [lifetime, message] {
-                controls::ToolTipService::
-                    SetToolTip(
-                        lifetime->
-                            JoinServerButton(),
-                        box_value(
-                            to_hstring(message)));
-            });
+        co_await ui_thread;
+        controls::ToolTipService::SetToolTip(
+            lifetime->JoinServerButton(),
+            box_value(to_hstring(message)));
         co_return;
     }
     const auto personal =
@@ -370,62 +349,58 @@ MainWindow::BeginDirectoryBootstrap() {
         servers.push_back(personal);
     }
 
-    (void)queue.TryEnqueue(
-        [lifetime,
-         service,
-         access_token,
-         servers = std::move(servers),
-         personal]() mutable {
-            lifetime->directory_service_ =
-                service;
-            lifetime->
-                directory_access_token_ =
-                access_token;
-            lifetime->directory_servers_ =
-                std::move(servers);
+    co_await ui_thread;
 
-            const auto found =
-                std::ranges::find(
-                    lifetime->
-                        directory_servers_,
-                    personal.id,
-                    &catro::platform::windows::
-                        DirectoryServer::id);
-            lifetime->
-                active_directory_server_ =
-                found !=
-                        lifetime->
-                            directory_servers_
-                                .end()
-                    ? std::optional{
-                          *found}
-                    : std::optional{
-                          personal};
+        lifetime->directory_service_ =
+            service;
+        lifetime->
+            directory_access_token_ =
+            access_token;
+        lifetime->directory_servers_ =
+            std::move(servers);
 
-            lifetime->JoinServerButton()
-                .IsEnabled(true);
-            controls::ToolTipService::
-                SetToolTip(
+        const auto found =
+            std::ranges::find(
+                lifetime->
+                    directory_servers_,
+                personal.id,
+                &catro::platform::windows::
+                    DirectoryServer::id);
+        lifetime->
+            active_directory_server_ =
+            found !=
                     lifetime->
-                        JoinServerButton(),
-                    box_value(
-                        hstring{
-                            L"Join with invite code"}));
-            lifetime->
-                RefreshDirectoryRail();
-            lifetime->
-                ApplyDirectoryServerToPage();
-            if (lifetime->
-                    shell_state_.destination() ==
-                catro::app::
-                    AppDestination::server) {
-                lifetime->TitleContext().Text(
-                    to_hstring(
-                        lifetime->
-                            active_directory_server_
-                            ->name));
-            }
-        });
+                        directory_servers_
+                            .end()
+                ? std::optional{
+                      *found}
+                : std::optional{
+                      personal};
+
+        lifetime->JoinServerButton()
+            .IsEnabled(true);
+        controls::ToolTipService::
+            SetToolTip(
+                lifetime->
+                    JoinServerButton(),
+                box_value(
+                    hstring{
+                        L"Join with invite code"}));
+        lifetime->
+            RefreshDirectoryRail();
+        lifetime->
+            ApplyDirectoryServerToPage();
+        if (lifetime->
+                shell_state_.destination() ==
+            catro::app::
+                AppDestination::server) {
+            lifetime->TitleContext().Text(
+                to_hstring(
+                    lifetime->
+                        active_directory_server_
+                        ->name));
+        }
+
 }
 
 winrt::fire_and_forget
@@ -473,7 +448,7 @@ MainWindow::BeginJoinServer() {
         *directory_service_;
     const auto access_token =
         directory_access_token_;
-    const auto queue = DispatcherQueue();
+    winrt::apartment_context ui_thread;
 
     JoinServerButton().IsEnabled(false);
     co_await winrt::resume_background();
@@ -491,19 +466,11 @@ MainWindow::BeginJoinServer() {
                     DirectoryError>(
                 &accepted)) {
         const auto message = failure->message;
-        (void)queue.TryEnqueue(
-            [lifetime, message] {
-                lifetime->
-                    JoinServerButton()
-                    .IsEnabled(true);
-                controls::ToolTipService::
-                    SetToolTip(
-                        lifetime->
-                            JoinServerButton(),
-                        box_value(
-                            to_hstring(
-                                message)));
-            });
+        co_await ui_thread;
+        lifetime->JoinServerButton().IsEnabled(true);
+        controls::ToolTipService::SetToolTip(
+            lifetime->JoinServerButton(),
+            box_value(to_hstring(message)));
         co_return;
     }
 
@@ -511,39 +478,39 @@ MainWindow::BeginJoinServer() {
         std::get<
             catro::platform::windows::
                 DirectoryServer>(accepted);
-    (void)queue.TryEnqueue(
-        [lifetime, server] {
-            auto found =
-                std::ranges::find(
-                    lifetime->
-                        directory_servers_,
-                    server.id,
-                    &catro::platform::windows::
-                        DirectoryServer::id);
-            if (found ==
+    co_await ui_thread;
+
+        auto found =
+            std::ranges::find(
                 lifetime->
-                    directory_servers_
-                        .end()) {
-                lifetime->
-                    directory_servers_
-                    .push_back(server);
-            } else {
-                *found = server;
-            }
+                    directory_servers_,
+                server.id,
+                &catro::platform::windows::
+                    DirectoryServer::id);
+        if (found ==
             lifetime->
-                active_directory_server_ =
-                server;
+                directory_servers_
+                    .end()) {
             lifetime->
-                JoinServerButton()
-                .IsEnabled(true);
-            lifetime->
-                RefreshDirectoryRail();
-            lifetime->
-                ApplyDirectoryServerToPage();
-            lifetime->Activate(
-                catro::app::
-                    AppDestination::server);
-        });
+                directory_servers_
+                .push_back(server);
+        } else {
+            *found = server;
+        }
+        lifetime->
+            active_directory_server_ =
+            server;
+        lifetime->
+            JoinServerButton()
+            .IsEnabled(true);
+        lifetime->
+            RefreshDirectoryRail();
+        lifetime->
+            ApplyDirectoryServerToPage();
+        lifetime->Activate(
+            catro::app::
+                AppDestination::server);
+
 }
 
 void MainWindow::RefreshDirectoryRail() {
