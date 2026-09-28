@@ -96,7 +96,7 @@ public:
 
     [[nodiscard]] std::variant<EncodeStep, CodecError> encode_next(OutboundDatagram& datagram) noexcept;
     [[nodiscard]] ReceiveResult receive(std::span<const std::byte> datagram) noexcept;
-    [[nodiscard]] PlayoutKind next_playout_kind() const noexcept { return jitter_.peek(); }
+    [[nodiscard]] PlayoutKind next_playout_kind() const noexcept;
     [[nodiscard]] std::optional<CodecError> resynchronize_receiver() noexcept;
     [[nodiscard]] std::variant<DecodeStep, CodecError> decode_next() noexcept;
 
@@ -108,7 +108,6 @@ private:
     VoicePipeline(const VoicePipelineConfig& config, std::unique_ptr<Encoder> encoder);
 
     [[nodiscard]] RemoteStream* find_remote(std::uint32_t stream_id) noexcept;
-    [[nodiscard]] const RemoteStream* find_remote(std::uint32_t stream_id) const noexcept;
     [[nodiscard]] JitterStatistics aggregate_jitter_statistics() const noexcept;
 
     CaptureBridge capture_;
