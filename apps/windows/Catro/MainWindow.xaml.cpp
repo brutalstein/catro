@@ -588,9 +588,11 @@ void MainWindow::RefreshDirectoryRail() {
         } else {
             label.Text(L"S");
         }
+        // Avoid the generated FontWeights factory here: some Windows SDK projection orders expose
+        // the auto-return declaration before its inline definition in this translation unit.
         label.FontWeight(
             Windows::UI::Text::
-                FontWeights::SemiBold());
+                FontWeight{600});
         button.Content(label);
 
         controls::ToolTipService::
