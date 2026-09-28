@@ -15,7 +15,7 @@ namespace winrt::Catro::implementation {
 // The diagnostics workspace: an overview plus one navigation entry per view-model section.
 // Evidence arrives on the capability service thread and is applied on the UI thread.
 struct DiagnosticsView : DiagnosticsViewT<DiagnosticsView> {
-    DiagnosticsView();
+    DiagnosticsView() = default;
     ~DiagnosticsView();
 
     void InitializeComponent();
