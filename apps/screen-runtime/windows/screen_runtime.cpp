@@ -916,6 +916,463 @@ struct WindowsScreenShareRuntime::Impl {
                share_stop_requested_.load(std::memory_order_acquire);
     }
 
+    void set_stream_audio_error(
+        std::string_view message,
+        std::int64_t native_code = 0) noexcept {
+        try {
+            std::string owned{message};
+            if (native_code != 0) {
+                owned += " (native ";
+                owned += std::to_string(native_code);
+                owned += ")";
+            }
+            std::scoped_lock lock(metadata_mutex_);
+            stream_audio_error_ = std::move(owned);
+        } catch (...) {
+        }
+    }
+
+    void run_stream_audio_sender_guarded(
+        ScreenShareConfig config) noexcept {
+        trace_event("stream-audio-sender-enter");
+        try {
+            run_stream_audio_sender(config);
+            trace_event("stream-audio-sender-exit");
+        } catch (const std::exception& error) {
+            set_stream_audio_error(
+                error.what() != nullptr
+                    ? std::string_view{error.what()}
+                    : std::string_view{
+                          "stream audio sender exception"});
+        } catch (...) {
+            set_stream_audio_error(
+                "stream audio sender exception");
+        }
+        stream_audio_active_.store(
+            false, std::memory_order_release);
+    }
+
+    void run_stream_audio_sender(
+        const ScreenShareConfig& config) {
+        if (config.room_runtime == nullptr ||
+            config.source.process_id == 0) {
+            return;
+        }
+
+        voice::EncoderConfig encoder_config;
+        encoder_config.bitrate =
+            config.stream_audio_bitrate;
+        encoder_config.channels =
+            static_cast<std::uint32_t>(
+                kStreamAudioChannels);
+        encoder_config.application =
+            voice::CodecApplication::audio;
+        encoder_config.complexity = 8;
+        encoder_config.expected_packet_loss_percent = 5;
+        encoder_config.inband_fec = true;
+        encoder_config.vbr = true;
+
+        auto encoder_result =
+            voice::Encoder::create(encoder_config);
+        if (const auto* failure =
+                std::get_if<voice::CodecError>(
+                    &encoder_result)) {
+            stream_audio_encode_failures_.fetch_add(
+                1, std::memory_order_relaxed);
+            set_stream_audio_error(
+                voice::name(failure->code),
+                failure->native_code);
+            return;
+        }
+        auto encoder =
+            std::move(
+                std::get<
+                    std::unique_ptr<voice::Encoder>>(
+                    encoder_result));
+
+        StreamAudioCaptureBridge bridge;
+        platform::windows::ProcessLoopbackAudioCapture
+            capture;
+        const auto capture_failure =
+            capture.start(
+                config.source.process_id,
+                [&bridge](
+                    std::span<const float> samples) noexcept {
+                    bridge.on_captured(samples);
+                });
+        if (capture_failure) {
+            set_stream_audio_error(
+                platform::windows::name(
+                    capture_failure->code),
+                capture_failure->native_code);
+            return;
+        }
+
+        {
+            std::scoped_lock lock(metadata_mutex_);
+            stream_audio_error_.clear();
+        }
+        stream_audio_active_.store(
+            true, std::memory_order_release);
+        trace_event("stream-audio-capture-started");
+
+        StreamAudioPcmFrame pcm{};
+        std::array<std::byte, voice::kMaxOpusPacketBytes>
+            payload{};
+        std::array<
+            std::byte,
+            voice::kVoiceHeaderBytes +
+                voice::kVoiceMaxPayloadBytes>
+            datagram{};
+
+        std::uint16_t sequence = 1;
+        std::uint32_t timestamp = 0;
+        auto stream_id =
+            config.ssrc ^ 0x41554430U; // "AUD0"
+        if (stream_id == 0) {
+            stream_id = 1;
+        }
+
+        while (!should_stop_sender()) {
+            if (!bridge.try_pop(pcm)) {
+                std::unique_lock stop_lock(stop_mutex_);
+                stop_cv_.wait_for(
+                    stop_lock,
+                    2ms,
+                    [this] {
+                        return should_stop_sender();
+                    });
+                continue;
+            }
+
+            const auto encoded =
+                encoder->encode(
+                    std::span<const float>(pcm),
+                    payload);
+            const auto* bytes =
+                std::get_if<std::size_t>(&encoded);
+            if (bytes == nullptr) {
+                stream_audio_encode_failures_.fetch_add(
+                    1, std::memory_order_relaxed);
+                continue;
+            }
+
+            const voice::VoicePacketView packet{
+                .stream_id = stream_id,
+                .sequence = sequence,
+                .timestamp = timestamp,
+                .payload =
+                    std::span<const std::byte>(
+                        payload.data(), *bytes),
+            };
+            const auto serialized =
+                voice::serialize_packet(
+                    packet, datagram);
+            const auto* datagram_size =
+                std::get_if<std::size_t>(
+                    &serialized);
+            if (datagram_size == nullptr) {
+                stream_audio_encode_failures_.fetch_add(
+                    1, std::memory_order_relaxed);
+                continue;
+            }
+
+            const auto peers =
+                catro_room_runtime_send_stream_audio(
+                    config.room_runtime,
+                    datagram.data(),
+                    *datagram_size);
+            if (peers != 0) {
+                stream_audio_packets_sent_.fetch_add(
+                    1, std::memory_order_relaxed);
+            }
+            stream_audio_frames_encoded_.fetch_add(
+                1, std::memory_order_relaxed);
+
+            ++sequence;
+            timestamp += voice::kFrameSamples;
+        }
+
+        capture.stop();
+        stream_audio_capture_drops_.store(
+            bridge.dropped_callbacks(),
+            std::memory_order_relaxed);
+    }
+
+    void run_stream_audio_receiver_guarded(
+        ScreenTransportConfig config) noexcept {
+        trace_event("stream-audio-receiver-enter");
+        try {
+            run_stream_audio_receiver(config);
+            trace_event("stream-audio-receiver-exit");
+        } catch (...) {
+            remote_stream_audio_decode_failures_.fetch_add(
+                1, std::memory_order_relaxed);
+        }
+        remote_stream_audio_active_.store(
+            false, std::memory_order_release);
+    }
+
+    void run_stream_audio_receiver(
+        const ScreenTransportConfig& config) {
+        if (config.room_runtime == nullptr) {
+            return;
+        }
+
+        auto decoder_result =
+            voice::Decoder::create(
+                static_cast<std::uint32_t>(
+                    kStreamAudioChannels));
+        if (const auto* failure =
+                std::get_if<voice::CodecError>(
+                    &decoder_result)) {
+            (void)failure;
+            remote_stream_audio_decode_failures_.fetch_add(
+                1, std::memory_order_relaxed);
+            return;
+        }
+        auto decoder =
+            std::move(
+                std::get<
+                    std::unique_ptr<voice::Decoder>>(
+                    decoder_result));
+
+        voice::JitterBuffer jitter{
+            static_cast<std::uint16_t>(
+                kStreamAudioJitterPackets)};
+        StreamAudioRenderBridge render_bridge;
+        platform::windows::WasapiStreamAudioRenderer
+            renderer;
+
+        std::array<
+            std::byte,
+            voice::kVoiceHeaderBytes +
+                voice::kVoiceMaxPayloadBytes + 1>
+            datagram{};
+        StreamAudioPcmFrame pcm{};
+        voice::PlayoutFrame playout;
+
+        bool playout_started = false;
+        bool renderer_started = false;
+        bool viewing_last = false;
+        auto next_playout = Clock::now();
+
+        const auto reset_playout = [&] {
+            jitter.resynchronize();
+            render_bridge.request_resync();
+            playout_started = false;
+            next_playout = Clock::now();
+            remote_stream_audio_active_.store(
+                false, std::memory_order_release);
+            remote_stream_audio_last_ns_.store(
+                0, std::memory_order_release);
+        };
+
+        const auto stop_renderer = [&] {
+            if (renderer_started) {
+                renderer.stop();
+                renderer_started = false;
+            }
+            reset_playout();
+        };
+
+        const auto decode_one = [&]() -> bool {
+            const auto kind = jitter.pull(playout);
+            if (kind == voice::PlayoutKind::waiting) {
+                return true;
+            }
+
+            std::variant<std::size_t, voice::CodecError>
+                decoded;
+            if (kind == voice::PlayoutKind::plc) {
+                decoded = decoder->conceal(pcm);
+            } else {
+                decoded = decoder->decode(
+                    playout.payload_view(),
+                    pcm,
+                    kind == voice::PlayoutKind::fec);
+            }
+            if (std::holds_alternative<
+                    voice::CodecError>(decoded)) {
+                remote_stream_audio_decode_failures_.fetch_add(
+                    1, std::memory_order_relaxed);
+                return false;
+            }
+
+            if (!render_bridge.try_push(pcm)) {
+                remote_stream_audio_render_drops_.fetch_add(
+                    1, std::memory_order_relaxed);
+            }
+            remote_stream_audio_frames_.fetch_add(
+                1, std::memory_order_relaxed);
+            return true;
+        };
+
+        while (!stop_requested_.load(
+                   std::memory_order_acquire)) {
+            const bool viewing =
+                remote_viewing_enabled_.load(
+                    std::memory_order_acquire);
+
+            if (viewing != viewing_last) {
+                if (!viewing) {
+                    stop_renderer();
+                } else {
+                    jitter.resynchronize();
+                    render_bridge.request_resync();
+                    playout_started = false;
+                    next_playout = Clock::now();
+                }
+                viewing_last = viewing;
+            }
+
+            const auto received =
+                catro_room_runtime_receive_stream_audio(
+                    config.room_runtime,
+                    datagram.data(),
+                    datagram.size(),
+                    20);
+            if (received < 0) {
+                const auto room =
+                    catro_room_runtime_snapshot(
+                        config.room_runtime);
+                if (room.state == CATRO_ROOM_FAILED) {
+                    break;
+                }
+                continue;
+            }
+
+            auto consume =
+                [&](std::size_t size) {
+                    remote_stream_audio_packets_.fetch_add(
+                        1, std::memory_order_relaxed);
+                    if (!viewing) {
+                        return;
+                    }
+
+                    const auto parsed =
+                        voice::parse_packet(
+                            std::span<const std::byte>(
+                                datagram.data(), size));
+                    const auto* packet =
+                        std::get_if<
+                            voice::VoicePacketView>(
+                            &parsed);
+                    if (packet == nullptr) {
+                        remote_stream_audio_decode_failures_.fetch_add(
+                            1, std::memory_order_relaxed);
+                        return;
+                    }
+
+                    (void)jitter.push(*packet);
+                    remote_stream_audio_last_ns_.store(
+                        steady_now_ns(),
+                        std::memory_order_release);
+                };
+
+            if (received > 0) {
+                consume(
+                    static_cast<std::size_t>(
+                        received));
+                for (std::size_t drained = 1;
+                     drained <
+                         kStreamAudioReceiveDrainLimit;
+                     ++drained) {
+                    const auto more =
+                        catro_room_runtime_receive_stream_audio(
+                            config.room_runtime,
+                            datagram.data(),
+                            datagram.size(),
+                            0);
+                    if (more <= 0) {
+                        break;
+                    }
+                    consume(
+                        static_cast<std::size_t>(
+                            more));
+                }
+            }
+
+            if (!viewing) {
+                continue;
+            }
+
+            auto now = Clock::now();
+            if (!playout_started) {
+                if (jitter.peek() ==
+                    voice::PlayoutKind::waiting) {
+                    continue;
+                }
+                if (!decode_one()) {
+                    reset_playout();
+                    continue;
+                }
+                if (!renderer_started) {
+                    if (const auto failure =
+                            renderer.start(
+                                [&render_bridge](
+                                    std::span<float>
+                                        samples) noexcept {
+                                    render_bridge.on_render(
+                                        samples);
+                                })) {
+                        (void)failure;
+                        remote_stream_audio_render_drops_.fetch_add(
+                            1, std::memory_order_relaxed);
+                        reset_playout();
+                        continue;
+                    }
+                    renderer_started = true;
+                }
+                playout_started = true;
+                next_playout =
+                    Clock::now() +
+                    kStreamAudioFramePeriod;
+                remote_stream_audio_active_.store(
+                    true, std::memory_order_release);
+                continue;
+            }
+
+            if (now - next_playout >=
+                kStreamAudioFramePeriod * 3) {
+                reset_playout();
+                continue;
+            }
+
+            int caught_up = 0;
+            while (now >= next_playout &&
+                   caught_up < 3) {
+                if (!decode_one()) {
+                    reset_playout();
+                    break;
+                }
+                next_playout +=
+                    kStreamAudioFramePeriod;
+                ++caught_up;
+                now = Clock::now();
+            }
+
+            const auto last =
+                remote_stream_audio_last_ns_.load(
+                    std::memory_order_acquire);
+            if (last != 0) {
+                const auto age =
+                    steady_now_ns() - last;
+                if (age >=
+                    std::chrono::duration_cast<
+                        std::chrono::nanoseconds>(
+                        kRemoteInactiveTimeout)
+                        .count()) {
+                    stop_renderer();
+                }
+            }
+        }
+
+        if (renderer_started) {
+            renderer.stop();
+        }
+    }
+
     void run_sender_guarded(ScreenShareConfig config) noexcept {
         trace_event("sender-worker-enter");
         try {
