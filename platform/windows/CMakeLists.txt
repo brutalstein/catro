@@ -12,6 +12,7 @@ endif()
 
 add_library(catro_platform_windows STATIC
     src/audio_platform.cpp
+    src/directory_client.cpp
     src/process_loopback_audio.cpp
     src/screen_capture.cpp
     src/video_encoder.cpp
@@ -50,7 +51,8 @@ if(CATRO_CPPWINRT_INCLUDE_DIR)
 endif()
 target_link_libraries(catro_platform_windows
     PUBLIC Catro::Capabilities Catro::Audio Catro::Community
-    PRIVATE catro_windows_translation Catro::Reporting Catro::Video powrprof user32 bcrypt shell32 wtsapi32 dxgi d3d11 d3d12 dxcore shcore windowsapp
+    PRIVATE catro_windows_translation Catro::Reporting Catro::Video nlohmann_json::nlohmann_json
+            powrprof user32 bcrypt crypt32 winhttp shell32 wtsapi32 dxgi d3d11 d3d12 dxcore shcore windowsapp
             mfplat mfuuid ole32 avrt
 )
 target_compile_definitions(catro_platform_windows PRIVATE
