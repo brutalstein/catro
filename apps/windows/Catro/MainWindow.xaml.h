@@ -11,7 +11,7 @@
 namespace winrt::Catro::implementation {
 
 struct MainWindow : MainWindowT<MainWindow> {
-    MainWindow() = default;
+    MainWindow();
 
     void InitializeComponent();
     void OnServer(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
