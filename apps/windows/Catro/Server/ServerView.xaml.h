@@ -26,6 +26,8 @@ struct ServerView : ServerViewT<ServerView> {
     void OnShareScreen(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnWatchStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnLeaveStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnPopOutStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnFullScreenStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnSizeChanged(IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
     void SetLocalState(const catro::community::LocalState& state);
 
@@ -37,6 +39,10 @@ private:
     winrt::fire_and_forget BeginScreenShare();
     void StopScreenShare();
     void UpdateScreenShareUi();
+    void OpenStreamWindow(bool fullscreen);
+    void CloseStreamWindow() noexcept;
+    void UpdateStreamWindowLayout();
+    void SetStreamWindowFullscreen(bool fullscreen);
     void DetachPreviewSwapChain() noexcept;
     void DetachRemoteSwapChain() noexcept;
     [[nodiscard]] std::uint32_t LocalStreamId() const noexcept;
@@ -49,6 +55,15 @@ private:
     Microsoft::UI::Dispatching::DispatcherQueueTimer screen_timer_{nullptr};
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> attached_preview_swap_chain_;
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> attached_remote_swap_chain_;
+
+    Microsoft::UI::Xaml::Window stream_window_{nullptr};
+    Microsoft::UI::Xaml::Controls::Grid stream_window_root_{nullptr};
+    Microsoft::UI::Xaml::Controls::Border stream_window_viewport_{nullptr};
+    Microsoft::UI::Xaml::Controls::SwapChainPanel stream_window_swap_chain_panel_{nullptr};
+    Microsoft::UI::Xaml::Controls::Button stream_window_mode_button_{nullptr};
+    ::Microsoft::WRL::ComPtr<IDXGISwapChain1> stream_window_swap_chain_;
+    bool stream_window_fullscreen_ = false;
+
     bool share_dialog_open_ = false;
     bool muted_ = false;
     bool deafened_ = false;
