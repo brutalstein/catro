@@ -47,9 +47,9 @@ func TestTamperedAndExpiredTokensAreRejected(t *testing.T) {
 		t.Fatal("tampered token must be rejected")
 	}
 
-	value.Expires = time.Now().Add(-time.Second).Unix()
-	if err := verifyToken(secret, token, value); err == nil {
-		t.Fatal("expired expected claims must be rejected")
+	expiredAt := time.Unix(value.Expires+1, 0)
+	if err := verifyTokenAt(secret, token, value, expiredAt); err == nil {
+		t.Fatal("expired token must be rejected")
 	}
 }
 
