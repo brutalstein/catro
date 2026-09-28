@@ -23,6 +23,8 @@ enum class JitterPushResult {
     outside_window,
     wrong_stream,
     invalid_payload,
+    self_stream,
+    remote_capacity,
 };
 
 [[nodiscard]] constexpr std::string_view name(JitterPushResult result) noexcept {
@@ -39,6 +41,10 @@ enum class JitterPushResult {
         return "wrong stream";
     case JitterPushResult::invalid_payload:
         return "invalid payload";
+    case JitterPushResult::self_stream:
+        return "self stream";
+    case JitterPushResult::remote_capacity:
+        return "remote stream capacity";
     }
     return "jitter push error";
 }
