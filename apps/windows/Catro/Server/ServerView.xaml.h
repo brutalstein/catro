@@ -14,7 +14,7 @@
 namespace winrt::Catro::implementation {
 
 struct ServerView : ServerViewT<ServerView> {
-    ServerView();
+    ServerView() = default;
     ~ServerView();
 
     void InitializeComponent();
