@@ -107,6 +107,7 @@ struct ScreenShareSnapshot {
 
     bool stream_audio_enabled = false;
     bool stream_audio_active = false;
+    std::string stream_audio_error;
     std::uint64_t stream_audio_frames_encoded = 0;
     std::uint64_t stream_audio_packets_sent = 0;
     std::uint64_t stream_audio_capture_drops = 0;
