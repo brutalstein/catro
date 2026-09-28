@@ -132,6 +132,11 @@ public:
     // Stops only local capture/encode. Incoming video remains active on the same socket.
     void stop_sharing() noexcept;
 
+    // Local self-preview is presentation-only and must never be required for transport. Product UI
+    // disables it while the voice page is hidden so screen sharing does not spend GPU time on an
+    // invisible D3D11 VideoProcessor/swap-chain path.
+    void set_local_preview_enabled(bool enabled) noexcept;
+
     // Stops both directions and releases the transport.
     void stop() noexcept;
 
