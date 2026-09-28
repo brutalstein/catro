@@ -1,7 +1,10 @@
 param(
     [ValidateSet('Release','Debug')]
     [string] $Configuration = 'Release',
-    [switch] $SkipBuild
+    [switch] $SkipBuild,
+    [string] $ServiceUrl = $env:CATRO_SERVICE_URL,
+    [switch] $AllowInsecureService,
+    [switch] $Engineering
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +55,32 @@ try {
 
     Copy-Item -Path (Join-Path $source '*') -Destination $staging -Recurse -Force
 
+    if (-not $Engineering) {
+        if ([string]::IsNullOrWhiteSpace($ServiceUrl)) {
+            throw 'Production package requires -ServiceUrl https://your-catro-service (or CATRO_SERVICE_URL). Use -Engineering only for local direct-peer validation packages.'
+        }
+
+        $serviceUri = $null
+        if (-not [Uri]::TryCreate($ServiceUrl, [UriKind]::Absolute, [ref]$serviceUri)) {
+            throw "Invalid Catro service URL: $ServiceUrl"
+        }
+        if ($serviceUri.Scheme -ne 'https' -and
+            -not ($AllowInsecureService -and $serviceUri.Scheme -eq 'http')) {
+            throw 'Production Catro service URL must use HTTPS. -AllowInsecureService is engineering/LAN-only.'
+        }
+
+        $networkConfig = [ordered]@{
+            api_base_url = $serviceUri.AbsoluteUri.TrimEnd('/')
+            allow_insecure_http = [bool]$AllowInsecureService
+        } | ConvertTo-Json -Depth 4
+
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [IO.File]::WriteAllText(
+            (Join-Path $staging 'catro-network.json'),
+            $networkConfig,
+            $utf8NoBom)
+    }
+
     $readme = @"
 Catro Windows x64
 
@@ -65,9 +94,15 @@ Minimum OS: Windows 10 version 2004 (build 19041) or newer.
 For screen sharing and hardware video acceleration, current Windows 11 and current GPU drivers are
 recommended.
 
-Production RTC uses secure WebRTC room transport (WSS + ICE/STUN/TURN). A deployed signaling
-service, room access token, and ICE/TURN configuration are required before Internet rooms can be
-joined. Engineering CATRO_* direct-peer variables remain a local validation fallback only.
+Production RTC uses the Catro service configured in catro-network.json. The client registers its
+stable local identity, joins shared servers with invite codes, requests short-lived room tokens,
+and receives WSS + ICE/STUN/TURN provisioning from the service automatically. No end-user
+CATRO_ROOM_TOKEN, CATRO_SERVER_ID, or CATRO_ICE_SERVERS variables are required.
+
+The per-install directory credential is generated on first run and stored under LocalAppData with
+Windows DPAPI protection. Room tokens are short-lived and are never written to the package.
+
+Engineering CATRO_* direct-peer variables remain available only for local validation.
 "@
     Set-Content -Path (Join-Path $staging 'README.txt') -Value $readme -Encoding UTF8
 
