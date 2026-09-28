@@ -64,6 +64,11 @@ type directory struct {
 	path   string
 	secret []byte
 	state  directoryState
+
+	signalingURL             string
+	iceServers               []string
+	allowInsecureSignaling   bool
+	allowNoTURN              bool
 }
 
 type serverDescriptor struct {
@@ -72,6 +77,20 @@ type serverDescriptor struct {
 	Name           string `json:"name"`
 	VoiceChannelID string `json:"voice_channel_id"`
 	Role           string `json:"role"`
+}
+
+func (d *directory) setRTCProvisioning(
+	signalingURL string,
+	iceServers []string,
+	allowInsecure bool,
+	allowNoTURN bool,
+) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.signalingURL = signalingURL
+	d.iceServers = append([]string(nil), iceServers...)
+	d.allowInsecureSignaling = allowInsecure
+	d.allowNoTURN = allowNoTURN
 }
 
 func openDirectory(path string, secret []byte) (*directory, error) {
@@ -559,6 +578,10 @@ func (d *directory) handleRTCToken(w http.ResponseWriter, r *http.Request) {
 	d.mu.Lock()
 	server, exists := d.state.Servers[request.ServerID]
 	_, member := server.Members[user.ID]
+	signalingURL := d.signalingURL
+	iceServers := append([]string(nil), d.iceServers...)
+	allowInsecure := d.allowInsecureSignaling
+	allowNoTURN := d.allowNoTURN
 	d.mu.Unlock()
 	if !exists || !member || server.VoiceChannelID != request.ChannelID {
 		writeAPIError(w, http.StatusForbidden, "room membership required")
@@ -576,11 +599,19 @@ func (d *directory) handleRTCToken(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusInternalServerError, "token mint failed")
 		return
 	}
+	if signalingURL == "" || len(iceServers) == 0 {
+		writeAPIError(w, http.StatusServiceUnavailable, "rtc provisioning unavailable")
+		return
+	}
 	writeAPIJSON(w, http.StatusOK, map[string]any{
 		"token": token,
 		"expires": expires,
 		"server_id": server.ID,
 		"channel_id": server.VoiceChannelID,
 		"peer_id": user.ID,
+		"signaling_url": signalingURL,
+		"ice_servers": iceServers,
+		"allow_insecure_signaling": allowInsecure,
+		"allow_no_turn": allowNoTURN,
 	})
 }
