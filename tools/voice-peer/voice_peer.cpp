@@ -175,6 +175,10 @@ void print_progress(std::ostream& out, std::int64_t elapsed_seconds,
         << " cap-skip " << media.capture.timeline_frames_skipped
         << " enc-err " << media.encode_errors
         << " dec-err " << media.decode_errors
+        << " remotes " << media.remote_streams_active
+        << " mixed " << media.mixed_frames
+        << " limiter " << media.limiter_frames
+        << " room-cap-drop " << media.remote_stream_capacity_drops
         << " render-q " << media.render.buffered_samples
         << " render-full " << media.render_queue_full
         << " render-resync " << media.render.resync_events
@@ -514,7 +518,15 @@ int run_voice_peer(const VoicePeerOptions& options,
                         ++network.stale_network_packets_discarded;
                         continue;
                     }
-                    (void)pipeline->receive(std::span<const std::byte>(receive_buffer).first(bytes));
+                    const auto media_received =
+                        pipeline->receive(
+                            std::span<const std::byte>(receive_buffer).first(bytes));
+                    if (const auto* failure =
+                            std::get_if<voice::CodecError>(&media_received)) {
+                        codec_failure = *failure;
+                        exit_code = voice_peer_codec_failed;
+                        break;
+                    }
                 }
                 if (exit_code != voice_peer_ok) {
                     break;
@@ -651,6 +663,10 @@ int run_voice_peer(const VoicePeerOptions& options,
         << ", capture-skip " << final_media.capture.timeline_frames_skipped
         << ", encode-errors " << final_media.encode_errors
         << ", decode-errors " << final_media.decode_errors
+        << ", remotes " << final_media.remote_streams_active
+        << ", mixed " << final_media.mixed_frames
+        << ", limiter " << final_media.limiter_frames
+        << ", room-cap-drop " << final_media.remote_stream_capacity_drops
         << ", render-full " << final_media.render_queue_full
         << ", render-resync " << final_media.render.resync_events
         << ", render-stale " << final_media.render.stale_samples_discarded
