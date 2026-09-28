@@ -72,3 +72,20 @@ jobs:
         run: cmake --build out/build/sanitizers --parallel
       - name: Test
         run: ctest --test-dir out/build/sanitizers --output-on-failure
+
+
+  signaling:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/signaling
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: services/signaling/go.mod
+      - name: Test signaling service
+        run: go test ./...
+      - name: Build signaling service
+        run: go build -trimpath ./...
