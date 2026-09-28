@@ -284,6 +284,14 @@ try {
         Select-Object -First 1
     if (-not $msbuild) { throw 'MSBuild not found; run scripts/bootstrap.ps1.' }
 
+    # The debug-identity experiment used by earlier borderless-capture work can mutate the
+    # already-built executable's SxS manifest. Never trust an incremental shell output after that:
+    # clean only the WinUI shell output/obj trees, then relink from the unchanged CMake libraries.
+    $shellOut = Join-Path $root "out\apps\windows\x64\$Configuration"
+    $shellObj = Join-Path $root "out\apps\windows\obj\x64\$Configuration"
+    if (Test-Path $shellOut) { Remove-Item -Recurse -Force $shellOut }
+    if (Test-Path $shellObj) { Remove-Item -Recurse -Force $shellObj }
+
     Write-Host "[catro] Building WinUI shell with MSBuild: $msbuild"
     & $msbuild (Join-Path $root 'apps\windows\Catro.sln') -restore -p:RestorePackagesConfig=true `
         "-p:Configuration=$Configuration" -p:Platform=x64 "-p:CatroCoreRoot=$buildDir" -m -nologo -v:m
