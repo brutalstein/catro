@@ -421,6 +421,19 @@ struct WindowsScreenShareRuntime::Impl {
         local_preview_enabled_.store(enabled, std::memory_order_release);
     }
 
+    void set_remote_viewing_enabled(bool enabled) noexcept {
+        remote_viewing_enabled_.store(enabled, std::memory_order_release);
+        if (!enabled) {
+            // UI should detach immediately; the receive worker releases decoder/presenter GPU
+            // resources on its next <=20 ms receive-loop iteration.
+            remote_last_frame_ns_.store(0, std::memory_order_release);
+            remote_width_.store(0, std::memory_order_relaxed);
+            remote_height_.store(0, std::memory_order_relaxed);
+            std::scoped_lock lock(preview_mutex_);
+            remote_swap_chain_.Reset();
+        }
+    }
+
     void stop_sharing_locked() noexcept {
         share_stop_requested_.store(
             true, std::memory_order_release);
@@ -973,17 +986,6 @@ struct WindowsScreenShareRuntime::Impl {
         H264DecoderConfig decoder_config;
         decoder_config.max_access_unit_bytes =
             config.max_access_unit_bytes;
-        if (const auto failure =
-                decoder.start(decoder_config)) {
-            remote_decode_failures_.fetch_add(
-                1, std::memory_order_relaxed);
-            fail_session(
-                ScreenShareErrorCode::decoder_failed,
-                platform::windows::name(failure->code),
-                failure->native_code);
-            return;
-        }
-        trace_event("receiver-decoder-started");
 
         D3D11CompositionVideoPresenter presenter(
             VideoPresenterConfig{
@@ -997,11 +999,68 @@ struct WindowsScreenShareRuntime::Impl {
         bool have_timestamp = false;
         bool first_remote_frame_traced = false;
         bool first_remote_present_traced = false;
+        bool viewing_last = false;
+        bool awaiting_keyframe = true;
         std::uint32_t last_timestamp = 0;
         std::uint64_t extended_timestamp = 0;
 
+        const auto release_viewer_resources = [&] {
+            decoder.stop();
+            presenter.reset();
+            {
+                std::scoped_lock lock(preview_mutex_);
+                remote_swap_chain_.Reset();
+            }
+            remote_width_.store(0, std::memory_order_relaxed);
+            remote_height_.store(0, std::memory_order_relaxed);
+            remote_last_frame_ns_.store(0, std::memory_order_release);
+            have_timestamp = false;
+            last_timestamp = 0;
+            extended_timestamp = 0;
+            awaiting_keyframe = true;
+            first_remote_present_traced = false;
+        };
+
+        const auto synchronize_viewing_state = [&] {
+            auto requested =
+                remote_viewing_enabled_.load(std::memory_order_acquire);
+
+            const auto last_stream =
+                remote_last_stream_ns_.load(std::memory_order_acquire);
+            if (requested && last_stream != 0) {
+                const auto now = steady_now_ns();
+                const auto timeout =
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        kRemoteInactiveTimeout)
+                        .count();
+                if (now >= last_stream &&
+                    now - last_stream >= timeout) {
+                    remote_viewing_enabled_.store(
+                        false, std::memory_order_release);
+                    requested = false;
+                }
+            }
+
+            if (requested != viewing_last) {
+                if (!requested) {
+                    trace_event("receiver-viewing-stopped");
+                    release_viewer_resources();
+                } else {
+                    trace_event("receiver-viewing-requested");
+                    awaiting_keyframe = true;
+                    have_timestamp = false;
+                    last_timestamp = 0;
+                    extended_timestamp = 0;
+                }
+                viewing_last = requested;
+            }
+            return requested;
+        };
+
         while (!stop_requested_.load(
                    std::memory_order_acquire)) {
+            (void)synchronize_viewing_state();
+
             const auto ready =
                 socket->wait_readable(
                     std::chrono::duration_cast<
@@ -1073,7 +1132,7 @@ struct WindowsScreenShareRuntime::Impl {
                     reassembled.error ==
                         video::H264ReassemblyError::ssrc_mismatch) {
                     const auto last =
-                        remote_last_frame_ns_.load(
+                        remote_last_stream_ns_.load(
                             std::memory_order_acquire);
                     const auto now = steady_now_ns();
                     const auto timeout =
@@ -1083,31 +1142,12 @@ struct WindowsScreenShareRuntime::Impl {
                     if (last != 0 &&
                         now >= last &&
                         now - last >= timeout) {
-                        // A quiet peer may have restarted and chosen a new SSRC. Flush decoder
-                        // history only after the old stream is definitively inactive; an alien
-                        // packet cannot steal an active session.
+                        // A quiet peer may have restarted and chosen a new SSRC. Reset stream and
+                        // viewer history only after the old sender is inactive; an alien packet
+                        // cannot steal an active session.
                         reassembler.reset();
-                        decoder.stop();
-                        if (const auto restart =
-                                decoder.start(decoder_config)) {
-                            remote_decode_failures_.fetch_add(
-                                1, std::memory_order_relaxed);
-                            fail_session(
-                                ScreenShareErrorCode::decoder_failed,
-                                platform::windows::name(
-                                    restart->code),
-                                restart->native_code);
-                            fatal = true;
-                            break;
-                        }
-                        have_timestamp = false;
-                        extended_timestamp = 0;
-                        last_timestamp = 0;
-                        remote_width_.store(
-                            0, std::memory_order_relaxed);
-                        remote_height_.store(
-                            0, std::memory_order_relaxed);
-                        remote_last_frame_ns_.store(
+                        release_viewer_resources();
+                        remote_last_stream_ns_.store(
                             0, std::memory_order_release);
                         remote_stream_resets_.fetch_add(
                             1, std::memory_order_relaxed);
@@ -1137,9 +1177,38 @@ struct WindowsScreenShareRuntime::Impl {
 
                 remote_frames_.fetch_add(
                     1, std::memory_order_relaxed);
+                remote_last_stream_ns_.store(
+                    steady_now_ns(), std::memory_order_release);
                 if (!first_remote_frame_traced) {
                     trace_event("receiver-first-frame-reassembled");
                     first_remote_frame_traced = true;
+                }
+
+                const bool viewing = synchronize_viewing_state();
+                if (!viewing) {
+                    continue;
+                }
+
+                if (awaiting_keyframe) {
+                    if (!reassembled.frame.keyframe) {
+                        continue;
+                    }
+                    if (const auto failure =
+                            decoder.start(decoder_config)) {
+                        remote_decode_failures_.fetch_add(
+                            1, std::memory_order_relaxed);
+                        fail_session(
+                            ScreenShareErrorCode::decoder_failed,
+                            platform::windows::name(failure->code),
+                            failure->native_code);
+                        fatal = true;
+                        break;
+                    }
+                    trace_event("receiver-decoder-started");
+                    awaiting_keyframe = false;
+                    have_timestamp = false;
+                    last_timestamp = 0;
+                    extended_timestamp = 0;
                 }
 
                 const auto timestamp =
@@ -1237,8 +1306,7 @@ struct WindowsScreenShareRuntime::Impl {
             }
         }
 
-        decoder.stop();
-        presenter.reset();
+        release_viewer_resources();
     }
 
     void fail_share(
@@ -1305,6 +1373,10 @@ struct WindowsScreenShareRuntime::Impl {
     }
 
     void reset_remote_statistics() noexcept {
+        remote_viewing_enabled_.store(
+            false, std::memory_order_relaxed);
+        remote_last_stream_ns_.store(
+            0, std::memory_order_relaxed);
         remote_width_.store(0, std::memory_order_relaxed);
         remote_height_.store(0, std::memory_order_relaxed);
         remote_packets_.store(0, std::memory_order_relaxed);
@@ -1376,6 +1448,23 @@ struct WindowsScreenShareRuntime::Impl {
             capture_contention_drops_.load(
                 std::memory_order_relaxed);
 
+        result.remote_viewing =
+            remote_viewing_enabled_.load(
+                std::memory_order_acquire);
+        const auto stream_last =
+            remote_last_stream_ns_.load(
+                std::memory_order_acquire);
+        if (stream_last != 0) {
+            const auto age =
+                steady_now_ns() - stream_last;
+            result.remote_available =
+                age >= 0 &&
+                age < std::chrono::duration_cast<
+                          std::chrono::nanoseconds>(
+                          kRemoteInactiveTimeout)
+                          .count();
+        }
+
         result.remote_width =
             remote_width_.load(std::memory_order_relaxed);
         result.remote_height =
@@ -1404,7 +1493,7 @@ struct WindowsScreenShareRuntime::Impl {
         const auto last =
             remote_last_frame_ns_.load(
                 std::memory_order_acquire);
-        if (last != 0) {
+        if (result.remote_viewing && last != 0) {
             const auto age =
                 steady_now_ns() - last;
             result.remote_active =
@@ -1448,6 +1537,7 @@ struct WindowsScreenShareRuntime::Impl {
     std::atomic_bool stop_requested_{false};
     std::atomic_bool share_stop_requested_{true};
     std::atomic_bool local_preview_enabled_{true};
+    std::atomic_bool remote_viewing_enabled_{false};
     std::atomic<ScreenShareState> state_{
         ScreenShareState::idle};
 
@@ -1481,6 +1571,7 @@ struct WindowsScreenShareRuntime::Impl {
     std::atomic<std::uint64_t> remote_decode_failures_{0};
     std::atomic<std::uint64_t> remote_present_drops_{0};
     std::atomic<std::uint64_t> remote_stream_resets_{0};
+    std::atomic<std::int64_t> remote_last_stream_ns_{0};
     std::atomic<std::int64_t> remote_last_frame_ns_{0};
 };
 
@@ -1510,6 +1601,11 @@ void WindowsScreenShareRuntime::stop_sharing() noexcept {
 void WindowsScreenShareRuntime::set_local_preview_enabled(
     bool enabled) noexcept {
     impl_->set_local_preview_enabled(enabled);
+}
+
+void WindowsScreenShareRuntime::set_remote_viewing_enabled(
+    bool enabled) noexcept {
+    impl_->set_remote_viewing_enabled(enabled);
 }
 
 void WindowsScreenShareRuntime::stop() noexcept {
