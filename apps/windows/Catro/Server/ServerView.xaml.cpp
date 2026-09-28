@@ -202,6 +202,7 @@ void ServerView::InitializeComponent() {
             }
         }
         if (screen_runtime_) {
+            screen_runtime_->set_local_preview_enabled(true);
             const auto share = screen_runtime_->snapshot();
             if (share.state != catro::screen::ScreenShareState::idle) {
                 screen_timer_.Start();
@@ -212,13 +213,18 @@ void ServerView::InitializeComponent() {
     });
     Unloaded([this](auto&&, auto&&) {
         // Voice and screen share are room state, not page state. Navigating to Settings/System must
-        // not disconnect either media worker; only stop their UI polling timers.
+        // not disconnect either media worker. Suspend only presentation/polling work that cannot be
+        // seen while this page is unloaded; transport and encode continue uninterrupted.
         if (voice_timer_) {
             voice_timer_.Stop();
         }
         if (screen_timer_) {
             screen_timer_.Stop();
         }
+        if (screen_runtime_) {
+            screen_runtime_->set_local_preview_enabled(false);
+        }
+        DetachPreviewSwapChain();
     });
 
     ShowChannel("general");
