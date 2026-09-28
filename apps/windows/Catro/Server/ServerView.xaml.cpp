@@ -1668,6 +1668,9 @@ void ServerView::UpdateScreenShareUi() {
             meta += L"×";
             meta += std::to_wstring(snapshot.remote_height);
             meta += L"  ·  LIVE";
+            if (snapshot.remote_stream_audio_active) {
+                meta += L"  ·  AUDIO";
+            }
             RemoteShareMetaText().Text(hstring{meta});
         } else if (remote_available) {
             RemoteShareMetaText().Text(
@@ -1712,6 +1715,13 @@ void ServerView::UpdateScreenShareUi() {
             meta += L"×";
             meta += std::to_wstring(snapshot.encoded_height);
             meta += L"  ·  LIVE";
+            if (snapshot.stream_audio_active) {
+                meta += L"  ·  AUDIO";
+            } else if (
+                snapshot.stream_audio_enabled &&
+                !snapshot.stream_audio_error.empty()) {
+                meta += L"  ·  VIDEO ONLY";
+            }
             ShareMetaText().Text(hstring{meta});
         } else {
             ShareMetaText().Text(L"Starting…");
@@ -1778,6 +1788,17 @@ void ServerView::UpdateScreenShareUi() {
 
     if (stream_window_) {
         UpdateStreamWindowLayout();
+    }
+
+    if (!snapshot.stream_audio_error.empty()) {
+        controls::ToolTipService::SetToolTip(
+            ShareMetaText(),
+            box_value(
+                to_hstring(
+                    snapshot.stream_audio_error)));
+    } else {
+        controls::ToolTipService::SetToolTip(
+            ShareMetaText(), nullptr);
     }
 
     if (snapshot.state ==
