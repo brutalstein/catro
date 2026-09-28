@@ -31,7 +31,8 @@ struct VideoPeerOptions {
     std::uint32_t fps = 30;
     std::uint32_t bitrate = 6'000'000;
 
-    std::uint32_t ssrc = 1;
+    // Sender uses a non-zero SSRC. Receiver value 0 means lock to the first valid non-zero SSRC.
+    std::uint32_t ssrc = 0;
     std::uint8_t payload_type = 96;
     std::uint16_t mtu_bytes = 1200;
 
@@ -61,7 +62,7 @@ inline constexpr std::string_view kVideoPeerUsage =
     "  --max-height 180-4320        sender height ceiling (default 1080)\n"
     "  --fps 1-120                  sender frame rate (default 30)\n"
     "  --bitrate 128000-50000000    sender H.264 bit rate (default 6000000)\n"
-    "  --ssrc 1-4294967295          RTP SSRC (default 1)\n"
+    "  --ssrc 0-4294967295          sender: non-zero (default 1); receiver: 0=auto-lock (default 0)\n"
     "  --payload-type 96-127        dynamic RTP payload type (default 96)\n"
     "  --mtu 576-1400               RTP UDP datagram ceiling (default 1200)\n"
     "  --frame-buffer 262144-16777216 receiver/sender AU capacity in bytes (default 4194304)\n"
