@@ -704,9 +704,26 @@ void ServerView::UpdateVoiceUi() {
         return;
     }
 
-    const auto snapshot = catro_voice_runtime_snapshot(voice_runtime_);
-    const bool active = snapshot.state == CATRO_VOICE_STARTING || snapshot.state == CATRO_VOICE_JOINED;
-    const bool joined = snapshot.state == CATRO_VOICE_JOINED;
+    const auto snapshot =
+        catro_voice_runtime_snapshot(
+            voice_runtime_);
+    const auto room =
+        room_mode_active_ &&
+                room_runtime_ != nullptr
+            ? catro_room_runtime_snapshot(
+                  room_runtime_)
+            : CatroRoomRuntimeSnapshot{};
+    const bool room_ready =
+        !room_mode_active_ ||
+        room.state == CATRO_ROOM_JOINED;
+    const bool active =
+        snapshot.state == CATRO_VOICE_STARTING ||
+        snapshot.state == CATRO_VOICE_JOINED ||
+        (room_mode_active_ &&
+         room.state == CATRO_ROOM_CONNECTING);
+    const bool joined =
+        snapshot.state == CATRO_VOICE_JOINED &&
+        room_ready;
 
     bool share_active = false;
     if (screen_runtime_) {
@@ -744,6 +761,18 @@ void ServerView::UpdateVoiceUi() {
     DeafenVoiceButton().Opacity(deafened_ ? 1.0 : 0.72);
     ProfileDeafenButton().Opacity(deafened_ ? 1.0 : 0.72);
 
+    if (room_mode_active_ &&
+        room.state == CATRO_ROOM_FAILED) {
+        VoiceStateText().Text(L"Room connection error");
+        if (room.error[0] != '\0') {
+            controls::ToolTipService::SetToolTip(
+                VoiceStateText(),
+                box_value(
+                    to_hstring(
+                        std::string{room.error})));
+        }
+        return;
+    }
     if (snapshot.state == CATRO_VOICE_FAILED) {
         VoiceStateText().Text(L"Voice error");
         if (snapshot.error[0] != '\0') {
@@ -752,6 +781,11 @@ void ServerView::UpdateVoiceUi() {
         if (voice_timer_) {
             voice_timer_.Stop();
         }
+        return;
+    }
+    if (room_mode_active_ &&
+        room.state == CATRO_ROOM_CONNECTING) {
+        VoiceStateText().Text(L"Connecting room");
         return;
     }
     if (snapshot.state == CATRO_VOICE_STARTING) {
@@ -767,7 +801,10 @@ void ServerView::UpdateVoiceUi() {
         VoiceStateText().Text(L"Deafened");
     } else if (muted_) {
         VoiceStateText().Text(L"Muted");
-    } else if (snapshot.peer_seen != 0) {
+    } else if (
+        room_mode_active_
+            ? room.peer_count != 0
+            : snapshot.peer_seen != 0) {
         VoiceStateText().Text(L"Connected");
     } else {
         VoiceStateText().Text(L"Waiting for peer");
@@ -1013,12 +1050,19 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
             }
         }
 
-        const auto direct = direct_video_config();
+        const auto direct =
+            direct_video_config();
         catro::screen::ScreenShareConfig config;
         config.source = selected_source;
         config.borderless = borderless_allowed;
-        config.bind = direct.bind;
-        config.peer = direct.peer;
+        config.room_runtime =
+            room_mode_active_
+                ? room_runtime_
+                : nullptr;
+        if (!room_mode_active_) {
+            config.bind = direct.bind;
+            config.peer = direct.peer;
+        }
         config.max_width = width;
         config.max_height = height;
         config.fps = fps;
