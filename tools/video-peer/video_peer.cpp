@@ -318,8 +318,13 @@ int run_sender(
                 : initial_encoder.encoder_name)
         << "\n"
         << "path: WGC GPU BGRA -> GPU NV12 -> hardware H264 -> RTP scatter/gather UDP\n"
-        << "rtp: ssrc " << options.ssrc
-        << ", pt " << static_cast<unsigned>(options.payload_type)
+        << "rtp: ssrc ";
+    if (options.ssrc == 0) {
+        out << "auto";
+    } else {
+        out << options.ssrc;
+    }
+    out << ", pt " << static_cast<unsigned>(options.payload_type)
         << ", mtu " << options.mtu_bytes << "\n";
 
     const auto started = Clock::now();
@@ -683,7 +688,7 @@ std::optional<VideoPeerOptions> parse_video_peer_arguments(
             }
         } else if (option == "--ssrc" && !ssrc_seen) {
             ssrc_seen = true;
-            if (!parse_integer(value, options.ssrc) || options.ssrc == 0) {
+            if (!parse_integer(value, options.ssrc)) {
                 return std::nullopt;
             }
         } else if (option == "--payload-type" && !payload_seen) {
@@ -717,6 +722,13 @@ std::optional<VideoPeerOptions> parse_video_peer_arguments(
 
     if (!mode_seen || !bind_seen || !peer_seen) {
         return std::nullopt;
+    }
+    if (options.mode == VideoPeerMode::send) {
+        if (!ssrc_seen) {
+            options.ssrc = 1;
+        } else if (options.ssrc == 0) {
+            return std::nullopt;
+        }
     }
     return options;
 }
