@@ -113,6 +113,10 @@ func main() {
 		"ice-servers",
 		os.Getenv("CATRO_ICE_SERVERS"),
 		"semicolon/comma separated STUN/TURN URLs returned to authenticated clients")
+	turnSecret := flag.String(
+		"turn-secret",
+		os.Getenv("CATRO_TURN_SECRET"),
+		"coturn REST shared secret used only to mint short-lived TURN credentials")
 	mint := flag.Bool("mint-token", false, "mint one room token and exit")
 	serverID := flag.String("server-id", "", "token server id")
 	channelID := flag.String("channel-id", "", "token voice channel id")
@@ -182,6 +186,19 @@ func main() {
 	if !*allowNoTURN && !hasTURN {
 		log.Fatal("production ICE provisioning requires at least one TURN URL")
 	}
+	if hasTURN && !*allowNoTURN {
+		if len(*turnSecret) < 32 {
+			log.Fatal("CATRO TURN REST secret must be at least 32 bytes")
+		}
+		for _, value := range iceServers {
+			lower := strings.ToLower(value)
+			if (strings.HasPrefix(lower, "turn:") ||
+				strings.HasPrefix(lower, "turns:")) &&
+				strings.Contains(value, "@") {
+				log.Fatal("base TURN URLs must not contain long-lived credentials; configure --turn-secret instead")
+			}
+		}
+	}
 
 	directory, err := openDirectory(*stateFile, []byte(*secret))
 	if err != nil {
@@ -191,7 +208,8 @@ func main() {
 		*publicSignalingURL,
 		iceServers,
 		*allowHTTP,
-		*allowNoTURN)
+		*allowNoTURN,
+		[]byte(*turnSecret))
 
 	s := &service{
 		secret: []byte(*secret), maxRoomPeers: *maxRoom,
