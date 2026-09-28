@@ -24,6 +24,8 @@ struct ServerView : ServerViewT<ServerView> {
     void OnMuteVoice(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnDeafenVoice(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnShareScreen(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnWatchStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnLeaveStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnSizeChanged(IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
     void SetLocalState(const catro::community::LocalState& state);
 
