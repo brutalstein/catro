@@ -2281,6 +2281,15 @@ struct WindowsScreenShareRuntime::Impl {
         encoder_output_failures_.store(0, std::memory_order_relaxed);
         encoder_timeouts_.store(0, std::memory_order_relaxed);
         capture_contention_drops_.store(0, std::memory_order_relaxed);
+        stream_audio_active_.store(false, std::memory_order_relaxed);
+        stream_audio_frames_encoded_.store(0, std::memory_order_relaxed);
+        stream_audio_packets_sent_.store(0, std::memory_order_relaxed);
+        stream_audio_capture_drops_.store(0, std::memory_order_relaxed);
+        stream_audio_encode_failures_.store(0, std::memory_order_relaxed);
+        {
+            std::scoped_lock lock(metadata_mutex_);
+            stream_audio_error_.clear();
+        }
     }
 
     void reset_remote_statistics() noexcept {
@@ -2300,6 +2309,12 @@ struct WindowsScreenShareRuntime::Impl {
         remote_decode_failures_.store(0, std::memory_order_relaxed);
         remote_present_drops_.store(0, std::memory_order_relaxed);
         remote_stream_resets_.store(0, std::memory_order_relaxed);
+        remote_stream_audio_active_.store(false, std::memory_order_relaxed);
+        remote_stream_audio_packets_.store(0, std::memory_order_relaxed);
+        remote_stream_audio_frames_.store(0, std::memory_order_relaxed);
+        remote_stream_audio_decode_failures_.store(0, std::memory_order_relaxed);
+        remote_stream_audio_render_drops_.store(0, std::memory_order_relaxed);
+        remote_stream_audio_last_ns_.store(0, std::memory_order_relaxed);
         remote_last_frame_ns_.store(0, std::memory_order_relaxed);
     }
 
@@ -2318,6 +2333,8 @@ struct WindowsScreenShareRuntime::Impl {
             std::scoped_lock lock(metadata_mutex_);
             result.source_title = source_title_;
             result.error = error_;
+            result.stream_audio_error =
+                stream_audio_error_;
         }
 
         result.source_width =
@@ -2357,6 +2374,24 @@ struct WindowsScreenShareRuntime::Impl {
             encoder_timeouts_.load(std::memory_order_relaxed);
         result.capture_contention_drops =
             capture_contention_drops_.load(
+                std::memory_order_relaxed);
+        result.stream_audio_enabled =
+            stream_audio_enabled_.load(
+                std::memory_order_relaxed);
+        result.stream_audio_active =
+            stream_audio_active_.load(
+                std::memory_order_relaxed);
+        result.stream_audio_frames_encoded =
+            stream_audio_frames_encoded_.load(
+                std::memory_order_relaxed);
+        result.stream_audio_packets_sent =
+            stream_audio_packets_sent_.load(
+                std::memory_order_relaxed);
+        result.stream_audio_capture_drops =
+            stream_audio_capture_drops_.load(
+                std::memory_order_relaxed);
+        result.stream_audio_encode_failures =
+            stream_audio_encode_failures_.load(
                 std::memory_order_relaxed);
 
         result.remote_viewing =
@@ -2400,6 +2435,21 @@ struct WindowsScreenShareRuntime::Impl {
             remote_present_drops_.load(std::memory_order_relaxed);
         result.remote_stream_resets =
             remote_stream_resets_.load(std::memory_order_relaxed);
+        result.remote_stream_audio_active =
+            remote_stream_audio_active_.load(
+                std::memory_order_relaxed);
+        result.remote_stream_audio_packets =
+            remote_stream_audio_packets_.load(
+                std::memory_order_relaxed);
+        result.remote_stream_audio_frames =
+            remote_stream_audio_frames_.load(
+                std::memory_order_relaxed);
+        result.remote_stream_audio_decode_failures =
+            remote_stream_audio_decode_failures_.load(
+                std::memory_order_relaxed);
+        result.remote_stream_audio_render_drops =
+            remote_stream_audio_render_drops_.load(
+                std::memory_order_relaxed);
 
         const auto last =
             remote_last_frame_ns_.load(
@@ -2437,6 +2487,7 @@ struct WindowsScreenShareRuntime::Impl {
 
     std::string source_title_;
     std::string error_;
+    std::string stream_audio_error_;
 
     std::unique_ptr<UdpPeerSocket> socket_;
     std::optional<ScreenTransportConfig> transport_config_;
@@ -2445,6 +2496,8 @@ struct WindowsScreenShareRuntime::Impl {
 
     std::thread sender_worker_;
     std::thread receiver_worker_;
+    std::thread stream_audio_sender_worker_;
+    std::thread stream_audio_receiver_worker_;
     std::atomic_bool stop_requested_{false};
     std::atomic_bool share_stop_requested_{true};
     std::atomic_bool local_preview_enabled_{true};
@@ -2470,6 +2523,13 @@ struct WindowsScreenShareRuntime::Impl {
     std::atomic<std::uint64_t> encoder_timeouts_{0};
     std::atomic<std::uint64_t> capture_contention_drops_{0};
 
+    std::atomic_bool stream_audio_enabled_{false};
+    std::atomic_bool stream_audio_active_{false};
+    std::atomic<std::uint64_t> stream_audio_frames_encoded_{0};
+    std::atomic<std::uint64_t> stream_audio_packets_sent_{0};
+    std::atomic<std::uint64_t> stream_audio_capture_drops_{0};
+    std::atomic<std::uint64_t> stream_audio_encode_failures_{0};
+
     std::atomic<std::uint32_t> remote_width_{0};
     std::atomic<std::uint32_t> remote_height_{0};
     std::atomic<std::uint64_t> remote_packets_{0};
@@ -2482,6 +2542,14 @@ struct WindowsScreenShareRuntime::Impl {
     std::atomic<std::uint64_t> remote_decode_failures_{0};
     std::atomic<std::uint64_t> remote_present_drops_{0};
     std::atomic<std::uint64_t> remote_stream_resets_{0};
+
+    std::atomic_bool remote_stream_audio_active_{false};
+    std::atomic<std::uint64_t> remote_stream_audio_packets_{0};
+    std::atomic<std::uint64_t> remote_stream_audio_frames_{0};
+    std::atomic<std::uint64_t> remote_stream_audio_decode_failures_{0};
+    std::atomic<std::uint64_t> remote_stream_audio_render_drops_{0};
+    std::atomic<std::int64_t> remote_stream_audio_last_ns_{0};
+
     std::atomic<std::int64_t> remote_last_stream_ns_{0};
     std::atomic<std::int64_t> remote_last_frame_ns_{0};
 };
