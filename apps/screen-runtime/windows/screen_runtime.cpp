@@ -44,6 +44,7 @@ using transport::UdpErrorCode;
 using transport::UdpPeerSocket;
 
 constexpr auto kFirstFrameTimeout = 3s;
+constexpr auto kGameFirstFrameTimeout = 30s;
 constexpr auto kRemoteInactiveTimeout = 2s;
 constexpr auto kReceiveWait = 20ms;
 constexpr std::uint32_t kPreviewMaxFps = 30;
@@ -450,8 +451,16 @@ struct WindowsScreenShareRuntime::Impl {
         }
 
         GpuCaptureFrame first;
+        const bool wait_for_game_restore =
+            capture_config.backend ==
+                platform::windows::ScreenCaptureBackend::desktop_duplication &&
+            config.source.kind ==
+                platform::windows::CaptureSourceKind::window;
         const auto first_deadline =
-            Clock::now() + kFirstFrameTimeout;
+            Clock::now() +
+            (wait_for_game_restore
+                 ? kGameFirstFrameTimeout
+                 : kFirstFrameTimeout);
         while (!should_stop_sender() &&
                Clock::now() < first_deadline &&
                !capture.wait_for_latest(first, 50ms)) {
@@ -478,7 +487,9 @@ struct WindowsScreenShareRuntime::Impl {
                     ? "DXGI Desktop Duplication"
                     : "Windows Graphics Capture";
             std::string message{backend_name};
-            message += " did not produce a GPU frame for the selected source";
+            message += wait_for_game_restore
+                           ? " did not receive the selected game after waiting for it to be restored"
+                           : " did not produce a GPU frame for the selected source";
             fail_share(ScreenShareErrorCode::capture_failed, std::move(message));
             capture.stop();
             return;
