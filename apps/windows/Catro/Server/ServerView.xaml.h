@@ -43,6 +43,7 @@ private:
     void ShowChannel(std::string_view id);
     winrt::fire_and_forget BeginVoiceJoin();
     winrt::fire_and_forget BeginInvite();
+    winrt::fire_and_forget ShowInviteCode(std::string code);
     void StartVoice(
         std::optional<catro::platform::windows::RtcProvisioning> provisioning);
     void StopVoice();
