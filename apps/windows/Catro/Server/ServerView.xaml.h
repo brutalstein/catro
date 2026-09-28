@@ -5,12 +5,14 @@
 #include <ShellModel.hpp>
 
 #include <catro/community/model.hpp>
+#include <catro/platform/windows/directory_client.hpp>
 #include <catro/room_runtime.h>
 #include <catro/screen_runtime.hpp>
 #include <catro/voice_runtime.h>
 
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace winrt::Catro::implementation {
 
@@ -22,6 +24,7 @@ struct ServerView : ServerViewT<ServerView> {
     void OnTextChannel(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnVoiceChannel(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnJoinVoice(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnInvite(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnMuteVoice(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnDeafenVoice(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnShareScreen(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
@@ -31,10 +34,17 @@ struct ServerView : ServerViewT<ServerView> {
     void OnFullScreenStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnSizeChanged(IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
     void SetLocalState(const catro::community::LocalState& state);
+    void SetDirectorySession(
+        const catro::platform::windows::DirectoryServiceConfig& service,
+        std::string access_token,
+        const catro::platform::windows::DirectoryServer& server);
 
 private:
     void ShowChannel(std::string_view id);
-    void StartVoice();
+    winrt::fire_and_forget BeginVoiceJoin();
+    winrt::fire_and_forget BeginInvite();
+    void StartVoice(
+        std::optional<catro::platform::windows::RtcProvisioning> provisioning);
     void StopVoice();
     void UpdateVoiceUi();
     winrt::fire_and_forget BeginScreenShare();
@@ -51,6 +61,14 @@ private:
 
     catro::app::ShellState state_;
     std::optional<catro::community::LocalState> local_state_;
+    std::optional<
+        catro::platform::windows::DirectoryServiceConfig>
+        directory_service_;
+    std::string directory_access_token_;
+    std::optional<
+        catro::platform::windows::DirectoryServer>
+        directory_server_;
+
     CatroRoomRuntimeHandle room_runtime_ = nullptr;
     CatroVoiceRuntimeHandle voice_runtime_ = nullptr;
     Microsoft::UI::Dispatching::DispatcherQueueTimer voice_timer_{nullptr};
@@ -70,6 +88,8 @@ private:
     bool stream_window_topmost_ = false;
 
     bool room_mode_active_ = false;
+    bool voice_join_pending_ = false;
+    bool invite_pending_ = false;
     bool share_dialog_open_ = false;
     bool muted_ = false;
     bool deafened_ = false;
