@@ -265,7 +265,8 @@ UdpPeerSocket::SizeResult UdpPeerSocket::send_segments(
 
     msghdr message{};
     message.msg_iov = vectors.data();
-    message.msg_iovlen = segments.size();
+    message.msg_iovlen =
+        static_cast<decltype(message.msg_iovlen)>(segments.size());
     const auto sent = ::sendmsg(impl_->socket, &message, 0);
     if (sent < 0) {
 #endif
@@ -295,7 +296,9 @@ UdpPeerSocket::WaitResult UdpPeerSocket::wait_readable(std::chrono::microseconds
 
     timeval wait{};
     wait.tv_sec = static_cast<long>(clamped.count() / 1'000'000);
-    wait.tv_usec = static_cast<long>(clamped.count() % 1'000'000);
+    wait.tv_usec =
+        static_cast<decltype(wait.tv_usec)>(
+            clamped.count() % 1'000'000);
 
 #if defined(_WIN32)
     const auto result = select(0, &read_set, nullptr, nullptr, &wait);
