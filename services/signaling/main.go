@@ -186,9 +186,9 @@ func main() {
 	if !*allowNoTURN && !hasTURN {
 		log.Fatal("production ICE provisioning requires at least one TURN URL")
 	}
-	if hasTURN && !*allowNoTURN {
+	if hasTURN {
 		if len(*turnSecret) < 32 {
-			log.Fatal("CATRO TURN REST secret must be at least 32 bytes")
+			log.Fatal("CATRO TURN REST secret must be at least 32 bytes whenever TURN URLs are configured")
 		}
 		for _, value := range iceServers {
 			lower := strings.ToLower(value)
