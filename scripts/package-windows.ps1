@@ -92,7 +92,9 @@ on the target computer.
 
 Minimum OS: Windows 10 version 2004 (build 19041) or newer.
 For screen sharing and hardware video acceleration, current Windows 11 and current GPU drivers are
-recommended.
+recommended. Selected-window application-audio capture uses Microsoft's process-loopback API,
+whose documented minimum supported client is Windows build 20348. On older supported systems,
+screen video and voice remain available; application audio falls back to video-only sharing.
 
 Production RTC uses the Catro service configured in catro-network.json. The client registers its
 stable local identity, joins shared servers with invite codes, requests short-lived room tokens,
