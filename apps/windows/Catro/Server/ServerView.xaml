@@ -39,18 +39,21 @@
                                    FontWeight="SemiBold"
                                    Foreground="{ThemeResource CatroTextBrush}"
                                    VerticalAlignment="Center" />
-                        <FontIcon Glyph="&#xE735;"
+                        <FontIcon x:Name="ServerOwnerIcon"
+                                  Glyph="&#xE735;"
                                   FontSize="11"
                                   Foreground="{ThemeResource CatroAccentBrush}"
                                   ToolTipService.ToolTip="Owner" />
                     </StackPanel>
-                    <Button Grid.Column="1"
+                    <Button x:Name="InviteButton"
+                            Grid.Column="1"
                             Width="30"
                             Height="30"
                             Padding="0"
                             Background="Transparent"
                             BorderThickness="0"
                             IsEnabled="False"
+                            Click="OnInvite"
                             ToolTipService.ToolTip="Invite"
                             AutomationProperties.Name="Invite">
                         <FontIcon Glyph="&#xE8FA;" FontSize="14" />
