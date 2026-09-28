@@ -358,10 +358,9 @@ struct WindowsScreenShareRuntime::Impl {
     }
 
     void set_local_preview_enabled(bool enabled) noexcept {
+        // The sender samples this on its normal frame cadence. No lifecycle lock or cross-thread
+        // wakeup is needed, so hiding the page cannot perturb encode/transport scheduling.
         local_preview_enabled_.store(enabled, std::memory_order_release);
-        // Wake the sender so a hidden preview can release its GPU presentation resources promptly
-        // instead of waiting for an unrelated control event.
-        stop_cv_.notify_all();
     }
 
     void stop_sharing_locked() noexcept {
