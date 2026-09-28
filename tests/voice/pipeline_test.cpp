@@ -195,6 +195,57 @@ TEST_CASE("mute preserves packet cadence while encoding silence") {
     CHECK(finite_nonzero(rendered));
 }
 
+
+TEST_CASE("room pipeline mixes two independent remote streams into one bounded render frame") {
+    auto sender_one = make_pipeline(0x81000001U, 1);
+    auto sender_two = make_pipeline(0x81000002U, 1);
+    auto receiver = make_pipeline(0x81000003U, 1);
+    double phase_one = 0.0;
+    double phase_two = 0.0;
+
+    const auto first = encode(*sender_one, tone_frame(phase_one, 0.12F));
+    const auto second = encode(*sender_two, tone_frame(phase_two, 0.10F));
+
+    REQUIRE(std::get<JitterPushResult>(receiver->receive(first.view())) ==
+            JitterPushResult::accepted);
+    REQUIRE(std::get<JitterPushResult>(receiver->receive(second.view())) ==
+            JitterPushResult::accepted);
+
+    const auto step = receiver->decode_next();
+    REQUIRE(std::holds_alternative<DecodeStep>(step));
+    CHECK(std::get<DecodeStep>(step) == DecodeStep::queued_packet);
+
+    const auto stats = receiver->statistics();
+    CHECK(stats.remote_streams_active == 2);
+    CHECK(stats.decoded_frames == 2);
+    CHECK(stats.mixed_frames == 1);
+    CHECK(stats.render.frames_enqueued == 1);
+    CHECK(stats.remote_stream_capacity_drops == 0);
+
+    PcmFrame rendered{};
+    receiver->render().on_render(rendered);
+    CHECK(finite_nonzero(rendered));
+    CHECK(std::ranges::all_of(
+        rendered,
+        [](float sample) {
+            return std::isfinite(sample) &&
+                   sample >= -1.0F &&
+                   sample <= 1.0F;
+        }));
+}
+
+TEST_CASE("room pipeline never renders an SFU echo of its own stream") {
+    auto pipeline = make_pipeline(0x82000001U, 1);
+    double phase = 0.0;
+    const auto echo = encode(*pipeline, tone_frame(phase, 0.2F));
+
+    const auto received = pipeline->receive(echo.view());
+    REQUIRE(std::holds_alternative<JitterPushResult>(received));
+    CHECK(std::get<JitterPushResult>(received) == JitterPushResult::self_stream);
+    CHECK(pipeline->statistics().remote_streams_active == 0);
+    CHECK(pipeline->next_playout_kind() == PlayoutKind::waiting);
+}
+
 TEST_CASE("two pipelines restore reordered datagrams and queue decoded audio") {
     auto sender = make_pipeline(0x11111111U, 1);
     auto receiver = make_pipeline(0x22222222U, 3);
