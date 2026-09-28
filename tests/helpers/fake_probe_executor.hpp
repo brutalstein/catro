@@ -45,6 +45,9 @@ public:
 
     [[nodiscard]] const std::vector<std::string>& launched() const noexcept { return launched_; }
     [[nodiscard]] const std::vector<std::string>& terminated() const noexcept { return terminated_; }
+    [[nodiscard]] const std::map<std::string, std::chrono::steady_clock::duration>& wait_budgets() const noexcept {
+        return wait_budgets_;
+    }
     [[nodiscard]] std::size_t launch_count_at_first_wait() const noexcept { return launch_count_at_first_wait_; }
 
 private:
@@ -59,7 +62,16 @@ private:
             if (owner_.launch_count_at_first_wait_ == 0) {
                 owner_.launch_count_at_first_wait_ = owner_.launched_.size();
             }
-            if (behavior_.never_completes || ready_at_ > deadline) {
+            const auto now = std::chrono::steady_clock::now();
+            owner_.wait_budgets_.insert_or_assign(
+                probe_id_, deadline > now ? deadline - now : std::chrono::steady_clock::duration::zero());
+            // A fake that "never completes" does not need to burn wall-clock time. Returning the
+            // timeout immediately keeps the unit test deterministic while the recorded wait budget
+            // still proves which absolute deadline the coordinator enforced.
+            if (behavior_.never_completes) {
+                return std::nullopt;
+            }
+            if (ready_at_ > deadline) {
                 std::this_thread::sleep_until(deadline);
                 return std::nullopt;
             }
@@ -77,6 +89,7 @@ private:
     };
 
     std::map<std::string, Behavior> behaviors_;
+    std::map<std::string, std::chrono::steady_clock::duration> wait_budgets_;
     std::vector<std::string> launched_;
     std::vector<std::string> terminated_;
     std::size_t launch_count_at_first_wait_ = 0;
