@@ -249,7 +249,9 @@
     <Error Condition="!Exists('$(CatroPackagesDir)Microsoft.WindowsAppSDK.2.5.1\build\native\Microsoft.WindowsAppSDK.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(CatroPackagesDir)Microsoft.WindowsAppSDK.2.5.1\build\native\Microsoft.WindowsAppSDK.targets'))" />
   </Target>
   <!-- The core libraries come from CMake; fail early with the command that builds them. -->
-  <Target Name="EnsureCatroCore" BeforeTargets="PrepareForBuild">
+  <Target Name="EnsureCatroCore"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(CatroProjectionOnly)' != 'true'">
     <Error Condition="!Exists('$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib')" Text="Catro core libraries were not found under $(CatroCoreRoot). Build them first with cmake --build --preset windows-debug, or pass /p:CatroCoreRoot=&lt;CMake build directory&gt;." />
     <Error Condition="!Exists('$(CatroCoreRoot)\apps\shell\$(Configuration)\catro_shell.lib')" Text="Catro shell model was not found under $(CatroCoreRoot). Build the CMake targets before the WinUI shell." />
     <Error Condition="!Exists('$(CatroCoreRoot)\core\community\$(Configuration)\catro_community.lib')" Text="Catro community state library was not found under $(CatroCoreRoot). Build the CMake targets before the WinUI shell." />
