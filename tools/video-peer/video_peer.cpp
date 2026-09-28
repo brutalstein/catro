@@ -474,8 +474,13 @@ int run_receiver(
                 : initial_decoder.decoder_name)
         << "\n"
         << "path: UDP RTP -> bounded H264 reassembly -> D3D11 H264 decode; presentation not enabled yet\n"
-        << "rtp: ssrc " << options.ssrc
-        << ", pt " << static_cast<unsigned>(options.payload_type)
+        << "rtp: ssrc ";
+    if (options.ssrc == 0) {
+        out << "auto";
+    } else {
+        out << options.ssrc;
+    }
+    out << ", pt " << static_cast<unsigned>(options.payload_type)
         << ", mtu " << options.mtu_bytes
         << ", frame-buffer " << options.max_access_unit_bytes << " B\n";
 
