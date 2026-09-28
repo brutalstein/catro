@@ -1179,6 +1179,20 @@ void ServerView::OpenStreamWindow(bool fullscreen) {
         toolbar.Children().Append(
             stream_window_mode_button_);
 
+        stream_window_topmost_button_ =
+            controls::Button{};
+        stream_window_topmost_button_.Content(
+            box_value(hstring{L"Stay On Top"}));
+        stream_window_topmost_button_.Padding(
+            xaml::Thickness{12.0, 6.0, 12.0, 6.0});
+        stream_window_topmost_button_.Click(
+            [this](auto const&, auto const&) {
+                SetStreamWindowAlwaysOnTop(
+                    !stream_window_topmost_);
+            });
+        toolbar.Children().Append(
+            stream_window_topmost_button_);
+
         controls::Button back_button;
         back_button.Content(box_value(hstring{L"Back to Catro"}));
         back_button.Padding(
@@ -1227,8 +1241,10 @@ void ServerView::OpenStreamWindow(bool fullscreen) {
                 stream_window_viewport_ = nullptr;
                 stream_window_root_ = nullptr;
                 stream_window_mode_button_ = nullptr;
+                stream_window_topmost_button_ = nullptr;
                 stream_window_ = nullptr;
                 stream_window_fullscreen_ = false;
+                stream_window_topmost_ = false;
                 UpdateScreenShareUi();
             });
 
@@ -1292,7 +1308,44 @@ void ServerView::SetStreamWindowFullscreen(
                         ? hstring{L"Exit Full Screen"}
                         : hstring{L"Full Screen"}));
         }
+        if (stream_window_topmost_button_) {
+            stream_window_topmost_button_.IsEnabled(
+                !fullscreen);
+        }
+        if (!fullscreen && stream_window_topmost_) {
+            SetStreamWindowAlwaysOnTop(true);
+        }
         UpdateStreamWindowLayout();
+    } catch (...) {
+    }
+}
+
+void ServerView::SetStreamWindowAlwaysOnTop(
+    bool enabled) {
+    if (!stream_window_ ||
+        stream_window_fullscreen_) {
+        return;
+    }
+
+    try {
+        const auto presenter =
+            stream_window_.AppWindow().Presenter();
+        const auto overlapped =
+            presenter.try_as<
+                Microsoft::UI::Windowing::
+                    OverlappedPresenter>();
+        if (!overlapped) {
+            return;
+        }
+        overlapped.IsAlwaysOnTop(enabled);
+        stream_window_topmost_ = enabled;
+        if (stream_window_topmost_button_) {
+            stream_window_topmost_button_.Content(
+                box_value(
+                    enabled
+                        ? hstring{L"Remove From Top"}
+                        : hstring{L"Stay On Top"}));
+        }
     } catch (...) {
     }
 }
@@ -1381,8 +1434,10 @@ void ServerView::CloseStreamWindow() noexcept {
     stream_window_viewport_ = nullptr;
     stream_window_root_ = nullptr;
     stream_window_mode_button_ = nullptr;
+    stream_window_topmost_button_ = nullptr;
     stream_window_ = nullptr;
     stream_window_fullscreen_ = false;
+    stream_window_topmost_ = false;
 
     try {
         window.Close();
