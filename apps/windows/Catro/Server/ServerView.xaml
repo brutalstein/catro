@@ -328,17 +328,59 @@
                                    HorizontalAlignment="Center" />
                     </StackPanel>
 
+                    <Border x:Name="RemoteStreamInvite"
+                            Visibility="Collapsed"
+                            Margin="22"
+                            Padding="18"
+                            MaxWidth="430"
+                            CornerRadius="14"
+                            Background="{ThemeResource CatroSurfaceBrush}"
+                            BorderBrush="{ThemeResource CatroStrokeBrush}"
+                            BorderThickness="1"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Border Padding="8,4"
+                                        CornerRadius="8"
+                                        Background="{ThemeResource CatroSageBrush}">
+                                    <TextBlock Text="LIVE"
+                                               FontSize="9"
+                                               FontWeight="SemiBold"
+                                               CharacterSpacing="70"
+                                               Foreground="{ThemeResource CatroBackgroundBrush}" />
+                                </Border>
+                                <TextBlock Text="A stream is live"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource CatroTextBrush}"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="Stay in voice and watch only when you want."
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Foreground="{ThemeResource CatroTextSecondaryBrush}" />
+                            <Button x:Name="WatchStreamButton"
+                                    Content="Watch Stream"
+                                    Click="OnWatchStream"
+                                    HorizontalAlignment="Left"
+                                    Style="{StaticResource CatroPrimaryButtonStyle}" />
+                        </StackPanel>
+                    </Border>
+
                     <Grid x:Name="RemoteShareHost"
                           Visibility="Collapsed"
                           Margin="22"
-                          MaxWidth="960"
-                          HorizontalAlignment="Stretch"
-                          VerticalAlignment="Stretch">
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <Border CornerRadius="14"
+                        <Border x:Name="RemoteShareViewport"
+                                Width="720"
+                                Height="405"
+                                CornerRadius="14"
                                 Background="Black"
                                 BorderBrush="{ThemeResource CatroStrokeBrush}"
                                 BorderThickness="1">
@@ -346,23 +388,35 @@
                                 <SwapChainPanel x:Name="RemoteShareSwapChainPanel"
                                                 HorizontalAlignment="Stretch"
                                                 VerticalAlignment="Stretch" />
-                                <Border Padding="8,4"
-                                        Margin="10"
-                                        CornerRadius="8"
-                                        Background="{ThemeResource CatroSurfaceBrush}"
-                                        HorizontalAlignment="Left"
-                                        VerticalAlignment="Top">
-                                    <TextBlock Text="REMOTE STREAM"
-                                               FontSize="9"
-                                               FontWeight="SemiBold"
-                                               CharacterSpacing="70"
-                                               Foreground="{ThemeResource CatroSageBrush}" />
-                                </Border>
+                                <Grid Margin="10"
+                                      VerticalAlignment="Top">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Padding="8,4"
+                                            CornerRadius="8"
+                                            Background="{ThemeResource CatroSurfaceBrush}">
+                                        <TextBlock Text="LIVE"
+                                                   FontSize="9"
+                                                   FontWeight="SemiBold"
+                                                   CharacterSpacing="70"
+                                                   Foreground="{ThemeResource CatroSageBrush}" />
+                                    </Border>
+                                    <Button x:Name="LeaveStreamButton"
+                                            Grid.Column="2"
+                                            Content="Leave Stream"
+                                            Click="OnLeaveStream"
+                                            Padding="10,5"
+                                            Style="{StaticResource CatroSecondaryButtonStyle}" />
+                                </Grid>
                             </Grid>
                         </Border>
                         <TextBlock x:Name="RemoteShareMetaText"
                                    Grid.Row="1"
                                    Margin="2,10,2,0"
+                                   HorizontalAlignment="Center"
                                    FontSize="11"
                                    Foreground="{ThemeResource CatroTextTertiaryBrush}" />
                     </Grid>
@@ -370,14 +424,16 @@
                     <Grid x:Name="SharePreviewHost"
                           Visibility="Collapsed"
                           Margin="22"
-                          MaxWidth="960"
-                          HorizontalAlignment="Stretch"
-                          VerticalAlignment="Stretch">
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <Border CornerRadius="14"
+                        <Border x:Name="LocalShareViewport"
+                                Width="720"
+                                Height="405"
+                                CornerRadius="14"
                                 Background="Black"
                                 BorderBrush="{ThemeResource CatroStrokeBrush}"
                                 BorderThickness="1">
@@ -402,6 +458,7 @@
                         <StackPanel Grid.Row="1"
                                     Margin="2,10,2,0"
                                     Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
                                     Spacing="8">
                             <TextBlock x:Name="ShareSourceText"
                                        FontSize="11"
