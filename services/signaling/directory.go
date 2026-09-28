@@ -77,6 +77,7 @@ type serverDescriptor struct {
 	Name           string `json:"name"`
 	VoiceChannelID string `json:"voice_channel_id"`
 	Role           string `json:"role"`
+	MemberCount    int    `json:"member_count"`
 }
 
 func (d *directory) setRTCProvisioning(
@@ -404,6 +405,7 @@ func descriptorFor(server directoryServer, userID string) serverDescriptor {
 		Name: server.Name,
 		VoiceChannelID: server.VoiceChannelID,
 		Role: role,
+		MemberCount: len(server.Members),
 	}
 }
 
