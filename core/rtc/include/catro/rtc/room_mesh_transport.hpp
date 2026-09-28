@@ -54,6 +54,8 @@ struct RoomTransportCallbacks {
         on_voice_datagram;
     std::function<void(std::string_view, std::span<const std::byte>)>
         on_video_datagram;
+    std::function<void(std::string_view, std::span<const std::byte>)>
+        on_stream_audio_datagram;
     std::function<void(RoomTransportState)> on_state;
     std::function<void(std::string_view)> on_error;
 };
@@ -81,6 +83,8 @@ public:
     [[nodiscard]] std::size_t send_voice(
         std::span<const std::byte> datagram) noexcept;
     [[nodiscard]] std::size_t send_video(
+        std::span<const std::byte> datagram) noexcept;
+    [[nodiscard]] std::size_t send_stream_audio(
         std::span<const std::byte> datagram) noexcept;
 
     [[nodiscard]] RoomTransportState state() const noexcept;
