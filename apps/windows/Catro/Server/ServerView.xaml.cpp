@@ -202,7 +202,9 @@ void ServerView::InitializeComponent() {
             }
         }
         if (screen_runtime_) {
-            screen_runtime_->set_local_preview_enabled(true);
+            const bool local_preview_enabled =
+                environment("CATRO_LOCAL_PREVIEW").value_or("1") != "0";
+            screen_runtime_->set_local_preview_enabled(local_preview_enabled);
             const auto share = screen_runtime_->snapshot();
             if (share.state != catro::screen::ScreenShareState::idle) {
                 screen_timer_.Start();
@@ -679,8 +681,16 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
             co_return;
         }
 
+        const auto& selected_source =
+            sources[static_cast<std::size_t>(selected)];
+        const auto capture_backend =
+            catro::platform::windows::recommended_capture_backend(
+                selected_source);
+
         bool borderless_allowed = false;
-        if (request_borderless) {
+        if (request_borderless &&
+            capture_backend ==
+                catro::platform::windows::ScreenCaptureBackend::windows_graphics_capture) {
             try {
                 namespace graphics = Windows::Graphics::Capture;
                 namespace capability =
@@ -702,8 +712,7 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
 
         const auto direct = direct_video_config();
         catro::screen::ScreenShareConfig config;
-        config.source =
-            sources[static_cast<std::size_t>(selected)];
+        config.source = selected_source;
         config.borderless = borderless_allowed;
         config.bind = direct.bind;
         config.peer = direct.peer;
