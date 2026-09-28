@@ -227,16 +227,15 @@ std::variant<DuplicationBundle, ScreenCaptureError> create_duplication_bundle(
                 D3D_FEATURE_LEVEL_11_0,
             };
             ComPtr<ID3D11Device> device;
-            D3D_FEATURE_LEVEL created_level{};
             result = D3D11CreateDevice(
                 adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flags,
                 levels.data(), static_cast<UINT>(levels.size()),
-                D3D11_SDK_VERSION, &device, &created_level, nullptr);
+                D3D11_SDK_VERSION, &device, nullptr, nullptr);
             if (result == E_INVALIDARG) {
                 result = D3D11CreateDevice(
                     adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, flags,
                     &levels[1], 1, D3D11_SDK_VERSION,
-                    &device, &created_level, nullptr);
+                    &device, nullptr, nullptr);
             }
             if (FAILED(result) || !device) {
                 return ScreenCaptureError{
