@@ -261,6 +261,8 @@ private:
            config.fps <= 120 &&
            config.bitrate >= 128'000 &&
            config.bitrate <= 50'000'000 &&
+           config.stream_audio_bitrate >= 32'000 &&
+           config.stream_audio_bitrate <= 512'000 &&
            config.ssrc != 0;
 }
 
@@ -647,9 +649,34 @@ struct WindowsScreenShareRuntime::Impl {
         try {
             sender_worker_ = std::thread(
                 [this, config] { run_sender_guarded(config); });
+
+            const bool can_stream_audio =
+                config.share_audio &&
+                config.room_runtime != nullptr &&
+                config.source.kind ==
+                    platform::windows::CaptureSourceKind::window &&
+                config.source.process_id != 0;
+            stream_audio_enabled_.store(
+                can_stream_audio,
+                std::memory_order_release);
+            if (can_stream_audio) {
+                stream_audio_sender_worker_ =
+                    std::thread(
+                        [this, config] {
+                            run_stream_audio_sender_guarded(
+                                config);
+                        });
+            }
         } catch (...) {
             share_stop_requested_.store(
                 true, std::memory_order_release);
+            stop_cv_.notify_all();
+            if (stream_audio_sender_worker_.joinable()) {
+                stream_audio_sender_worker_.join();
+            }
+            if (sender_worker_.joinable()) {
+                sender_worker_.join();
+            }
             state_.store(
                 ScreenShareState::failed,
                 std::memory_order_release);
@@ -700,7 +727,22 @@ struct WindowsScreenShareRuntime::Impl {
                     [this, config] {
                         run_receiver_guarded(config);
                     });
+                stream_audio_receiver_worker_ =
+                    std::thread(
+                        [this, config] {
+                            run_stream_audio_receiver_guarded(
+                                config);
+                        });
             } catch (...) {
+                stop_requested_.store(
+                    true, std::memory_order_release);
+                stop_cv_.notify_all();
+                if (stream_audio_receiver_worker_.joinable()) {
+                    stream_audio_receiver_worker_.join();
+                }
+                if (receiver_worker_.joinable()) {
+                    receiver_worker_.join();
+                }
                 transport_config_.reset();
                 state_.store(
                     ScreenShareState::failed,
@@ -790,9 +832,16 @@ struct WindowsScreenShareRuntime::Impl {
             true, std::memory_order_release);
         stop_cv_.notify_all();
 
+        if (stream_audio_sender_worker_.joinable()) {
+            stream_audio_sender_worker_.join();
+        }
         if (sender_worker_.joinable()) {
             sender_worker_.join();
         }
+        stream_audio_enabled_.store(
+            false, std::memory_order_release);
+        stream_audio_active_.store(
+            false, std::memory_order_release);
 
         {
             std::scoped_lock lock(preview_mutex_);
@@ -801,7 +850,9 @@ struct WindowsScreenShareRuntime::Impl {
 
         const auto state =
             state_.load(std::memory_order_acquire);
-        if (socket_ &&
+        if ((socket_ ||
+             (transport_config_ &&
+              transport_config_->room_runtime != nullptr)) &&
             receiver_worker_.joinable() &&
             state != ScreenShareState::failed) {
             state_.store(
@@ -822,12 +873,25 @@ struct WindowsScreenShareRuntime::Impl {
             true, std::memory_order_release);
         stop_cv_.notify_all();
 
+        if (stream_audio_sender_worker_.joinable()) {
+            stream_audio_sender_worker_.join();
+        }
         if (sender_worker_.joinable()) {
             sender_worker_.join();
+        }
+        if (stream_audio_receiver_worker_.joinable()) {
+            stream_audio_receiver_worker_.join();
         }
         if (receiver_worker_.joinable()) {
             receiver_worker_.join();
         }
+
+        stream_audio_enabled_.store(
+            false, std::memory_order_release);
+        stream_audio_active_.store(
+            false, std::memory_order_release);
+        remote_stream_audio_active_.store(
+            false, std::memory_order_release);
 
         socket_.reset();
         transport_config_.reset();
