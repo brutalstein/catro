@@ -836,16 +836,18 @@ void ServerView::StartVoice(
                 : direct.bind.address.c_str(),
         .bind_port =
             room_mode_active_
-                ? 0
-                : direct.bind.port,
+                ? std::uint16_t{0}
+                : static_cast<std::uint16_t>(
+                      direct.bind.port),
         .peer_address =
             room_mode_active_
                 ? nullptr
                 : direct.peer.address.c_str(),
         .peer_port =
             room_mode_active_
-                ? 0
-                : direct.peer.port,
+                ? std::uint16_t{0}
+                : static_cast<std::uint16_t>(
+                      direct.peer.port),
         .stream_id = LocalStreamId(),
         .jitter_packets = 3,
         .bitrate = 48'000,
