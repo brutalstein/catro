@@ -47,7 +47,7 @@ namespace {
 
 using Platform = catro::platform::macos::CoreAudioPlatform;
 static_assert(std::atomic_bool::is_always_lock_free);
-std::atomic_bool g_stop_requested{false};
+catro::tools::VoicePeerControl g_control{};
 
 void stop_signal_handler(int) {
     g_control.stop_requested.store(true, std::memory_order_relaxed);
