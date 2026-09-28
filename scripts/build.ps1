@@ -253,11 +253,54 @@ function Resolve-CatroVisualStudioGenerator {
     throw "CMake does not expose a generator compatible with $($vs.displayName) $($vs.installationVersion). Run 'cmake --help' and inspect the available generators."
 }
 
+function Resolve-CatroMSBuild {
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (-not (Test-Path $vswhere)) {
+        throw 'vswhere.exe not found; run scripts/bootstrap.ps1.'
+    }
+    $resolved = & $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+        -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+    if (-not $resolved) {
+        throw 'MSBuild not found; run scripts/bootstrap.ps1.'
+    }
+    return $resolved
+}
+
+function New-CatroPinnedCppWinRTProjection([string] $MSBuildPath) {
+    $solution = Join-Path $root 'apps\windows\Catro.sln'
+    $project = Join-Path $root 'apps\windows\Catro\Catro.vcxproj'
+
+    Write-Host '[catro] Restoring pinned Windows packages'
+    & $MSBuildPath $solution -t:Restore -p:RestorePackagesConfig=true `
+        "-p:Configuration=$Configuration" -p:Platform=x64 -nologo -v:m
+    if ($LASTEXITCODE -ne 0) {
+        throw 'NuGet restore for the pinned C++/WinRT projection failed.'
+    }
+
+    Write-Host '[catro] Generating pinned C++/WinRT platform projection'
+    & $MSBuildPath $project -t:CppWinRTMakePlatformProjection `
+        "-p:Configuration=$Configuration" -p:Platform=x64 -nologo -v:m
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Pinned C++/WinRT platform projection generation failed.'
+    }
+
+    $generated = Join-Path $root "out\apps\windows\obj\x64\$Configuration\Generated Files"
+    $baseHeader = Join-Path $generated 'winrt\base.h'
+    if (-not (Test-Path $baseHeader)) {
+        throw "Pinned C++/WinRT projection missing expected header: $baseHeader"
+    }
+    return $generated
+}
+
 Push-Location $root
 try {
     $generator = Resolve-CatroVisualStudioGenerator
+    $msbuild = Resolve-CatroMSBuild
+    $cppwinrtGeneratedDir = New-CatroPinnedCppWinRTProjection $msbuild
+
     Write-Host "[catro] Configure generator: $generator"
     Write-Host "[catro] Build directory: $buildDir"
+    Write-Host "[catro] C++/WinRT projection: $cppwinrtGeneratedDir"
 
     $cachePath = Join-Path $buildDir 'CMakeCache.txt'
     if (Test-Path $cachePath) {
@@ -272,17 +315,14 @@ try {
         }
     }
 
-    cmake -S $root -B $buildDir -G $generator -A x64 -DCATRO_BUILD_TESTS=ON
+    cmake -S $root -B $buildDir -G $generator -A x64 -DCATRO_BUILD_TESTS=ON `
+        "-DCATRO_CPPWINRT_INCLUDE_DIR=$cppwinrtGeneratedDir"
     if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
 
     cmake --build $buildDir --config $Configuration --parallel
     if ($LASTEXITCODE -ne 0) { throw 'CMake build failed.' }
     if ($SkipShell) { return }
 
-    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-    $msbuild = & $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find 'MSBuild\**\Bin\MSBuild.exe' |
-        Select-Object -First 1
-    if (-not $msbuild) { throw 'MSBuild not found; run scripts/bootstrap.ps1.' }
 
     # The debug-identity experiment used by earlier borderless-capture work can mutate the
     # already-built executable's SxS manifest. Never trust an incremental shell output after that:
