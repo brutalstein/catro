@@ -473,6 +473,15 @@ int run_receiver(
                 ? "<unnamed H264 decoder>"
                 : initial_decoder.decoder_name)
         << "\n"
+        << "decoder-mode: d3d11-aware "
+        << (initial_decoder.d3d11_aware ? "yes" : "no")
+        << ", low-latency "
+        << (initial_decoder.low_latency_applied ? "enabled" : "not-confirmed")
+        << ", hw-accel "
+        << (initial_decoder.hardware_acceleration_applied ? "enabled" : "not-confirmed")
+        << ", multithread-protected "
+        << (initial_decoder.multithread_protected ? "yes" : "no")
+        << "\n"
         << "path: UDP RTP -> bounded H264 reassembly -> D3D11 H264 decode; presentation not enabled yet\n"
         << "rtp: ssrc ";
     if (options.ssrc == 0) {
