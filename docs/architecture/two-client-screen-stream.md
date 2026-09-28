@@ -34,3 +34,13 @@ This tool remains an unencrypted engineering transport and enforces numeric loop
 Gate A is not yet a user-visible screen stream. The next gate adds hardware H.264 decode to a D3D11
 surface and native presentation, then validates end-to-end glass-to-glass latency and resource use on
 two real Windows machines. The product Share Screen control remains disabled until Gate B passes.
+
+
+## Decoder latency control
+
+The Windows inbox H.264 decoder is a documented Media Foundation special case for
+`CODECAPI_AVLowLatencyMode`: it expects `VT_UI4` through `ICodecAPI`, while the encoder and
+most other codecs use `VT_BOOL`. Catro therefore sets both the MFT `MF_LOW_LATENCY` UINT32
+attribute and the decoder's `ICodecAPI` property using `VT_UI4`. The video-peer diagnostic
+prints whether low-latency activation was accepted so a fixed decoder backlog cannot be mistaken
+for network latency.
