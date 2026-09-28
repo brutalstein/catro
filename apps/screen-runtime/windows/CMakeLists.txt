@@ -15,6 +15,8 @@ target_include_directories(catro_screen_runtime
 target_link_libraries(catro_screen_runtime
     PUBLIC
         Catro::Windows
+        Catro::Audio
+        Catro::Voice
         Catro::Video
         Catro::Transport
         catro_room_runtime
