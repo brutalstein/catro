@@ -10,6 +10,7 @@ add_executable(catro_macos_app MACOSX_BUNDLE
     Catro/Diagnostics/DiagnosticsViewModel.swift
     Catro/Audio/AudioView.swift
     Catro/Audio/AudioViewModel.swift
+    Catro/Assets.xcassets
     Catro/Bridge/CatroCapabilitiesBridge.mm
     Catro/Bridge/CatroAudioBridge.mm
     ${bridge_header})
@@ -22,7 +23,8 @@ set_target_properties(catro_macos_app PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER "dev.catro.Catro"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
-    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "dev.catro.Catro")
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "dev.catro.Catro"
+    XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon")
 target_include_directories(catro_macos_app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Catro/Bridge)
 target_compile_options(catro_macos_app PRIVATE
     "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-import-objc-header ${bridge_header}>"

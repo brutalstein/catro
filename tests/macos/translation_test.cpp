@@ -1,5 +1,6 @@
 #include "macos_translation.hpp"
 
+#include <catro/platform/macos/audio_platform_contract.hpp>
 #include <catro/capabilities/validation.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -13,6 +14,25 @@
 
 using namespace catro::capabilities;
 using namespace catro::platform::macos;
+
+TEST_CASE("AUHAL capture uses the global callback element and input render bus") {
+    CHECK(detail::kInputCallbackElement == 0);
+    CHECK(detail::kInputRenderElement == 1);
+}
+
+TEST_CASE("microphone authorization requests undecided access and rejects denial") {
+    using detail::MicrophoneAuthorization;
+    using detail::MicrophoneAuthorizationAction;
+
+    CHECK(detail::authorization_action(MicrophoneAuthorization::authorized) ==
+          MicrophoneAuthorizationAction::open);
+    CHECK(detail::authorization_action(MicrophoneAuthorization::not_determined) ==
+          MicrophoneAuthorizationAction::request);
+    CHECK(detail::authorization_action(MicrophoneAuthorization::denied) ==
+          MicrophoneAuthorizationAction::deny);
+    CHECK(detail::authorization_action(MicrophoneAuthorization::restricted) ==
+          MicrophoneAuthorizationAction::deny);
+}
 
 namespace {
 

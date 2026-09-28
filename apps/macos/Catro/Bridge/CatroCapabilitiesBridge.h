@@ -107,13 +107,15 @@ __attribute__((objc_subclassing_restricted))
 @end
 
 // Owns the CoreAudio platform and the audio engine. Devices open only while a session runs.
-// Called on the main thread; -session reads atomics and never waits for the audio thread.
+// Called on the main thread; starting may prompt asynchronously for microphone access.
 __attribute__((objc_subclassing_restricted))
 @interface CatroAudioBridge : NSObject
-// Nil on success, otherwise the failure name, e.g. "device not found".
-- (nullable NSString*)startWithMode:(CatroAudioMode)mode
-                              input:(nullable NSString*)input
-                             output:(nullable NSString*)output NS_SWIFT_NAME(start(mode:input:output:));
+// The completion runs on the main thread with nil on success, otherwise the failure name.
+- (void)startWithMode:(CatroAudioMode)mode
+                input:(nullable NSString*)input
+               output:(nullable NSString*)output
+           completion:(void (^)(NSString* _Nullable error))completion
+    NS_SWIFT_NAME(start(mode:input:output:completion:));
 - (void)stop;
 - (CatroAudioSession*)session NS_SWIFT_NAME(session());
 @end

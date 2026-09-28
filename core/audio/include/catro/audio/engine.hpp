@@ -3,6 +3,7 @@
 #include <catro/capabilities/ids.hpp>
 
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -10,6 +11,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <thread>
 #include <variant>
 
 namespace catro::audio {
@@ -181,14 +183,20 @@ private:
     struct Session;
 
     void fail(std::uint64_t generation, AudioError error);
+    void clean_up_failures(std::stop_token stop);
 
     AudioPlatform& platform_;
     FailureHandler on_failure_;
+    std::mutex control_mutex_;
     mutable std::mutex mutex_;
+    std::condition_variable failure_changed_;
     std::unique_ptr<Session> session_;
+    std::optional<std::uint64_t> pending_failure_generation_;
+    AudioError pending_failure_error_;
     std::uint64_t generation_ = 0;
     EngineState state_ = EngineState::idle;
     std::optional<AudioError> error_;
+    std::jthread failure_thread_;
 };
 
 } // namespace catro::audio

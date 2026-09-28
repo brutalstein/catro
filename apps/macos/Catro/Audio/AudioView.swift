@@ -20,13 +20,13 @@ struct AudioView: View {
                         Text(device.label).tag(device.identifier)
                     }
                 }
-                .disabled(running || !audio.mode.usesInput)
+                .disabled(running || audio.starting || !audio.mode.usesInput)
                 Picker("Speakers or headphones", selection: $audio.output) {
                     ForEach(Array(outputs.enumerated()), id: \.offset) { _, device in
                         Text(device.label).tag(device.identifier)
                     }
                 }
-                .disabled(running || !audio.mode.usesOutput)
+                .disabled(running || audio.starting || !audio.mode.usesOutput)
             }
             Section("Test") {
                 Picker("Test", selection: $audio.mode) {
@@ -35,7 +35,7 @@ struct AudioView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .disabled(running)
+                .disabled(running || audio.starting)
                 if audio.mode == .monitor {
                     Label("Use headphones: live monitor plays the microphone back, and speakers can cause loud feedback.",
                           systemImage: "headphones")
@@ -44,7 +44,7 @@ struct AudioView: View {
                 HStack(spacing: 12) {
                     Button("Start") { audio.start() }
                         .keyboardShortcut(.defaultAction)
-                        .disabled(running)
+                        .disabled(running || audio.starting)
                     Button("Stop") { audio.stop() }
                         .disabled(!running)
                     Text(audio.session.status)

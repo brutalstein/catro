@@ -1,7 +1,7 @@
 # Plain C++ translation from native records to domain facts. Built on every platform so it
 # compiles and is tested without an Apple SDK.
 add_library(catro_macos_translation STATIC src/macos_translation.cpp)
-target_include_directories(catro_macos_translation PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(catro_macos_translation PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(catro_macos_translation PUBLIC Catro::Capabilities)
 catro_enable_warnings(catro_macos_translation)
 

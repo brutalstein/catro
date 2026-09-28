@@ -52,19 +52,28 @@ struct AudioEngine::Session final : CaptureSink, RenderSource {
 };
 
 AudioEngine::AudioEngine(AudioPlatform& platform, FailureHandler on_failure)
-    : platform_(platform), on_failure_(std::move(on_failure)) {}
+    : platform_(platform), on_failure_(std::move(on_failure)),
+      failure_thread_([this](std::stop_token stop) { clean_up_failures(stop); }) {}
 
 AudioEngine::~AudioEngine() {
     stop();
+    failure_thread_.request_stop();
+    failure_changed_.notify_all();
+    failure_thread_.join();
 }
 
 std::optional<AudioError> AudioEngine::start(const SessionConfig& config) {
-    stop();
+    const std::scoped_lock control_lock(control_mutex_);
+    std::unique_ptr<Session> finished;
     std::uint64_t generation = 0;
     {
         const std::scoped_lock lock(mutex_);
+        finished = std::move(session_);
         generation = ++generation_;
+        state_ = EngineState::idle;
+        error_.reset();
     }
+    finished.reset();
     auto session = std::make_unique<Session>(config.mode);
     const auto failure = [this, generation](AudioError error) { fail(generation, error); };
     const auto record = [&](AudioError error) {
@@ -107,16 +116,21 @@ std::optional<AudioError> AudioEngine::start(const SessionConfig& config) {
         }
     }
 
-    const std::scoped_lock lock(mutex_);
-    // A stream may already have failed on its own thread; that failure stands.
-    if (generation == generation_ && state_ != EngineState::failed) {
-        state_ = EngineState::running;
+    std::optional<AudioError> result;
+    {
+        const std::scoped_lock lock(mutex_);
+        // A stream may already have failed on its own thread; that failure stands.
+        if (generation == generation_ && state_ != EngineState::failed) {
+            state_ = EngineState::running;
+        }
+        session_ = std::move(session);
+        result = error_;
     }
-    session_ = std::move(session);
-    return error_;
+    return result;
 }
 
 void AudioEngine::stop() {
+    const std::scoped_lock control_lock(control_mutex_);
     std::unique_ptr<Session> finished;
     {
         const std::scoped_lock lock(mutex_);
@@ -137,9 +151,41 @@ void AudioEngine::fail(std::uint64_t generation, AudioError error) {
         }
         state_ = EngineState::failed;
         error_ = error;
+        pending_failure_generation_ = generation;
+        pending_failure_error_ = error;
     }
-    if (on_failure_) {
-        on_failure_(error);
+    failure_changed_.notify_one();
+}
+
+void AudioEngine::clean_up_failures(std::stop_token stop) {
+    while (!stop.stop_requested()) {
+        std::uint64_t failed_generation = 0;
+        AudioError failure;
+        {
+            std::unique_lock lock(mutex_);
+            failure_changed_.wait(
+                lock, [&] { return stop.stop_requested() || pending_failure_generation_.has_value(); });
+            if (stop.stop_requested()) {
+                return;
+            }
+            failed_generation = *pending_failure_generation_;
+            failure = pending_failure_error_;
+            pending_failure_generation_.reset();
+        }
+
+        std::unique_ptr<Session> finished;
+        {
+            const std::scoped_lock control_lock(control_mutex_);
+            const std::scoped_lock lock(mutex_);
+            if (failed_generation == generation_) {
+                finished = std::move(session_);
+            }
+        }
+        // Stream destruction may join a platform thread, so it stays outside the state lock.
+        finished.reset();
+        if (on_failure_) {
+            on_failure_(failure);
+        }
     }
 }
 

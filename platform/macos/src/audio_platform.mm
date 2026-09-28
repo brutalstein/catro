@@ -1,4 +1,5 @@
 #include <catro/platform/macos/audio_platform.hpp>
+#include <catro/platform/macos/audio_platform_contract.hpp>
 
 #include <catro/audio/realtime.hpp>
 
@@ -9,11 +10,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace catro::platform::macos {
@@ -30,7 +33,7 @@ enum class Direction {
 
 // Returned by the converter input callback once the captured block is used up.
 constexpr OSStatus kBlockConsumed = 0x626c6b21; // 'blk!'
-constexpr UInt32 kInputElement = 1;
+constexpr UInt32 kInputElement = detail::kInputRenderElement;
 constexpr UInt32 kOutputElement = 0;
 
 AudioObjectPropertyAddress address(AudioObjectPropertySelector selector,
@@ -138,13 +141,39 @@ AudioError error_for(OSStatus status) {
     case kAudioHardwareBadObjectError:
         return {AudioErrorCode::device_lost, native};
     case kAudioDevicePermissionsError:
-        return {AudioErrorCode::device_in_use, native};
+        return {AudioErrorCode::permission_denied, native};
     case kAudioDeviceUnsupportedFormatError:
     case kAudioUnitErr_FormatNotSupported:
         return {AudioErrorCode::format_unsupported, native};
     default:
         return {AudioErrorCode::os_failure, native};
     }
+}
+
+detail::MicrophoneAuthorization microphone_authorization() {
+    switch ([AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio]) {
+    case AVAuthorizationStatusAuthorized:
+        return detail::MicrophoneAuthorization::authorized;
+    case AVAuthorizationStatusNotDetermined:
+        return detail::MicrophoneAuthorization::not_determined;
+    case AVAuthorizationStatusDenied:
+        return detail::MicrophoneAuthorization::denied;
+    case AVAuthorizationStatusRestricted:
+        return detail::MicrophoneAuthorization::restricted;
+    }
+    return detail::MicrophoneAuthorization::restricted;
+}
+
+bool request_microphone_access() {
+    dispatch_semaphore_t completed = dispatch_semaphore_create(0);
+    __block BOOL granted = NO;
+    [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio
+                            completionHandler:^(BOOL allowed) {
+                              granted = allowed;
+                              dispatch_semaphore_signal(completed);
+                            }];
+    dispatch_semaphore_wait(completed, DISPATCH_TIME_FOREVER);
+    return granted;
 }
 
 AudioStreamBasicDescription float_format(Float64 rate, UInt32 channels) {
@@ -176,6 +205,10 @@ public:
     ~CoreAudioStream() override {
         if (unit_ != nullptr) {
             AudioOutputUnitStop(unit_);
+        }
+        worker_stop_.store(true, std::memory_order_relaxed);
+        if (capture_worker_.joinable()) {
+            capture_worker_.join();
         }
         // Removal does not wait for a listener already running; draining the queue does.
         if (alive_listener_ != nil) {
@@ -267,12 +300,14 @@ public:
                     converter_ = nullptr;
                     return error_for(status);
                 }
+                capture_ring_ = std::make_unique<audio::SpscRing<float>>(static_cast<std::size_t>(max_frames) * 8);
+                converter_input_.assign(max_frames, 0.0F);
             }
             captured_.assign(max_frames, 0.0F);
             converted_.assign(engine_frames(max_frames, device_rate) + 64, 0.0F);
             const AURenderCallbackStruct callback{&CoreAudioStream::on_input, this};
             status = AudioUnitSetProperty(unit_, kAudioOutputUnitProperty_SetInputCallback, kAudioUnitScope_Global,
-                                          kInputElement, &callback, sizeof(callback));
+                                          detail::kInputCallbackElement, &callback, sizeof(callback));
         } else {
             // AUHAL converts rate and format on its output side. Two identical channels, so a stereo
             // device plays the mono engine signal on both sides instead of the left one only.
@@ -294,20 +329,76 @@ public:
     const audio::StreamInfo& info() const noexcept override { return info_; }
 
     std::optional<AudioError> start() override {
+        if (direction_ == Direction::capture) {
+            worker_stop_.store(false, std::memory_order_relaxed);
+            capture_worker_ = std::thread([this] { run_capture_worker(); });
+        }
         const auto status = AudioOutputUnitStart(unit_);
-        return status == noErr ? std::nullopt : std::optional{error_for(status)};
+        if (status == noErr) {
+            return std::nullopt;
+        }
+        worker_stop_.store(true, std::memory_order_relaxed);
+        if (capture_worker_.joinable()) {
+            capture_worker_.join();
+        }
+        return error_for(status);
     }
 
     std::uint64_t glitches() const noexcept override { return glitches_.load(std::memory_order_relaxed); }
 
 private:
+    void report_failure(AudioError error) {
+        if (!failed_.exchange(true)) {
+            failure_(error);
+        }
+    }
+
+    void remember_callback_error(OSStatus status) noexcept {
+        auto expected = noErr;
+        callback_error_.compare_exchange_strong(expected, status, std::memory_order_relaxed);
+    }
+
+    void run_capture_worker() {
+        while (!worker_stop_.load(std::memory_order_relaxed)) {
+            const auto callback_error = callback_error_.exchange(noErr, std::memory_order_relaxed);
+            if (callback_error != noErr) {
+                report_failure(error_for(callback_error));
+                return;
+            }
+            if (converter_ == nullptr) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+
+            const auto consumed = capture_ring_->read(converter_input_);
+            if (consumed == 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+            pending_ = static_cast<UInt32>(consumed);
+            UInt32 produced = static_cast<UInt32>(converted_.size());
+            AudioBufferList out{};
+            out.mNumberBuffers = 1;
+            out.mBuffers[0] = {1, static_cast<UInt32>(produced * sizeof(float)), converted_.data()};
+            const auto status =
+                AudioConverterFillComplexBuffer(converter_, &CoreAudioStream::supply, this, &produced, &out, nullptr);
+            if (status != noErr && status != kBlockConsumed) {
+                report_failure(error_for(status));
+                return;
+            }
+            if (produced > 0) {
+                sink_->on_captured(std::span<const float>(converted_.data(), produced));
+            }
+        }
+    }
+
     // Device removal and processor overloads arrive on this stream's serial queue, never on the
     // real-time thread.
     std::optional<AudioError> listen() {
         alive_listener_ = ^(UInt32, const AudioObjectPropertyAddress*) {
           const auto alive = scalar<UInt32>(device_, address(kAudioDevicePropertyDeviceIsAlive));
-          if ((!alive || *alive == 0) && !failed_.exchange(true)) {
-              failure_(AudioError{AudioErrorCode::device_lost});
+          if (!alive || *alive == 0) {
+              report_failure(AudioError{AudioErrorCode::device_lost});
           }
         };
         overload_listener_ = ^(UInt32, const AudioObjectPropertyAddress*) {
@@ -332,7 +423,8 @@ private:
         auto& stream = *static_cast<CoreAudioStream*>(context);
         if (frames > stream.captured_.size()) {
             stream.glitches_.fetch_add(1, std::memory_order_relaxed);
-            return noErr;
+            stream.remember_callback_error(kAudioUnitErr_TooManyFramesToProcess);
+            return kAudioUnitErr_TooManyFramesToProcess;
         }
         AudioBufferList list{};
         list.mNumberBuffers = 1;
@@ -340,24 +432,15 @@ private:
         const auto status = AudioUnitRender(stream.unit_, flags, time, bus, frames, &list);
         if (status != noErr) {
             stream.glitches_.fetch_add(1, std::memory_order_relaxed);
+            stream.remember_callback_error(status);
             return status;
         }
         if (stream.converter_ == nullptr) {
             stream.sink_->on_captured(std::span<const float>(stream.captured_.data(), frames));
             return noErr;
         }
-        stream.pending_ = frames;
-        UInt32 produced = static_cast<UInt32>(stream.converted_.size());
-        AudioBufferList out{};
-        out.mNumberBuffers = 1;
-        out.mBuffers[0] = {1, static_cast<UInt32>(produced * sizeof(float)), stream.converted_.data()};
-        const auto converted =
-            AudioConverterFillComplexBuffer(stream.converter_, &CoreAudioStream::supply, &stream, &produced, &out, nullptr);
-        if (converted != noErr && converted != kBlockConsumed) {
+        if (stream.capture_ring_->write(std::span<const float>(stream.captured_.data(), frames)) != frames) {
             stream.glitches_.fetch_add(1, std::memory_order_relaxed);
-        }
-        if (produced > 0) {
-            stream.sink_->on_captured(std::span<const float>(stream.converted_.data(), produced));
         }
         return noErr;
     }
@@ -371,7 +454,7 @@ private:
             return kBlockConsumed;
         }
         data->mNumberBuffers = 1;
-        data->mBuffers[0] = {1, static_cast<UInt32>(stream.pending_ * sizeof(float)), stream.captured_.data()};
+        data->mBuffers[0] = {1, static_cast<UInt32>(stream.pending_ * sizeof(float)), stream.converter_input_.data()};
         *packets = stream.pending_;
         stream.pending_ = 0;
         return noErr;
@@ -404,8 +487,13 @@ private:
     AudioConverterRef converter_ = nullptr;
     // Preallocated before the stream runs; the real-time callbacks only index into them.
     std::vector<float> captured_;
+    std::unique_ptr<audio::SpscRing<float>> capture_ring_;
+    std::vector<float> converter_input_;
     std::vector<float> converted_;
     UInt32 pending_ = 0;
+    std::thread capture_worker_;
+    std::atomic<bool> worker_stop_{false};
+    std::atomic<OSStatus> callback_error_{noErr};
     std::atomic<std::uint64_t> glitches_{0};
     std::atomic<bool> failed_{false};
 };
@@ -427,12 +515,15 @@ audio::OpenResult open_stream(Direction direction, const std::optional<caps::Aud
 
 audio::OpenResult CoreAudioPlatform::open_capture(const std::optional<caps::AudioEndpointId>& device,
                                                   audio::CaptureSink& sink, audio::StreamFailure failure) {
-    switch ([AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio]) {
-    case AVAuthorizationStatusDenied:
-    case AVAuthorizationStatusRestricted:
+    switch (detail::authorization_action(microphone_authorization())) {
+    case detail::MicrophoneAuthorizationAction::deny:
         return AudioError{AudioErrorCode::permission_denied};
-    case AVAuthorizationStatusNotDetermined:
-    case AVAuthorizationStatusAuthorized:
+    case detail::MicrophoneAuthorizationAction::request:
+        if (!request_microphone_access()) {
+            return AudioError{AudioErrorCode::permission_denied};
+        }
+        break;
+    case detail::MicrophoneAuthorizationAction::open:
         break;
     }
     return open_stream(Direction::capture, device, &sink, nullptr, std::move(failure));

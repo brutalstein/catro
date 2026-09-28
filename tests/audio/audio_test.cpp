@@ -7,9 +7,14 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
+#include <latch>
 #include <memory>
+#include <mutex>
 #include <numeric>
 #include <thread>
 #include <vector>
@@ -160,14 +165,14 @@ AudioEndpointId endpoint(const char* value) {
 
 class FakeStream final : public AudioStream {
 public:
-    FakeStream(StreamInfo info, std::optional<AudioError> start_error, bool& started)
+    FakeStream(StreamInfo info, std::optional<AudioError> start_error, std::atomic_bool& started)
         : info_(std::move(info)), start_error_(start_error), started_(started) {}
 
-    ~FakeStream() override { started_ = false; }
+    ~FakeStream() override { started_.store(false); }
 
     const StreamInfo& info() const noexcept override { return info_; }
     std::optional<AudioError> start() override {
-        started_ = !start_error_;
+        started_.store(!start_error_);
         return start_error_;
     }
     std::uint64_t glitches() const noexcept override { return 2; }
@@ -175,7 +180,7 @@ public:
 private:
     StreamInfo info_;
     std::optional<AudioError> start_error_;
-    bool& started_;
+    std::atomic_bool& started_;
 };
 
 class FakePlatform final : public AudioPlatform {
@@ -214,8 +219,52 @@ public:
     RenderSource* source = nullptr;
     StreamFailure capture_failure;
     StreamFailure render_failure;
-    bool capture_started = false;
-    bool render_started = false;
+    std::atomic_bool capture_started = false;
+    std::atomic_bool render_started = false;
+};
+
+class FailureRecorder {
+public:
+    void record(AudioError error) {
+        {
+            const std::scoped_lock lock(mutex_);
+            errors_.push_back(error);
+        }
+        changed_.notify_all();
+    }
+
+    bool wait_for(std::size_t count) {
+        std::unique_lock lock(mutex_);
+        return changed_.wait_for(lock, std::chrono::seconds(1), [&] { return errors_.size() >= count; });
+    }
+
+    std::vector<AudioError> errors() const {
+        const std::scoped_lock lock(mutex_);
+        return errors_;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::condition_variable changed_;
+    std::vector<AudioError> errors_;
+};
+
+class BlockingPlatform final : public AudioPlatform {
+public:
+    OpenResult open_capture(const std::optional<AudioEndpointId>& device, CaptureSink&, StreamFailure) override {
+        capture_opened.count_down();
+        release_capture.wait();
+        return std::make_unique<FakeStream>(
+            StreamInfo{device.value_or(endpoint("default-in")), 48000, 1, 480, 96}, std::nullopt, capture_started);
+    }
+
+    OpenResult open_render(const std::optional<AudioEndpointId>&, RenderSource&, StreamFailure) override {
+        return AudioError{AudioErrorCode::os_failure};
+    }
+
+    std::latch capture_opened{1};
+    std::latch release_capture{1};
+    std::atomic_bool capture_started = false;
 };
 
 } // namespace
@@ -300,18 +349,46 @@ TEST_CASE("open and start errors leave nothing running") {
 
 TEST_CASE("a stream failure fails the session once and stale failures are ignored") {
     FakePlatform platform;
-    std::vector<AudioError> reported;
-    AudioEngine engine(platform, [&](AudioError error) { reported.push_back(error); });
+    FailureRecorder reported;
+    AudioEngine engine(platform, [&](AudioError error) { reported.record(error); });
     REQUIRE_FALSE(engine.start({.mode = SessionMode::monitor}));
 
     platform.render_failure(AudioError{AudioErrorCode::device_lost, 7});
+    REQUIRE(reported.wait_for(1));
     platform.capture_failure(AudioError{AudioErrorCode::os_failure});
-    CHECK(reported == std::vector{AudioError{AudioErrorCode::device_lost, 7}});
+    CHECK(reported.errors() == std::vector{AudioError{AudioErrorCode::device_lost, 7}});
     CHECK(engine.statistics().state == EngineState::failed);
+    CHECK_FALSE(platform.capture_started.load());
+    CHECK_FALSE(platform.render_started.load());
 
     auto stale = platform.render_failure;
     REQUIRE_FALSE(engine.start({.mode = SessionMode::tone}));
     stale(AudioError{AudioErrorCode::device_lost});
     CHECK(engine.statistics().state == EngineState::running);
-    CHECK(reported.size() == 1);
+    CHECK(reported.errors().size() == 1);
+}
+
+TEST_CASE("a concurrent stop waits for an in-flight start and leaves no stream running") {
+    BlockingPlatform platform;
+    AudioEngine engine(platform);
+    std::optional<AudioError> start_error;
+    std::atomic_bool stop_returned = false;
+
+    std::thread starter([&] { start_error = engine.start({.mode = SessionMode::meter}); });
+    platform.capture_opened.wait();
+    std::thread stopper([&] {
+        engine.stop();
+        stop_returned.store(true);
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    CHECK_FALSE(stop_returned.load());
+    platform.release_capture.count_down();
+    starter.join();
+    stopper.join();
+
+    CHECK_FALSE(start_error);
+    CHECK(stop_returned.load());
+    CHECK_FALSE(platform.capture_started.load());
+    CHECK(engine.statistics().state == EngineState::idle);
 }

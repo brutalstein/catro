@@ -98,9 +98,10 @@ struct AudioState {
     return self;
 }
 
-- (nullable NSString*)startWithMode:(CatroAudioMode)mode
-                              input:(nullable NSString*)input
-                             output:(nullable NSString*)output {
+- (void)startWithMode:(CatroAudioMode)mode
+                input:(nullable NSString*)input
+               output:(nullable NSString*)output
+           completion:(void (^)(NSString* _Nullable error))completion {
     audio::SessionConfig config{.input = endpoint(input), .output = endpoint(output)};
     switch (mode) {
     case CatroAudioModeMeter:
@@ -113,8 +114,13 @@ struct AudioState {
         config.mode = audio::SessionMode::monitor;
         break;
     }
-    const auto error = _state->engine.start(config);
-    return error ? copy_string(std::string(name(error->code))) : nil;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      const auto error = _state->engine.start(config);
+      NSString* message = error ? copy_string(std::string(name(error->code))) : nil;
+      dispatch_async(dispatch_get_main_queue(), ^{
+        completion(message);
+      });
+    });
 }
 
 - (void)stop {

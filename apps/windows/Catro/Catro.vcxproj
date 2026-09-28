@@ -93,6 +93,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <Manifest Include="app.manifest" />
+    <ResourceCompile Include="Catro.rc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />

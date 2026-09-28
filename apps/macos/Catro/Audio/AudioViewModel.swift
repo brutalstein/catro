@@ -37,6 +37,7 @@ final class AudioViewModel: ObservableObject {
     @Published var output: String?
     @Published private(set) var session: CatroAudioSession
     @Published private(set) var failure: (title: String, message: String)?
+    @Published private(set) var starting = false
 
     private let bridge = CatroAudioBridge()
     private var timer: Timer?
@@ -46,17 +47,23 @@ final class AudioViewModel: ObservableObject {
     }
 
     func start() {
+        guard !starting else { return }
         failure = nil
-        if let error = bridge.start(mode: mode.bridged, input: mode.usesInput ? input : nil,
-                                    output: mode.usesOutput ? output : nil) {
-            failure = ("Could not start: \(error)", Self.guidance(for: error))
+        starting = true
+        bridge.start(mode: mode.bridged, input: mode.usesInput ? input : nil,
+                     output: mode.usesOutput ? output : nil) { [weak self] error in
+            guard let self else { return }
+            starting = false
+            if let error {
+                failure = ("Could not start: \(error)", Self.guidance(for: error))
+                refresh()
+                return
+            }
+            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.refresh() }
+            }
             refresh()
-            return
         }
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
-        refresh()
     }
 
     func stop() {
