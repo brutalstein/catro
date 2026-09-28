@@ -701,6 +701,14 @@ void ServerView::SetDirectorySession(
         owner
             ? xaml::Visibility::Visible
             : xaml::Visibility::Collapsed);
+    MemberRoleIcon().Visibility(
+        owner
+            ? xaml::Visibility::Visible
+            : xaml::Visibility::Collapsed);
+    ProfileRoleText().Text(
+        owner ? L"Owner" : L"Member");
+    VoiceRoleText().Text(
+        owner ? L"OWNER" : L"MEMBER");
     InviteButton().IsEnabled(
         owner && !invite_pending_);
 
