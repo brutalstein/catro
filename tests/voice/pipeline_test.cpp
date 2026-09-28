@@ -362,7 +362,10 @@ TEST_CASE("pipeline PLC never waits on a missing network packet") {
 
 TEST_CASE("malformed Opus payload is concealed without terminating the voice pipeline") {
     auto receiver = make_pipeline(0x70000001U, 1);
-    const std::array<std::byte, 2> invalid_opus{std::byte{0x03}, std::byte{0x00}};
+    // TOC code 3 requires a second frame-count byte. A one-byte code-3 packet is structurally
+    // incomplete by definition, unlike the old two-byte fixture that newer libopus builds may
+    // legally interpret as audio on some architectures.
+    const std::array<std::byte, 1> invalid_opus{std::byte{0x03}};
     std::array<std::byte, kVoiceHeaderBytes + invalid_opus.size()> datagram{};
     const auto serialized = serialize_packet(
         VoicePacketView{.stream_id = 0x70000002U,
