@@ -52,6 +52,7 @@ struct DeviceBundle {
 struct DuplicationBundle {
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
+    ComPtr<IDXGIOutput1> output;
     ComPtr<IDXGIOutputDuplication> duplication;
     std::uint64_t adapter_luid = 0;
     std::uint32_t width = 0;
@@ -275,6 +276,7 @@ std::variant<DuplicationBundle, ScreenCaptureError> create_duplication_bundle(
             return DuplicationBundle{
                 .device = std::move(device),
                 .context = std::move(context),
+                .output = std::move(output1),
                 .duplication = std::move(duplication),
                 .adapter_luid = pack_luid(adapter_desc.AdapterLuid),
                 .width = static_cast<std::uint32_t>(width),
@@ -292,25 +294,39 @@ bool nearly_equal_edge(LONG left, LONG right) noexcept {
 }
 
 bool window_is_fullscreen_like(HWND window, HMONITOR monitor) noexcept {
-    if (window == nullptr || monitor == nullptr || IsIconic(window)) return false;
+    if (window == nullptr || monitor == nullptr) return false;
 
-    RECT client{};
-    if (!GetClientRect(window, &client)) return false;
-    POINT top_left{client.left, client.top};
-    POINT bottom_right{client.right, client.bottom};
-    if (!ClientToScreen(window, &top_left) ||
-        !ClientToScreen(window, &bottom_right)) {
-        return false;
+    RECT candidate{};
+    if (IsIconic(window)) {
+        WINDOWPLACEMENT placement{};
+        placement.length = sizeof(placement);
+        if (!GetWindowPlacement(window, &placement)) return false;
+        candidate = placement.rcNormalPosition;
+    } else {
+        RECT client{};
+        if (!GetClientRect(window, &client)) return false;
+        POINT top_left{client.left, client.top};
+        POINT bottom_right{client.right, client.bottom};
+        if (!ClientToScreen(window, &top_left) ||
+            !ClientToScreen(window, &bottom_right)) {
+            return false;
+        }
+        candidate = RECT{
+            top_left.x,
+            top_left.y,
+            bottom_right.x,
+            bottom_right.y,
+        };
     }
 
     MONITORINFO info{};
     info.cbSize = sizeof(info);
     if (!GetMonitorInfoW(monitor, &info)) return false;
 
-    return nearly_equal_edge(top_left.x, info.rcMonitor.left) &&
-           nearly_equal_edge(top_left.y, info.rcMonitor.top) &&
-           nearly_equal_edge(bottom_right.x, info.rcMonitor.right) &&
-           nearly_equal_edge(bottom_right.y, info.rcMonitor.bottom);
+    return nearly_equal_edge(candidate.left, info.rcMonitor.left) &&
+           nearly_equal_edge(candidate.top, info.rcMonitor.top) &&
+           nearly_equal_edge(candidate.right, info.rcMonitor.right) &&
+           nearly_equal_edge(candidate.bottom, info.rcMonitor.bottom);
 }
 
 std::string utf8(std::wstring_view wide) {
@@ -497,6 +513,7 @@ struct WindowsGraphicsCapture::Impl {
 
         d3d_device_ = std::move(bundle.device);
         duplication_context_ = std::move(bundle.context);
+        duplication_output_ = std::move(bundle.output);
         duplication_ = std::move(bundle.duplication);
         duplication_slot_ = 0;
         for (auto& texture : duplication_textures_) texture.Reset();
@@ -627,6 +644,7 @@ struct WindowsGraphicsCapture::Impl {
         item_ = nullptr;
         winrt_device_ = nullptr;
         duplication_.Reset();
+        duplication_output_.Reset();
         duplication_context_.Reset();
         for (auto& texture : duplication_textures_) texture.Reset();
         duplication_slot_ = 0;
@@ -771,9 +789,27 @@ struct WindowsGraphicsCapture::Impl {
         ComPtr<IDXGIResource> resource;
         const auto timeout_ms = static_cast<UINT>(
             std::max<std::int64_t>(0, timeout.count()));
-        const auto acquired =
+        auto acquired =
             duplication_->AcquireNextFrame(timeout_ms, &info, &resource);
         if (acquired == DXGI_ERROR_WAIT_TIMEOUT) return false;
+        if (acquired == DXGI_ERROR_ACCESS_LOST) {
+            duplication_.Reset();
+            for (auto& texture : duplication_textures_) texture.Reset();
+            duplication_slot_ = 0;
+            if (!duplication_output_ || !d3d_device_) {
+                fail_from_callback(ScreenCaptureError{
+                    ScreenCaptureErrorCode::frame_failure, acquired});
+                return false;
+            }
+            const auto recreated =
+                duplication_output_->DuplicateOutput(
+                    d3d_device_.Get(), &duplication_);
+            if (FAILED(recreated) || !duplication_) {
+                fail_from_callback(ScreenCaptureError{
+                    ScreenCaptureErrorCode::frame_failure, recreated});
+            }
+            return false;
+        }
         if (FAILED(acquired) || !resource) {
             fail_from_callback(ScreenCaptureError{
                 ScreenCaptureErrorCode::frame_failure, acquired});
@@ -912,6 +948,7 @@ struct WindowsGraphicsCapture::Impl {
     direct3d::IDirect3DDevice winrt_device_{nullptr};
     std::mutex duplication_mutex_;
     ComPtr<ID3D11DeviceContext> duplication_context_;
+    ComPtr<IDXGIOutput1> duplication_output_;
     ComPtr<IDXGIOutputDuplication> duplication_;
     std::array<ComPtr<ID3D11Texture2D>, 2> duplication_textures_{};
     std::size_t duplication_slot_ = 0;
