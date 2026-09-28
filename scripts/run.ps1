@@ -32,11 +32,26 @@ if (-not (Test-Path $shell)) {
 # packaging gate is complete, normal startup is more important than silently mutating the binary.
 $process = Start-Process -FilePath $shell -PassThru
 
-# Detect immediate startup failures instead of returning a misleading successful prompt.
-Start-Sleep -Milliseconds 1200
-if ($process.HasExited) {
-    $exitCode = $process.ExitCode
-    throw "Catro exited during startup with code $exitCode. Rebuild with scripts/build.ps1 and retry."
+# A live process is not enough for a GUI app: wait until WinUI has actually created a top-level
+# window. This catches startup hangs where the process survives but XAML initialization never
+# reaches Window::Activate().
+$deadline = [DateTime]::UtcNow.AddSeconds(8)
+$windowReady = $false
+do {
+    Start-Sleep -Milliseconds 150
+    $process.Refresh()
+    if ($process.HasExited) {
+        $exitCode = $process.ExitCode
+        throw "Catro exited during startup with code $exitCode. Rebuild with scripts/build.ps1 and retry."
+    }
+    if ($process.MainWindowHandle -ne 0) {
+        $windowReady = $true
+        break
+    }
+} while ([DateTime]::UtcNow -lt $deadline)
+
+if (-not $windowReady) {
+    throw "Catro process is alive (PID $($process.Id)) but no top-level window was created within 8 seconds."
 }
 
-Write-Host "[catro] Started Catro (PID $($process.Id))."
+Write-Host "[catro] Started Catro (PID $($process.Id), HWND 0x$('{0:X}' -f $process.MainWindowHandle))."
