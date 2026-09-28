@@ -1205,6 +1205,7 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
                     .monitor_handle = reinterpret_cast<std::uintptr_t>(monitor),
                     .title = utf8(title),
                     .process_name = process_image_name(process_id),
+                    .process_id = static_cast<std::uint32_t>(process_id),
                     .width = static_cast<std::uint32_t>(width),
                     .height = static_cast<std::uint32_t>(height),
                     .primary = false,
