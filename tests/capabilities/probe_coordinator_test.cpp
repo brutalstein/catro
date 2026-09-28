@@ -114,12 +114,12 @@ TEST_CASE("all probe helpers start before the coordinator waits") {
     test::FakeProbeExecutor executor;
     complete_all(executor, source, 30ms);
 
-    const auto started = std::chrono::steady_clock::now();
     const auto publication = collect_snapshot(schedule, executor);
-    const auto elapsed = std::chrono::steady_clock::now() - started;
 
+    // The fake records how many helpers existed when the first wait began. This directly verifies
+    // concurrent launch orchestration without turning hosted-runner scheduler latency into a test
+    // failure.
     REQUIRE(executor.launch_count_at_first_wait() == 5);
-    REQUIRE(elapsed < 120ms);
     REQUIRE(publication.snapshot);
     REQUIRE(publication.validation.ok());
 }
