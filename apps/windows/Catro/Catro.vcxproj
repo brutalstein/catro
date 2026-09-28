@@ -98,7 +98,6 @@
   <ItemGroup>
     <Manifest Include="app.manifest" />
     <ResourceCompile Include="Catro.rc" />
-    <None Include="Assets\Catro.ico.b64" />
     <None Include="sparse.appxmanifest.xml" />
   </ItemGroup>
   <ItemGroup>
