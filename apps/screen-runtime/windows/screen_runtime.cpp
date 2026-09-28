@@ -983,6 +983,7 @@ struct WindowsScreenShareRuntime::Impl {
                 failure->native_code);
             return;
         }
+        trace_event("receiver-decoder-started");
 
         D3D11CompositionVideoPresenter presenter(
             VideoPresenterConfig{
@@ -994,6 +995,8 @@ struct WindowsScreenShareRuntime::Impl {
         std::array<std::byte, kReceiveDatagramBytes>
             datagram{};
         bool have_timestamp = false;
+        bool first_remote_frame_traced = false;
+        bool first_remote_present_traced = false;
         std::uint32_t last_timestamp = 0;
         std::uint64_t extended_timestamp = 0;
 
@@ -1134,6 +1137,10 @@ struct WindowsScreenShareRuntime::Impl {
 
                 remote_frames_.fetch_add(
                     1, std::memory_order_relaxed);
+                if (!first_remote_frame_traced) {
+                    trace_event("receiver-first-frame-reassembled");
+                    first_remote_frame_traced = true;
+                }
 
                 const auto timestamp =
                     reassembled.frame.timestamp_90khz;
@@ -1170,17 +1177,25 @@ struct WindowsScreenShareRuntime::Impl {
                     continue;
                 }
 
-                remote_decoded_.fetch_add(
-                    1, std::memory_order_relaxed);
+                const auto decoded_before =
+                    remote_decoded_.fetch_add(
+                        1, std::memory_order_relaxed);
+                if (decoded_before == 0) {
+                    trace_event("receiver-first-frame-decoded");
+                }
                 remote_width_.store(
                     decoded.width, std::memory_order_relaxed);
                 remote_height_.store(
                     decoded.height, std::memory_order_relaxed);
 
+                if (!first_remote_present_traced) {
+                    trace_event("receiver-first-frame-present-begin");
+                }
                 if (const auto failure =
                         presenter.present(
                             *decoded.texture.Get(),
                             decoded.subresource_index)) {
+                    trace_event("receiver-present-error");
                     fail_session(
                         ScreenShareErrorCode::remote_present_failed,
                         platform::windows::name(
@@ -1188,6 +1203,10 @@ struct WindowsScreenShareRuntime::Impl {
                         failure->native_code);
                     fatal = true;
                     break;
+                }
+                if (!first_remote_present_traced) {
+                    trace_event("receiver-first-frame-presented");
+                    first_remote_present_traced = true;
                 }
 
                 const auto presentation =
