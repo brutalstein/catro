@@ -140,6 +140,14 @@ func TestDirectoryInviteMembershipAndRTCTokenFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	d.setRTCProvisioning(
+		"wss://rtc.example.test/v1/rtc",
+		[]string{
+			"stun:stun.example.test:3478",
+			"turn:turn.example.test:3478",
+		},
+		false,
+		false)
 
 	ownerToken := registerTestUser(
 		t, d, "owner-1", testCredential(0x11))
