@@ -218,7 +218,7 @@ struct CapabilityService::Impl {
             dispatch_resume(memory_source);
         }
 
-        power_registered = notify_register_dispatch(kIOPSNotifyPowerSource, &power_token, core->queue, ^(int) {
+        power_registered = notify_register_dispatch(kIOPSTimeRemainingNotificationKey, &power_token, core->queue, ^(int) {
                              shared->schedule(caps::RefreshReason::power);
                            }) == NOTIFY_STATUS_OK;
 
