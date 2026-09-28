@@ -178,11 +178,14 @@ TEST_CASE("the global deadline publishes explicit unknowns for a blocked family"
     complete_all(executor, source, 1ms);
     executor.set(std::string(fx::kSystemProbe), {.never_completes = true});
 
-    const auto started = std::chrono::steady_clock::now();
     const auto publication = collect_snapshot(schedule, executor);
-    const auto elapsed = std::chrono::steady_clock::now() - started;
 
-    REQUIRE(elapsed < 150ms);
+    const auto wait = executor.wait_budgets().find(std::string(fx::kSystemProbe));
+    REQUIRE(wait != executor.wait_budgets().end());
+    // The system family has a 200 ms hard budget, so a budget no larger than the 40 ms global
+    // publication budget proves the coordinator chose the global deadline without relying on
+    // hosted-runner scheduling latency.
+    REQUIRE(wait->second <= schedule.publication_budget);
     REQUIRE(publication.snapshot);
     REQUIRE(publication.validation.ok());
     REQUIRE(record_for(*publication.snapshot, ProbeFamily::system).outcome == ProbeOutcome::timeout);
