@@ -1568,14 +1568,27 @@ void ServerView::UpdateScreenShareUi() {
 
     const auto panel_width = VoicePanel().ActualWidth();
     const auto panel_height = VoicePanel().ActualHeight();
-    const auto max_stream_width =
+
+    // Remote viewing follows the actual available voice-panel viewport. Do not impose a 960x720
+    // product cap here: a large Catro window should let a 16:9, 16:10, 4:3, ultrawide, or portrait
+    // stream grow until one real panel edge becomes limiting. fit_viewport() preserves the decoded
+    // source aspect ratio while presentation scales independently from the encoder's no-upscale
+    // policy.
+    const auto remote_max_stream_width =
         panel_width > 80.0
-            ? std::min(960.0, std::max(160.0, panel_width - 44.0))
+            ? std::max(160.0, panel_width - 44.0)
             : 720.0;
-    const auto max_stream_height =
+    const auto remote_max_stream_height =
         panel_height > 140.0
-            ? std::min(720.0, std::max(120.0, panel_height - 120.0))
+            ? std::max(120.0, panel_height - 120.0)
             : 405.0;
+
+    // Self-preview is not the primary content. Keep its surface bounded so maximizing Catro while
+    // sharing cannot turn the optional local preview into a large extra GPU presentation workload.
+    const auto local_max_stream_width =
+        std::min(960.0, remote_max_stream_width);
+    const auto local_max_stream_height =
+        std::min(720.0, remote_max_stream_height);
 
     ShareScreenButton().Content(
         box_value(local_active ? hstring{L"Stop sharing"}
@@ -1610,8 +1623,8 @@ void ServerView::UpdateScreenShareUi() {
             fit_viewport(
                 snapshot.remote_width,
                 snapshot.remote_height,
-                max_stream_width,
-                max_stream_height);
+                remote_max_stream_width,
+                remote_max_stream_height);
         const bool have_remote_geometry =
             remote_size.width > 0.0 &&
             remote_size.height > 0.0;
@@ -1742,8 +1755,8 @@ void ServerView::UpdateScreenShareUi() {
                 fit_viewport(
                     local_source_width,
                     local_source_height,
-                    max_stream_width,
-                    max_stream_height);
+                    local_max_stream_width,
+                    local_max_stream_height);
             if (local_size.width > 0.0 &&
                 local_size.height > 0.0) {
                 LocalShareViewport().Width(local_size.width);
