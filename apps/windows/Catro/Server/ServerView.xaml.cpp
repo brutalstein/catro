@@ -1236,28 +1236,31 @@ void ServerView::OpenStreamWindow(bool fullscreen) {
         stream_window_.Activate();
 
         if (!fullscreen) {
-            const auto snapshot = screen_runtime_->snapshot();
-            const auto source_width =
-                snapshot.remote_width != 0
-                    ? snapshot.remote_width
-                    : 1280U;
-            const auto source_height =
-                snapshot.remote_height != 0
-                    ? snapshot.remote_height
-                    : 720U;
-            const auto initial =
-                fit_viewport(
-                    source_width,
-                    source_height,
-                    1280.0,
-                    760.0);
-            stream_window_.AppWindow().Resize(
-                {
-                    static_cast<std::int32_t>(
-                        std::max(640.0, initial.width)),
-                    static_cast<std::int32_t>(
-                        std::max(420.0, initial.height + 40.0)),
-                });
+            const auto snapshot =
+                screen_runtime_->snapshot();
+            if (snapshot.remote_width != 0 &&
+                snapshot.remote_height != 0) {
+                const auto initial =
+                    fit_viewport(
+                        snapshot.remote_width,
+                        snapshot.remote_height,
+                        1280.0,
+                        760.0);
+                stream_window_.AppWindow().Resize(
+                    {
+                        static_cast<std::int32_t>(
+                            std::max(
+                                640.0,
+                                initial.width)),
+                        static_cast<std::int32_t>(
+                            std::max(
+                                420.0,
+                                initial.height + 40.0)),
+                    });
+            } else {
+                stream_window_.AppWindow().Resize(
+                    {960, 640});
+            }
         }
 
         SetStreamWindowFullscreen(fullscreen);
@@ -1309,14 +1312,19 @@ void ServerView::UpdateStreamWindowLayout() {
         return;
     }
 
+    if (snapshot.remote_width == 0 ||
+        snapshot.remote_height == 0) {
+        stream_window_viewport_.Visibility(
+            xaml::Visibility::Collapsed);
+        return;
+    }
+    stream_window_viewport_.Visibility(
+        xaml::Visibility::Visible);
+
     const auto source_width =
-        snapshot.remote_width != 0
-            ? snapshot.remote_width
-            : 1280U;
+        snapshot.remote_width;
     const auto source_height =
-        snapshot.remote_height != 0
-            ? snapshot.remote_height
-            : 720U;
+        snapshot.remote_height;
     const auto available_width =
         std::max(2.0, stream_window_root_.ActualWidth());
     const auto available_height =
@@ -1484,18 +1492,22 @@ void ServerView::UpdateScreenShareUi() {
 
         const auto remote_size =
             fit_viewport(
-                snapshot.remote_width != 0
-                    ? snapshot.remote_width
-                    : 1280U,
-                snapshot.remote_height != 0
-                    ? snapshot.remote_height
-                    : 720U,
+                snapshot.remote_width,
+                snapshot.remote_height,
                 max_stream_width,
                 max_stream_height);
-        if (remote_size.width > 0.0 &&
-            remote_size.height > 0.0) {
-            RemoteShareViewport().Width(remote_size.width);
-            RemoteShareViewport().Height(remote_size.height);
+        const bool have_remote_geometry =
+            remote_size.width > 0.0 &&
+            remote_size.height > 0.0;
+        RemoteShareViewport().Visibility(
+            have_remote_geometry
+                ? xaml::Visibility::Visible
+                : xaml::Visibility::Collapsed);
+        if (have_remote_geometry) {
+            RemoteShareViewport().Width(
+                remote_size.width);
+            RemoteShareViewport().Height(
+                remote_size.height);
         }
 
         if (!stream_window_) {
