@@ -64,6 +64,7 @@ add_subdirectory(tools/capture-check)
 add_subdirectory(tools/encode-check)
 add_subdirectory(tools/voice-peer)
 add_subdirectory(tools/video-peer)
+add_subdirectory(apps/room-runtime/windows)
 add_subdirectory(apps/voice-runtime/windows)
 add_subdirectory(apps/screen-runtime/windows)
 
