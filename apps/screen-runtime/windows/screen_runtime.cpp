@@ -219,6 +219,108 @@ void trace_event(std::string_view event) noexcept {
     return text;
 }
 
+class VideoReceiveSource final {
+public:
+    VideoReceiveSource(
+        UdpPeerSocket* socket,
+        CatroRoomRuntimeHandle room_runtime) noexcept
+        : socket_(socket),
+          room_runtime_(room_runtime) {}
+
+    [[nodiscard]] bool valid() const noexcept {
+        return socket_ != nullptr ||
+               room_runtime_ != nullptr;
+    }
+
+    [[nodiscard]] bool room_mode() const noexcept {
+        return room_runtime_ != nullptr;
+    }
+
+    [[nodiscard]] UdpPeerSocket::WaitResult wait_readable(
+        std::chrono::microseconds timeout) noexcept {
+        if (socket_ != nullptr) {
+            return socket_->wait_readable(timeout);
+        }
+        if (room_runtime_ == nullptr) {
+            return UdpError{UdpErrorCode::wait_failed};
+        }
+        if (pending_size_ != 0) {
+            return true;
+        }
+
+        const auto rounded_ms =
+            timeout <= std::chrono::microseconds::zero()
+                ? 0ULL
+                : static_cast<unsigned long long>(
+                      (timeout.count() + 999) / 1000);
+        const auto timeout_ms =
+            static_cast<std::uint32_t>(
+                std::min<unsigned long long>(
+                    rounded_ms,
+                    static_cast<unsigned long long>(
+                        UINT32_MAX)));
+
+        const auto received =
+            catro_room_runtime_receive_video(
+                room_runtime_,
+                pending_.data(),
+                pending_.size(),
+                timeout_ms);
+        if (received < 0) {
+            return UdpError{
+                UdpErrorCode::receive_failed};
+        }
+        pending_size_ =
+            static_cast<std::size_t>(received);
+        return pending_size_ != 0;
+    }
+
+    [[nodiscard]] UdpPeerSocket::SizeResult receive(
+        std::span<std::byte> destination) noexcept {
+        if (socket_ != nullptr) {
+            return socket_->receive(destination);
+        }
+        if (room_runtime_ == nullptr) {
+            return UdpError{
+                UdpErrorCode::receive_failed};
+        }
+
+        if (pending_size_ != 0) {
+            if (pending_size_ > destination.size()) {
+                pending_size_ = 0;
+                return UdpError{
+                    UdpErrorCode::datagram_too_large};
+            }
+            std::memcpy(
+                destination.data(),
+                pending_.data(),
+                pending_size_);
+            const auto copied = pending_size_;
+            pending_size_ = 0;
+            return copied;
+        }
+
+        const auto received =
+            catro_room_runtime_receive_video(
+                room_runtime_,
+                destination.data(),
+                destination.size(),
+                0);
+        if (received < 0) {
+            return UdpError{
+                UdpErrorCode::receive_failed};
+        }
+        return static_cast<std::size_t>(received);
+    }
+
+private:
+    UdpPeerSocket* socket_ = nullptr;
+    CatroRoomRuntimeHandle room_runtime_ = nullptr;
+    std::array<std::byte, kReceiveDatagramBytes>
+        pending_{};
+    std::size_t pending_size_ = 0;
+};
+
 } // namespace
 
 struct WindowsScreenShareRuntime::Impl {
@@ -1076,8 +1178,10 @@ struct WindowsScreenShareRuntime::Impl {
     }
 
     void run_receiver(ScreenTransportConfig config) {
-        auto* const socket = socket_.get();
-        if (socket == nullptr) {
+        VideoReceiveSource source{
+            socket_.get(),
+            config.room_runtime};
+        if (!source.valid()) {
             fail_session(
                 ScreenShareErrorCode::network_failed,
                 "video transport is not running");
@@ -1185,7 +1289,7 @@ struct WindowsScreenShareRuntime::Impl {
             (void)synchronize_viewing_state();
 
             const auto ready =
-                socket->wait_readable(
+                source.wait_readable(
                     std::chrono::duration_cast<
                         std::chrono::microseconds>(
                         kReceiveWait));
@@ -1197,9 +1301,20 @@ struct WindowsScreenShareRuntime::Impl {
                         1, std::memory_order_relaxed);
                     continue;
                 }
-                fail_session(
-                    ScreenShareErrorCode::network_failed,
-                    udp_error_text(*failure));
+                if (source.room_mode()) {
+                    const auto room =
+                        catro_room_runtime_snapshot(
+                            config.room_runtime);
+                    fail_session(
+                        ScreenShareErrorCode::network_failed,
+                        room.error[0] != '\0'
+                            ? room.error
+                            : "RTC room video receive failed");
+                } else {
+                    fail_session(
+                        ScreenShareErrorCode::network_failed,
+                        udp_error_text(*failure));
+                }
                 break;
             }
 
@@ -1212,7 +1327,7 @@ struct WindowsScreenShareRuntime::Impl {
                  drained < kReceiveDrainLimit;
                  ++drained) {
                 const auto received =
-                    socket->receive(datagram);
+                    source.receive(datagram);
                 if (const auto* failure =
                         std::get_if<UdpError>(&received)) {
                     if (failure->code ==
@@ -1227,9 +1342,20 @@ struct WindowsScreenShareRuntime::Impl {
                             1, std::memory_order_relaxed);
                         continue;
                     }
-                    fail_session(
-                        ScreenShareErrorCode::network_failed,
-                        udp_error_text(*failure));
+                    if (source.room_mode()) {
+                        const auto room =
+                            catro_room_runtime_snapshot(
+                                config.room_runtime);
+                        fail_session(
+                            ScreenShareErrorCode::network_failed,
+                            room.error[0] != '\0'
+                                ? room.error
+                                : "RTC room video receive failed");
+                    } else {
+                        fail_session(
+                            ScreenShareErrorCode::network_failed,
+                            udp_error_text(*failure));
+                    }
                     fatal = true;
                     break;
                 }
