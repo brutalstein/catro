@@ -54,7 +54,14 @@ func TestTamperedAndExpiredTokensAreRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tampered := token[:len(token)-1] + "0"
+	replacement := byte('0')
+	if token[len(token)-1] == replacement {
+		replacement = '1'
+	}
+	tampered := token[:len(token)-1] + string(replacement)
+	if tampered == token {
+		t.Fatal("tamper fixture did not mutate token")
+	}
 	if err := verifyToken(secret, tampered, value); err == nil {
 		t.Fatal("tampered token must be rejected")
 	}
