@@ -142,10 +142,8 @@ type serverLookupDescriptor struct {
 
 type joinRequestDescriptor struct {
 	ID                   string `json:"id"`
-	ServerID             string `json:"server_id,omitempty"`
 	ServerName           string `json:"server_name"`
 	PublicCode           string `json:"public_code"`
-	RequesterID          string `json:"requester_id,omitempty"`
 	RequesterDisplayName string `json:"requester_display_name,omitempty"`
 	Message              string `json:"message,omitempty"`
 	Status               string `json:"status"`
@@ -569,10 +567,8 @@ func (d *directory) joinRequestDescriptorLocked(request directoryJoinRequest) jo
 	user := d.state.Users[request.RequesterID]
 	return joinRequestDescriptor{
 		ID:                   request.ID,
-		ServerID:             request.ServerID,
 		ServerName:           server.Name,
 		PublicCode:           server.PublicCode,
-		RequesterID:          request.RequesterID,
 		RequesterDisplayName: user.DisplayName,
 		Message:              request.Message,
 		Status:               request.Status,

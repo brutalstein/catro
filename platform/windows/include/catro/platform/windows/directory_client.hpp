@@ -37,6 +37,7 @@ struct DirectoryServer {
     std::string id;
     std::string owner_id;
     std::string name;
+    std::string public_code;
     std::string text_channel_id;
     std::string voice_channel_id;
     std::string role;
@@ -53,6 +54,26 @@ struct DirectoryMember {
     std::string user_id;
     std::string display_name;
     std::string role;
+};
+
+struct DirectoryServerLookup {
+    std::string public_code;
+    std::string name;
+    std::size_t member_count = 0;
+    std::string relationship;
+    std::string request_id;
+};
+
+struct DirectoryJoinRequest {
+    std::string id;
+    std::string server_name;
+    std::string public_code;
+    std::string requester_display_name;
+    std::string message;
+    std::string status;
+    std::int64_t created_at = 0;
+    std::int64_t updated_at = 0;
+    std::int64_t expires_at = 0;
 };
 
 struct DirectoryMessage {
@@ -96,6 +117,12 @@ using DirectoryInviteResult =
     std::variant<DirectoryInvite, DirectoryError>;
 using DirectoryMembersResult =
     std::variant<std::vector<DirectoryMember>, DirectoryError>;
+using DirectoryServerLookupResult =
+    std::variant<DirectoryServerLookup, DirectoryError>;
+using DirectoryJoinRequestResult =
+    std::variant<DirectoryJoinRequest, DirectoryError>;
+using DirectoryJoinRequestsResult =
+    std::variant<std::vector<DirectoryJoinRequest>, DirectoryError>;
 using DirectoryMessageResult =
     std::variant<DirectoryMessage, DirectoryError>;
 using DirectoryMessagesResult =
@@ -140,6 +167,37 @@ load_or_create_directory_credential() noexcept;
     const DirectoryServiceConfig& service,
     std::string_view access_token,
     std::string_view server_id) noexcept;
+
+[[nodiscard]] DirectoryServerLookupResult lookup_directory_server(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_code) noexcept;
+
+[[nodiscard]] DirectoryJoinRequestResult create_directory_join_request(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_code,
+    std::string_view message) noexcept;
+
+[[nodiscard]] DirectoryJoinRequestsResult list_outgoing_directory_join_requests(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token) noexcept;
+
+[[nodiscard]] DirectoryJoinRequestsResult list_pending_directory_join_requests(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_id) noexcept;
+
+[[nodiscard]] DirectoryJoinRequestResult decide_directory_join_request(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view request_id,
+    bool approve) noexcept;
+
+[[nodiscard]] DirectoryJoinRequestResult cancel_directory_join_request(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view request_id) noexcept;
 
 [[nodiscard]] DirectoryMessagesResult list_directory_messages(
     const DirectoryServiceConfig& service,
