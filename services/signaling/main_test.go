@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestTokenRoundTripAndClaimBinding(t *testing.T) {
@@ -133,6 +135,234 @@ func authenticatedRequest(
 		method, path, bytes.NewReader(encoded))
 	request.Header.Set("Authorization", "Bearer "+token)
 	return request
+}
+
+type testRoomMessage struct {
+	Type        string   `json:"type"`
+	PeerID      string   `json:"peer_id,omitempty"`
+	ScreenOwner string   `json:"screen_owner,omitempty"`
+	Message     string   `json:"message,omitempty"`
+	Peers       []string `json:"peers,omitempty"`
+}
+
+func newTestRoomService(
+	t *testing.T,
+) (*service, *httptest.Server, string) {
+	t.Helper()
+	secret := strings.Repeat("w", 32)
+	s := &service{
+		secret:       []byte(secret),
+		maxRoomPeers: 5,
+		rooms:        make(map[string]*room),
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/rtc", s.websocket)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	return s, server, secret
+}
+
+func joinTestRoomPeer(
+	t *testing.T,
+	server *httptest.Server,
+	secret string,
+	peerID string,
+) (*websocket.Conn, testRoomMessage) {
+	t.Helper()
+	token, err := mintToken(
+		[]byte(secret),
+		claims{
+			ServerID:  "server-1",
+			ChannelID: "voice-1",
+			PeerID:    peerID,
+			Expires:   time.Now().Add(time.Minute).Unix(),
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	socketURL := "ws" +
+		strings.TrimPrefix(server.URL, "http") +
+		"/v1/rtc"
+	conn, _, err := websocket.DefaultDialer.Dial(
+		socketURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = conn.Close()
+	})
+	if err := conn.WriteJSON(map[string]any{
+		"type":       "join",
+		"protocol":   1,
+		"token":      token,
+		"server_id":  "server-1",
+		"channel_id": "voice-1",
+		"peer_id":    peerID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var joined testRoomMessage
+	if err := conn.ReadJSON(&joined); err != nil {
+		t.Fatal(err)
+	}
+	if joined.Type != "joined" {
+		t.Fatalf("first message = %q, want joined",
+			joined.Type)
+	}
+	return conn, joined
+}
+
+func readTestRoomMessage(
+	t *testing.T,
+	conn *websocket.Conn,
+	wantType string,
+) testRoomMessage {
+	t.Helper()
+	if err := conn.SetReadDeadline(
+		time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		var incoming testRoomMessage
+		if err := conn.ReadJSON(&incoming); err != nil {
+			t.Fatalf("read %s: %v", wantType, err)
+		}
+		if incoming.Type == wantType {
+			return incoming
+		}
+	}
+}
+
+func claimTestScreen(
+	t *testing.T,
+	conn *websocket.Conn,
+) {
+	t.Helper()
+	if err := conn.WriteJSON(
+		map[string]any{"type": "screen_claim"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestScreenClaimIsExclusiveAndIdempotent(t *testing.T) {
+	_, server, secret := newTestRoomService(t)
+	owner, _ := joinTestRoomPeer(
+		t, server, secret, "owner-1")
+	guest, _ := joinTestRoomPeer(
+		t, server, secret, "guest-1")
+
+	claimTestScreen(t, owner)
+	for _, conn := range []*websocket.Conn{owner, guest} {
+		state := readTestRoomMessage(
+			t, conn, "screen_state")
+		if state.ScreenOwner != "owner-1" {
+			t.Fatalf(
+				"screen owner = %q, want owner-1",
+				state.ScreenOwner)
+		}
+	}
+
+	claimTestScreen(t, owner)
+	state := readTestRoomMessage(
+		t, owner, "screen_state")
+	if state.ScreenOwner != "owner-1" {
+		t.Fatalf(
+			"idempotent owner = %q, want owner-1",
+			state.ScreenOwner)
+	}
+
+	claimTestScreen(t, guest)
+	busy := readTestRoomMessage(
+		t, guest, "screen_busy")
+	if busy.ScreenOwner != "owner-1" {
+		t.Fatalf(
+			"busy owner = %q, want owner-1",
+			busy.ScreenOwner)
+	}
+}
+
+func TestScreenOwnerReleaseAndDisconnectBroadcastState(
+	t *testing.T,
+) {
+	_, server, secret := newTestRoomService(t)
+	owner, _ := joinTestRoomPeer(
+		t, server, secret, "owner-1")
+	guest, _ := joinTestRoomPeer(
+		t, server, secret, "guest-1")
+
+	claimTestScreen(t, owner)
+	_ = readTestRoomMessage(t, owner, "screen_state")
+	_ = readTestRoomMessage(t, guest, "screen_state")
+
+	if err := owner.WriteJSON(
+		map[string]any{"type": "screen_release"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, conn := range []*websocket.Conn{owner, guest} {
+		state := readTestRoomMessage(
+			t, conn, "screen_state")
+		if state.ScreenOwner != "" {
+			t.Fatalf(
+				"released owner = %q, want empty",
+				state.ScreenOwner)
+		}
+	}
+
+	claimTestScreen(t, owner)
+	_ = readTestRoomMessage(t, owner, "screen_state")
+	_ = readTestRoomMessage(t, guest, "screen_state")
+	if err := owner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	state := readTestRoomMessage(
+		t, guest, "screen_state")
+	if state.ScreenOwner != "" {
+		t.Fatalf(
+			"disconnected owner = %q, want empty",
+			state.ScreenOwner)
+	}
+}
+
+func TestLateJoinReceivesCurrentScreenOwner(t *testing.T) {
+	_, server, secret := newTestRoomService(t)
+	owner, _ := joinTestRoomPeer(
+		t, server, secret, "owner-1")
+	claimTestScreen(t, owner)
+	_ = readTestRoomMessage(t, owner, "screen_state")
+
+	_, joined := joinTestRoomPeer(
+		t, server, secret, "late-1")
+	if joined.ScreenOwner != "owner-1" {
+		t.Fatalf(
+			"late join owner = %q, want owner-1",
+			joined.ScreenOwner)
+	}
+}
+
+func TestNonOwnerCannotReleaseScreen(t *testing.T) {
+	_, server, secret := newTestRoomService(t)
+	owner, _ := joinTestRoomPeer(
+		t, server, secret, "owner-1")
+	guest, _ := joinTestRoomPeer(
+		t, server, secret, "guest-1")
+
+	claimTestScreen(t, owner)
+	_ = readTestRoomMessage(t, owner, "screen_state")
+	_ = readTestRoomMessage(t, guest, "screen_state")
+
+	if err := guest.WriteJSON(
+		map[string]any{"type": "screen_release"}); err != nil {
+		t.Fatal(err)
+	}
+	claimTestScreen(t, guest)
+	busy := readTestRoomMessage(
+		t, guest, "screen_busy")
+	if busy.ScreenOwner != "owner-1" {
+		t.Fatalf(
+			"owner after non-owner release = %q, want owner-1",
+			busy.ScreenOwner)
+	}
 }
 
 func TestRoomCapacityRejectsSixthPeer(t *testing.T) {

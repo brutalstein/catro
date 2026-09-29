@@ -45,20 +45,21 @@ type claims struct {
 }
 
 type message struct {
-	Type      string   `json:"type"`
-	Token     string   `json:"token,omitempty"`
-	ServerID  string   `json:"server_id,omitempty"`
-	ChannelID string   `json:"channel_id,omitempty"`
-	PeerID    string   `json:"peer_id,omitempty"`
-	Protocol  int      `json:"protocol,omitempty"`
-	Peers     []string `json:"peers,omitempty"`
-	To        string   `json:"to,omitempty"`
-	From      string   `json:"from,omitempty"`
-	Kind      string   `json:"kind,omitempty"`
-	SDP       string   `json:"sdp,omitempty"`
-	Candidate string   `json:"candidate,omitempty"`
-	MID       string   `json:"mid,omitempty"`
-	Message   string   `json:"message,omitempty"`
+	Type        string   `json:"type"`
+	Token       string   `json:"token,omitempty"`
+	ServerID    string   `json:"server_id,omitempty"`
+	ChannelID   string   `json:"channel_id,omitempty"`
+	PeerID      string   `json:"peer_id,omitempty"`
+	Protocol    int      `json:"protocol,omitempty"`
+	Peers       []string `json:"peers,omitempty"`
+	To          string   `json:"to,omitempty"`
+	From        string   `json:"from,omitempty"`
+	Kind        string   `json:"kind,omitempty"`
+	SDP         string   `json:"sdp,omitempty"`
+	Candidate   string   `json:"candidate,omitempty"`
+	MID         string   `json:"mid,omitempty"`
+	ScreenOwner string   `json:"screen_owner,omitempty"`
+	Message     string   `json:"message,omitempty"`
 }
 
 type client struct {
@@ -73,10 +74,11 @@ type client struct {
 }
 
 type room struct {
-	key      string
-	mu       sync.RWMutex
-	peers    map[string]*client
-	maxPeers int
+	key         string
+	mu          sync.RWMutex
+	peers       map[string]*client
+	maxPeers    int
+	screenOwner string
 }
 
 type service struct {
@@ -330,12 +332,18 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() {
-		rm.remove(c.id)
+		_, releasedScreen := rm.remove(c.id)
 		rm.broadcastExcept(c.id, message{Type: "peer_left", PeerID: c.id})
+		if releasedScreen {
+			rm.broadcast(message{Type: "screen_state"})
+		}
 		s.dropEmptyRoom(rm)
 	}()
 
-	if err := c.write(message{Type: "joined", Peers: existing, Protocol: 1}); err != nil {
+	if err := c.write(message{
+		Type: "joined", Peers: existing, Protocol: 1,
+		ScreenOwner: rm.currentScreenOwner(),
+	}); err != nil {
 		return
 	}
 	rm.broadcastExcept(c.id, message{Type: "peer_joined", PeerID: c.id})
@@ -376,7 +384,33 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 			_ = c.write(message{Type: "error", Message: "signal rate exceeded"})
 			return
 		}
-		if incoming.Type != "signal" || !validID(incoming.To) ||
+		switch incoming.Type {
+		case "screen_claim":
+			owner, acquired := rm.claimScreen(c.id)
+			if acquired {
+				rm.broadcast(message{
+					Type:        "screen_state",
+					ScreenOwner: owner,
+				})
+			} else {
+				_ = c.write(message{
+					Type:        "screen_busy",
+					ScreenOwner: owner,
+				})
+			}
+			continue
+		case "screen_release":
+			if rm.releaseScreen(c.id) {
+				rm.broadcast(message{Type: "screen_state"})
+			}
+			continue
+		case "signal":
+		default:
+			s.rejectedMessages.Add(1)
+			continue
+		}
+
+		if !validID(incoming.To) ||
 			(incoming.Kind != "offer" && incoming.Kind != "answer" &&
 				incoming.Kind != "candidate") || incoming.To == c.id {
 			s.rejectedMessages.Add(1)
@@ -453,10 +487,44 @@ func (r *room) add(c *client) ([]string, error) {
 	return existing, nil
 }
 
-func (r *room) remove(peerID string) {
+func (r *room) remove(peerID string) (bool, bool) {
 	r.mu.Lock()
+	_, removed := r.peers[peerID]
 	delete(r.peers, peerID)
+	releasedScreen := r.screenOwner == peerID
+	if releasedScreen {
+		r.screenOwner = ""
+	}
 	r.mu.Unlock()
+	return removed, releasedScreen
+}
+
+func (r *room) currentScreenOwner() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.screenOwner
+}
+
+func (r *room) claimScreen(peerID string) (string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.peers[peerID] == nil {
+		return r.screenOwner, false
+	}
+	if r.screenOwner == "" {
+		r.screenOwner = peerID
+	}
+	return r.screenOwner, r.screenOwner == peerID
+}
+
+func (r *room) releaseScreen(peerID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.screenOwner != peerID {
+		return false
+	}
+	r.screenOwner = ""
+	return true
 }
 
 func (r *room) forward(from, to string, m message) bool {
@@ -479,6 +547,10 @@ func (r *room) broadcastExcept(except string, m message) {
 	for _, peer := range peers {
 		_ = peer.write(m)
 	}
+}
+
+func (r *room) broadcast(m message) {
+	r.broadcastExcept("", m)
 }
 
 func (c *client) write(m message) error {
