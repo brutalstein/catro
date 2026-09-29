@@ -1420,7 +1420,9 @@ void ServerView::SetDirectorySession(
     if (server_changed) {
         voice_join_pending_ = false;
         invite_pending_ = false;
-        access_decision_pending_ = false;
+        // Keep an in-flight access decision marked pending across server switches. Its generation
+        // check will discard stale presentation state after completion, while this flag prevents a
+        // second owner decision from overlapping the first request.
         access_dialog_open_ = false;
     }
     if (server_changed &&

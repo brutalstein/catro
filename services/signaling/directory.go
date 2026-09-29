@@ -288,12 +288,18 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 	}
 	if len(d.state.Users) > maxDirectoryUsers ||
 		len(d.state.Servers) > maxDirectoryServers ||
-		len(d.state.Invites) > maxDirectoryInvites ||
-		len(d.state.JoinRequests) > maxDirectoryJoinRequests {
+		len(d.state.Invites) > maxDirectoryInvites {
 		return nil, errors.New("directory state exceeds object-count bounds")
 	}
 
-	migrationDirty := false
+	// Resolved/expired requests are retained only temporarily. Prune them before applying the
+	// retained-object bound so a clean restart can recover from a file containing many records that
+	// all became eligible for deletion while the service was offline.
+	now := time.Now().Unix()
+	migrationDirty := d.pruneJoinRequestsLocked(now)
+	if len(d.state.JoinRequests) > maxDirectoryJoinRequests {
+		return nil, errors.New("directory join request count exceeds retention bound")
+	}
 	usedCodes := make(map[string]string, len(d.state.Servers))
 	for id, server := range d.state.Servers {
 		if server.PublicCode == "" {
@@ -357,11 +363,6 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 		if ownerCount != 1 {
 			return nil, errors.New("directory server owner invariant is invalid")
 		}
-	}
-
-	now := time.Now().Unix()
-	if d.pruneJoinRequestsLocked(now) {
-		migrationDirty = true
 	}
 
 	pendingByServer := make(map[string]int)
