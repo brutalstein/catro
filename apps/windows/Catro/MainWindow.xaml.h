@@ -58,6 +58,7 @@ private:
 
     Microsoft::UI::Dispatching::DispatcherQueueTimer join_request_timer_{nullptr};
     std::unordered_set<std::string> observed_join_request_ids_;
+    std::unordered_set<std::string> approved_join_requests_waiting_refresh_;
     bool join_request_refresh_pending_ = false;
     bool directory_server_refresh_pending_ = false;
 };

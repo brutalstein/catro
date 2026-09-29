@@ -119,12 +119,14 @@ TEST_CASE("Server Code join flow stays bounded and preserves direct invites") {
     CHECK(source.find("Use Invite Code") != std::string::npos);
     CHECK(source.find("lookup_directory_server") != std::string::npos);
     CHECK(source.find("create_directory_join_request") != std::string::npos);
+    CHECK(source.find("cancel_directory_join_request") != std::string::npos);
     CHECK(source.find("accept_directory_invite") != std::string::npos);
     CHECK(source.find("join_request_timer_.Interval(std::chrono::seconds{5})") !=
           std::string::npos);
     CHECK(source.find("join_request_refresh_pending_") != std::string::npos);
     CHECK(source.find("list_outgoing_directory_join_requests") != std::string::npos);
     CHECK(source.find("BeginDirectoryServerRefresh") != std::string::npos);
+    CHECK(source.find("approved_join_requests_waiting_refresh_") != std::string::npos);
 }
 
 TEST_CASE("owner access requests stay virtualized authorized and bounded") {

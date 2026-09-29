@@ -543,7 +543,11 @@ MainWindow::BeginServerCodeLookup(
         std::wstring message;
         if (preview.relationship == "pending") {
             message =
-                L"Your access request is already pending owner approval.";
+                L"Your access request is pending owner approval.";
+            status.PrimaryButtonText(L"Cancel request");
+        } else if (preview.relationship == "owner") {
+            message =
+                L"You own this server.";
         } else {
             message =
                 L"You are already a member of this server.";
@@ -552,7 +556,52 @@ MainWindow::BeginServerCodeLookup(
         text.Text(hstring{message});
         text.TextWrapping(xaml::TextWrapping::Wrap);
         status.Content(text);
-        co_await status.ShowAsync();
+
+        const auto status_result =
+            co_await status.ShowAsync();
+        if (preview.relationship != "pending" ||
+            status_result !=
+                controls::ContentDialogResult::Primary) {
+            co_return;
+        }
+
+        lifetime->JoinServerButton().IsEnabled(false);
+        co_await winrt::resume_background();
+        auto cancelled =
+            catro::platform::windows::
+                cancel_directory_join_request(
+                    service,
+                    access_token,
+                    preview.request_id);
+        co_await ui_thread;
+        lifetime->JoinServerButton().IsEnabled(true);
+
+        if (const auto* failure =
+                std::get_if<
+                    catro::platform::windows::
+                        DirectoryError>(&cancelled)) {
+            controls::ToolTipService::SetToolTip(
+                lifetime->JoinServerButton(),
+                box_value(
+                    to_hstring(
+                        failure->message)));
+            co_return;
+        }
+
+        const auto request =
+            std::get<
+                catro::platform::windows::
+                    DirectoryJoinRequest>(
+                        std::move(cancelled));
+        lifetime->observed_join_request_ids_
+            .insert(request.id);
+        std::wstring notice =
+            L"Access request cancelled: ";
+        notice +=
+            to_hstring(request.server_name).c_str();
+        controls::ToolTipService::SetToolTip(
+            lifetime->JoinServerButton(),
+            box_value(hstring{notice}));
         co_return;
     }
 
@@ -739,30 +788,38 @@ MainWindow::BeginOutgoingJoinRequestRefresh() {
 
     bool refresh_servers = false;
     for (const auto& request : *requests) {
-        if (request.status == "pending") {
+        if (request.status == "pending" ||
+            lifetime->observed_join_request_ids_
+                .contains(request.id)) {
             continue;
         }
+
+        if (request.status == "approved") {
+            // Approval is not consumed until the authoritative server list has refreshed
+            // successfully. A transient list failure therefore retries on the next bounded poll.
+            lifetime->
+                approved_join_requests_waiting_refresh_
+                .insert(request.id);
+            refresh_servers = true;
+            continue;
+        }
+
         if (!lifetime->
                 observed_join_request_ids_
                 .insert(request.id)
                 .second) {
             continue;
         }
-
-        if (request.status == "approved") {
-            refresh_servers = true;
-        } else {
-            std::wstring notice =
-                L"Access request ";
-            notice += request.status == "rejected"
-                ? L"rejected: "
-                : L"cancelled: ";
-            notice +=
-                to_hstring(request.server_name).c_str();
-            controls::ToolTipService::SetToolTip(
-                lifetime->JoinServerButton(),
-                box_value(hstring{notice}));
-        }
+        std::wstring notice =
+            L"Access request ";
+        notice += request.status == "rejected"
+            ? L"rejected: "
+            : L"cancelled: ";
+        notice +=
+            to_hstring(request.server_name).c_str();
+        controls::ToolTipService::SetToolTip(
+            lifetime->JoinServerButton(),
+            box_value(hstring{notice}));
     }
 
     if (refresh_servers) {
@@ -808,6 +865,16 @@ MainWindow::BeginDirectoryServerRefresh() {
     }
 
     lifetime->directory_servers_ = *servers;
+    for (const auto& request_id :
+         lifetime->
+             approved_join_requests_waiting_refresh_) {
+        lifetime->observed_join_request_ids_
+            .insert(request_id);
+    }
+    lifetime->
+        approved_join_requests_waiting_refresh_
+        .clear();
+
     auto active =
         std::ranges::find(
             lifetime->directory_servers_,
