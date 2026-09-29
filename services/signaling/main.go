@@ -277,6 +277,7 @@ func main() {
 		"/v1/servers/sync",
 		s.limitDirectoryMutation(directory.handleServerSync))
 	mux.HandleFunc("/v1/servers", directory.handleServers)
+	mux.HandleFunc("/v1/members", directory.handleMembers)
 	mux.HandleFunc(
 		"/v1/invites",
 		s.limitDirectoryMutation(directory.handleInvites))

@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -107,6 +108,12 @@ type serverDescriptor struct {
 	VoiceChannelID string `json:"voice_channel_id"`
 	Role           string `json:"role"`
 	MemberCount    int    `json:"member_count"`
+}
+
+type memberDescriptor struct {
+	UserID      string `json:"user_id"`
+	DisplayName string `json:"display_name"`
+	Role        string `json:"role"`
 }
 
 type messageDescriptor struct {
@@ -243,8 +250,38 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 			server.Members = make(map[string]directoryMember)
 			d.state.Servers[id] = server
 		}
-		if len(server.Members) > maxDirectoryMembers {
-			return nil, errors.New("directory server exceeds member bound")
+		if len(server.Members) == 0 ||
+			len(server.Members) > maxDirectoryMembers {
+			return nil, errors.New("directory server exceeds member bounds")
+		}
+
+		owner, ownerExists := server.Members[server.OwnerID]
+		if !ownerExists ||
+			owner.UserID != server.OwnerID ||
+			owner.Role != "owner" {
+			return nil, errors.New("directory server owner membership is invalid")
+		}
+
+		ownerCount := 0
+		for memberID, member := range server.Members {
+			if memberID != member.UserID ||
+				!validID(member.UserID) ||
+				(member.Role != "owner" &&
+					member.Role != "member") {
+				return nil, errors.New("directory contains invalid server membership")
+			}
+			if _, exists := d.state.Users[member.UserID]; !exists {
+				return nil, errors.New("directory membership references unknown user")
+			}
+			if member.Role == "owner" {
+				ownerCount++
+				if member.UserID != server.OwnerID {
+					return nil, errors.New("directory contains multiple server owners")
+				}
+			}
+		}
+		if ownerCount != 1 {
+			return nil, errors.New("directory server owner invariant is invalid")
 		}
 	}
 
@@ -625,6 +662,76 @@ func (d *directory) handleServers(w http.ResponseWriter, r *http.Request) {
 	}
 	d.mu.Unlock()
 	writeAPIJSON(w, http.StatusOK, map[string]any{"servers": servers})
+}
+
+func (d *directory) handleMembers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeAPIError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	user, ok := d.authenticate(r)
+	if !ok {
+		writeAPIError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	serverID := r.URL.Query().Get("server_id")
+	if !validID(serverID) {
+		writeAPIError(w, http.StatusBadRequest, "invalid server")
+		return
+	}
+
+	d.mu.Lock()
+	server, exists := d.state.Servers[serverID]
+	if !exists {
+		d.mu.Unlock()
+		writeAPIError(w, http.StatusForbidden, "server membership required")
+		return
+	}
+	if _, member := server.Members[user.ID]; !member {
+		d.mu.Unlock()
+		writeAPIError(w, http.StatusForbidden, "server membership required")
+		return
+	}
+
+	members := make([]memberDescriptor, 0, len(server.Members))
+	for _, member := range server.Members {
+		entry, exists := d.state.Users[member.UserID]
+		if !exists ||
+			!validBoundedText(entry.DisplayName, maxDisplayNameBytes) ||
+			(member.Role != "owner" && member.Role != "member") {
+			d.mu.Unlock()
+			writeAPIError(w, http.StatusInternalServerError, "directory membership state is invalid")
+			return
+		}
+		members = append(members, memberDescriptor{
+			UserID:      member.UserID,
+			DisplayName: entry.DisplayName,
+			Role:        member.Role,
+		})
+	}
+	d.mu.Unlock()
+
+	sort.Slice(members, func(left, right int) bool {
+		a := members[left]
+		b := members[right]
+		if a.Role != b.Role {
+			return a.Role == "owner"
+		}
+		aFolded := strings.ToLower(a.DisplayName)
+		bFolded := strings.ToLower(b.DisplayName)
+		if aFolded != bFolded {
+			return aFolded < bFolded
+		}
+		if a.DisplayName != b.DisplayName {
+			return a.DisplayName < b.DisplayName
+		}
+		return a.UserID < b.UserID
+	})
+
+	writeAPIJSON(w, http.StatusOK, map[string]any{
+		"members": members,
+	})
 }
 
 func randomInviteCode() (string, error) {

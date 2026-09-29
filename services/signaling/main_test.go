@@ -89,10 +89,21 @@ func registerTestUser(
 	userID string,
 	credential string,
 ) string {
+	return registerTestUserNamed(
+		t, d, userID, userID, credential)
+}
+
+func registerTestUserNamed(
+	t *testing.T,
+	d *directory,
+	userID string,
+	displayName string,
+	credential string,
+) string {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{
 		"user_id":      userID,
-		"display_name": userID,
+		"display_name": displayName,
 		"credential":   credential,
 	})
 	if err != nil {
@@ -1046,4 +1057,198 @@ func TestServerSyncDoesNotOrphanTextHistoryByChangingChannelIdentity(t *testing.
 	if len(d.state.Messages[messageKey("server-1", "text-1")]) != 1 {
 		t.Fatal("rejected sync orphaned retained history")
 	}
+}
+
+
+func TestDirectoryMemberRosterIsAuthorizedAndDeterministic(t *testing.T) {
+	secret := []byte(strings.Repeat("r", 32))
+	d, err := openDirectory(
+		filepath.Join(t.TempDir(), "directory.json"),
+		secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ownerToken := registerTestUserNamed(
+		t, d, "owner-1", "Zeta Owner", testCredential(0xa1))
+	alphaToken := registerTestUserNamed(
+		t, d, "member-a", "alice", testCredential(0xa2))
+	bravoToken := registerTestUserNamed(
+		t, d, "member-b", "Bravo", testCredential(0xa3))
+	outsiderToken := registerTestUserNamed(
+		t, d, "outsider-1", "Outsider", testCredential(0xa4))
+
+	serverRequest := authenticatedRequest(
+		http.MethodPost,
+		"/v1/servers/sync",
+		ownerToken,
+		map[string]any{
+			"server_id":        "server-1",
+			"name":             "Roster Server",
+			"text_channel_id":  "text-1",
+			"voice_channel_id": "voice-1",
+		})
+	serverResponse := httptest.NewRecorder()
+	d.handleServerSync(serverResponse, serverRequest)
+	if serverResponse.Code != http.StatusCreated {
+		t.Fatalf("sync server: %d %s",
+			serverResponse.Code, serverResponse.Body.String())
+	}
+
+	d.mu.Lock()
+	server := d.state.Servers["server-1"]
+	server.Members["member-b"] = directoryMember{
+		UserID: "member-b", Role: "member"}
+	server.Members["member-a"] = directoryMember{
+		UserID: "member-a", Role: "member"}
+	d.state.Servers["server-1"] = server
+	d.mu.Unlock()
+
+	for name, token := range map[string]string{
+		"owner": ownerToken,
+		"member": alphaToken,
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := authenticatedRequest(
+				http.MethodGet,
+				"/v1/members?server_id=server-1",
+				token,
+				nil)
+			response := httptest.NewRecorder()
+			d.handleMembers(response, request)
+			if response.Code != http.StatusOK {
+				t.Fatalf("roster: %d %s",
+					response.Code, response.Body.String())
+			}
+			var page struct {
+				Members []memberDescriptor `json:"members"`
+			}
+			if err := json.Unmarshal(
+				response.Body.Bytes(), &page); err != nil {
+				t.Fatal(err)
+			}
+			if len(page.Members) != 3 {
+				t.Fatalf("member count = %d, want 3",
+					len(page.Members))
+			}
+			want := []string{"owner-1", "member-a", "member-b"}
+			for index, member := range page.Members {
+				if member.UserID != want[index] {
+					t.Fatalf("member[%d] = %q, want %q",
+						index, member.UserID, want[index])
+				}
+			}
+			if page.Members[0].Role != "owner" ||
+				page.Members[1].Role != "member" ||
+				page.Members[2].Role != "member" {
+				t.Fatalf("unexpected member roles: %#v", page.Members)
+			}
+			if strings.Contains(response.Body.String(), "token_hash") ||
+				strings.Contains(response.Body.String(), "credential") {
+				t.Fatal("roster response leaked credential material")
+			}
+		})
+	}
+
+	outsider := authenticatedRequest(
+		http.MethodGet,
+		"/v1/members?server_id=server-1",
+		outsiderToken,
+		nil)
+	outsiderResponse := httptest.NewRecorder()
+	d.handleMembers(outsiderResponse, outsider)
+	if outsiderResponse.Code != http.StatusForbidden {
+		t.Fatalf("outsider roster status = %d",
+			outsiderResponse.Code)
+	}
+
+	_ = bravoToken
+}
+
+func TestOpenDirectoryRejectsMalformedMembershipGraph(t *testing.T) {
+	secret := []byte(strings.Repeat("g", 32))
+
+	t.Run("unknown member", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "directory.json")
+		d, err := openDirectory(path, secret)
+		if err != nil {
+			t.Fatal(err)
+		}
+		token := registerTestUser(
+			t, d, "owner-1", testCredential(0xb1))
+		request := authenticatedRequest(
+			http.MethodPost,
+			"/v1/servers/sync",
+			token,
+			map[string]any{
+				"server_id":        "server-1",
+				"name":             "Broken Server",
+				"text_channel_id":  "text-1",
+				"voice_channel_id": "voice-1",
+			})
+		response := httptest.NewRecorder()
+		d.handleServerSync(response, request)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("sync: %d %s",
+				response.Code, response.Body.String())
+		}
+
+		d.mu.Lock()
+		server := d.state.Servers["server-1"]
+		server.Members["ghost"] = directoryMember{
+			UserID: "ghost", Role: "member"}
+		d.state.Servers["server-1"] = server
+		if err := d.persistLocked(); err != nil {
+			d.mu.Unlock()
+			t.Fatal(err)
+		}
+		d.mu.Unlock()
+
+		if _, err := openDirectory(path, secret); err == nil {
+			t.Fatal("unknown persisted member must be rejected")
+		}
+	})
+
+	t.Run("second owner", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "directory.json")
+		d, err := openDirectory(path, secret)
+		if err != nil {
+			t.Fatal(err)
+		}
+		token := registerTestUser(
+			t, d, "owner-1", testCredential(0xb2))
+		_ = registerTestUser(
+			t, d, "member-1", testCredential(0xb3))
+		request := authenticatedRequest(
+			http.MethodPost,
+			"/v1/servers/sync",
+			token,
+			map[string]any{
+				"server_id":        "server-1",
+				"name":             "Broken Owners",
+				"text_channel_id":  "text-1",
+				"voice_channel_id": "voice-1",
+			})
+		response := httptest.NewRecorder()
+		d.handleServerSync(response, request)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("sync: %d %s",
+				response.Code, response.Body.String())
+		}
+
+		d.mu.Lock()
+		server := d.state.Servers["server-1"]
+		server.Members["member-1"] = directoryMember{
+			UserID: "member-1", Role: "owner"}
+		d.state.Servers["server-1"] = server
+		if err := d.persistLocked(); err != nil {
+			d.mu.Unlock()
+			t.Fatal(err)
+		}
+		d.mu.Unlock()
+
+		if _, err := openDirectory(path, secret); err == nil {
+			t.Fatal("multiple persisted owners must be rejected")
+		}
+	})
 }
