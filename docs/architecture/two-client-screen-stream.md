@@ -1,6 +1,8 @@
-# Two-client H.264 transport validation
+# Two-client H.264 screen streaming
 
-The first two-client screen path is deliberately split into two gates.
+The Windows screen path was delivered in two implementation gates. Automated tests cover bounded
+media contracts and runtime lifecycle; the remaining acceptance gate is measurement on two real
+Windows machines.
 
 ## Gate A — compressed transport
 
@@ -28,13 +30,30 @@ math. It never upscales and respects width/height ceilings. The frame scheduler 
 nanoseconds; no floating-point arithmetic is required in packet timing.
 
 This tool remains an unencrypted engineering transport and enforces numeric loopback/private IPv4.
+It is not the product transport.
 
 ## Gate B — decode and presentation
 
-Gate A is not yet a user-visible screen stream. The next gate adds hardware H.264 decode to a D3D11
-surface and native presentation, then validates end-to-end glass-to-glass latency and resource use on
-two real Windows machines. The product Share Screen control remains disabled until Gate B passes.
+Gate B is implemented in the Windows screen runtime and WinUI shell:
 
+```text
+authenticated RTC room
+→ bounded screen media channel
+→ RTP/H.264 reassembly
+→ Media Foundation H.264 decode
+→ D3D11 swap-chain presentation
+→ embedded, pop-out, or full-screen viewer
+```
+
+The Share Screen control can publish a display or window after the user joins voice. Remote viewing
+is opt-in, local preview work is suspended when hidden, and selected-window process audio can share
+the same RTC room as a separate bounded Opus channel. Direct private-IPv4 mode remains available only
+for engineering diagnostics.
+
+The outstanding Gate B acceptance work is a two-real-machine run that records glass-to-glass
+latency, encode/decode behavior, CPU/GPU load, memory bounds, recovery after stream restart, and TURN
+fallback behavior. Until that evidence is recorded, implementation-complete must not be described as
+real-machine validated.
 
 ## Decoder latency control
 
