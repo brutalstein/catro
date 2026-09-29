@@ -136,6 +136,10 @@ func main() {
 	origin := flag.String("allowed-origin", "", "optional exact browser Origin")
 	allowHTTP := flag.Bool("allow-insecure-http", false, "engineering only: plaintext HTTP/WebSocket")
 	allowNoTURN := flag.Bool("allow-no-turn", false, "engineering only: permit RTC provisioning without TURN")
+	healthCheckURL := flag.String(
+		"health-check",
+		"",
+		"probe one HTTP(S) health endpoint and exit")
 	publicSignalingURL := flag.String(
 		"public-signaling-url",
 		os.Getenv("CATRO_PUBLIC_SIGNALING_URL"),
@@ -154,6 +158,13 @@ func main() {
 	peerID := flag.String("peer-id", "", "token peer/user id")
 	ttl := flag.Duration("ttl", 24*time.Hour, "minted token lifetime")
 	flag.Parse()
+
+	if *healthCheckURL != "" {
+		if err := runHealthCheck(*healthCheckURL); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 
 	if len(*secret) < 32 {
 		log.Fatal("CATRO signaling secret must be at least 32 bytes")
@@ -309,6 +320,30 @@ func main() {
 	if err := httpServer.Shutdown(ctx); err != nil {
 		log.Printf("shutdown: %v", err)
 	}
+}
+
+func runHealthCheck(endpoint string) error {
+	request, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil || request.URL.Host == "" ||
+		(request.URL.Scheme != "http" && request.URL.Scheme != "https") {
+		return errors.New("health-check endpoint must be an absolute HTTP(S) URL")
+	}
+
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("health-check request: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("health-check status: %s", response.Status)
+	}
+	return nil
 }
 
 func (s *service) health(w http.ResponseWriter, _ *http.Request) {

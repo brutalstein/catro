@@ -1,0 +1,128 @@
+name: catro-production
+
+services:
+  signaling:
+    image: catro-signaling:${CATRO_IMAGE_TAG:-prod}
+    build:
+      context: ../../services/signaling
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      CATRO_SIGNALING_SECRET: "${CATRO_SIGNALING_SECRET:?CATRO_SIGNALING_SECRET is required}"
+      CATRO_SIGNALING_STATE: /var/lib/catro/directory.json
+      CATRO_PUBLIC_SIGNALING_URL: "wss://${CATRO_HOSTNAME:?CATRO_HOSTNAME is required}/v1/rtc"
+      CATRO_ICE_SERVERS: "stun:${CATRO_HOSTNAME}:3478;turn:${CATRO_HOSTNAME}:3478?transport=udp;turn:${CATRO_HOSTNAME}:3478?transport=tcp"
+      CATRO_TURN_SECRET: "${CATRO_TURN_SECRET:?CATRO_TURN_SECRET is required}"
+      CATRO_API_WRITES_PER_MINUTE: "${CATRO_API_WRITES_PER_MINUTE:-30}"
+      CATRO_TRUST_PROXY_HEADERS: "true"
+    command:
+      - "--addr=:8443"
+      - "--allow-insecure-http"
+      - "--max-room-peers=${CATRO_MAX_ROOM_PEERS:-5}"
+    expose:
+      - "8443"
+    volumes:
+      - type: bind
+        source: ${CATRO_STATE_DIR:?CATRO_STATE_DIR is required}
+        target: /var/lib/catro
+    networks:
+      - control
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - /catro-signaling
+        - --health-check=http://127.0.0.1:8443/healthz
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    depends_on:
+      signaling:
+        condition: service_healthy
+    environment:
+      CATRO_HOSTNAME: "${CATRO_HOSTNAME:?CATRO_HOSTNAME is required}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - type: bind
+        source: ${CATRO_CADDY_DATA_DIR:?CATRO_CADDY_DATA_DIR is required}
+        target: /data
+      - type: bind
+        source: ${CATRO_CADDY_CONFIG_DIR:?CATRO_CADDY_CONFIG_DIR is required}
+        target: /config
+    networks:
+      - edge
+      - control
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - http://127.0.0.1:2019/config/
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  coturn:
+    image: coturn/coturn:4.18.0-r0
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      CATRO_TURN_SECRET: "${CATRO_TURN_SECRET:?CATRO_TURN_SECRET is required}"
+      CATRO_HOSTNAME: "${CATRO_HOSTNAME:?CATRO_HOSTNAME is required}"
+      CATRO_PUBLIC_IP: "${CATRO_PUBLIC_IP:?CATRO_PUBLIC_IP is required}"
+      CATRO_PRIVATE_IP: "${CATRO_PRIVATE_IP:?CATRO_PRIVATE_IP is required}"
+      CATRO_TURN_MIN_PORT: "${CATRO_TURN_MIN_PORT:-49160}"
+      CATRO_TURN_MAX_PORT: "${CATRO_TURN_MAX_PORT:-49200}"
+    volumes:
+      - ./coturn.conf:/etc/coturn/catro.conf:ro
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        umask 077
+        runtime=/tmp/catro-turnserver.conf
+        cp /etc/coturn/catro.conf "$$runtime"
+        {
+          printf 'static-auth-secret=%s\n' "$$CATRO_TURN_SECRET"
+          printf 'realm=%s\n' "$$CATRO_HOSTNAME"
+          printf 'external-ip=%s/%s\n' "$$CATRO_PUBLIC_IP" "$$CATRO_PRIVATE_IP"
+          printf 'relay-ip=%s\n' "$$CATRO_PRIVATE_IP"
+          printf 'min-port=%s\n' "$$CATRO_TURN_MIN_PORT"
+          printf 'max-port=%s\n' "$$CATRO_TURN_MAX_PORT"
+        } >> "$$runtime"
+        exec turnserver -c "$$runtime"
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=4m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - turnutils_stunclient -t 1000 -p 3478 127.0.0.1 >/dev/null 2>&1
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+networks:
+  edge:
+    driver: bridge
+  control:
+    driver: bridge
+    internal: true

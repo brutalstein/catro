@@ -1,0 +1,33 @@
+{
+	admin 127.0.0.1:2019
+}
+
+{$CATRO_HOSTNAME} {
+	log {
+		output stdout
+		format console
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	handle /healthz {
+		reverse_proxy signaling:8443
+	}
+
+	handle /v1/* {
+		request_body {
+			max_size 64KB
+		}
+		reverse_proxy signaling:8443
+	}
+
+	handle {
+		respond "Not Found" 404
+	}
+}

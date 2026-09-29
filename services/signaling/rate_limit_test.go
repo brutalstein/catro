@@ -244,3 +244,26 @@ func TestProductionMetricsTrackRoomEventsWithoutSensitiveLabels(t *testing.T) {
 		}
 	}
 }
+
+
+func TestRunHealthCheckAcceptsOnlyHealthyHTTP(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/healthz" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			http.Error(w, "unhealthy", http.StatusServiceUnavailable)
+		}))
+	defer server.Close()
+
+	if err := runHealthCheck(server.URL + "/healthz"); err != nil {
+		t.Fatalf("healthy endpoint rejected: %v", err)
+	}
+	if err := runHealthCheck(server.URL + "/unhealthy"); err == nil {
+		t.Fatal("unhealthy endpoint accepted")
+	}
+	if err := runHealthCheck("file:///etc/passwd"); err == nil {
+		t.Fatal("non-HTTP health endpoint accepted")
+	}
+}

@@ -89,3 +89,15 @@ jobs:
         run: go test ./...
       - name: Build signaling service
         run: go build -trimpath ./...
+
+  deployment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shellcheck deployment scripts
+        run: shellcheck deploy/oracle-free/*.sh
+      - name: Validate deployment statically
+        run: VERIFY_ONLY=1 deploy/oracle-free/verify.sh
+      - name: Validate Compose model
+        working-directory: deploy/oracle-free
+        run: docker compose --env-file .env.example config >/dev/null
