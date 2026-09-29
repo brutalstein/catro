@@ -22,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -528,6 +529,31 @@ parse_server(const Json& value) {
             return std::nullopt;
         }
         return server;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+[[nodiscard]] std::optional<DirectoryMember>
+parse_member(const Json& value) {
+    try {
+        DirectoryMember member;
+        member.user_id =
+            value.at("user_id").get<std::string>();
+        member.display_name =
+            value.at("display_name").get<std::string>();
+        member.role =
+            value.at("role").get<std::string>();
+
+        if (!valid_remote_id(member.user_id) ||
+            member.display_name.empty() ||
+            member.display_name.size() >
+                community::kMaxDisplayNameBytes ||
+            (member.role != "owner" &&
+             member.role != "member")) {
+            return std::nullopt;
+        }
+        return member;
     } catch (...) {
         return std::nullopt;
     }
@@ -1226,6 +1252,97 @@ DirectoryServerResult accept_directory_invite(
         return error(
             DirectoryErrorCode::malformed_response,
             "invite acceptance response is invalid");
+    }
+}
+
+DirectoryMembersResult list_directory_members(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_id) noexcept {
+    try {
+        if (!valid_remote_id(server_id)) {
+            return error(
+                DirectoryErrorCode::invalid_config,
+                "member roster server is invalid");
+        }
+
+        const auto server = wide(server_id);
+        if (server.empty()) {
+            return error(
+                DirectoryErrorCode::invalid_config,
+                "member roster server encoding failed");
+        }
+
+        std::wstring endpoint =
+            L"/v1/members?server_id=";
+        endpoint += server;
+
+        const auto response =
+            successful_json(
+                request_json(
+                    service,
+                    L"GET",
+                    endpoint,
+                    access_token,
+                    nullptr));
+        if (const auto* failure =
+                std::get_if<DirectoryError>(
+                    &response)) {
+            return *failure;
+        }
+
+        const auto& json =
+            std::get<Json>(response);
+        const auto& items =
+            json.at("members");
+        if (!items.is_array() ||
+            items.empty() ||
+            items.size() >
+                community::kMaxMembers) {
+            return error(
+                DirectoryErrorCode::malformed_response,
+                "member roster is invalid");
+        }
+
+        std::vector<DirectoryMember> members;
+        members.reserve(items.size());
+        std::unordered_set<std::string> seen;
+        seen.reserve(items.size());
+        std::size_t owner_count = 0;
+
+        for (std::size_t index = 0;
+             index < items.size();
+             ++index) {
+            const auto parsed =
+                parse_member(items[index]);
+            if (!parsed ||
+                !seen.insert(parsed->user_id).second) {
+                return error(
+                    DirectoryErrorCode::malformed_response,
+                    "member roster contains invalid data");
+            }
+            if (parsed->role == "owner") {
+                ++owner_count;
+                if (index != 0) {
+                    return error(
+                        DirectoryErrorCode::malformed_response,
+                        "member roster owner ordering is invalid");
+                }
+            }
+            members.push_back(*parsed);
+        }
+
+        if (owner_count != 1 ||
+            members.front().role != "owner") {
+            return error(
+                DirectoryErrorCode::malformed_response,
+                "member roster owner is invalid");
+        }
+        return members;
+    } catch (...) {
+        return error(
+            DirectoryErrorCode::malformed_response,
+            "member roster response is invalid");
     }
 }
 

@@ -49,6 +49,12 @@ struct DirectoryInvite {
     DirectoryServer server;
 };
 
+struct DirectoryMember {
+    std::string user_id;
+    std::string display_name;
+    std::string role;
+};
+
 struct DirectoryMessage {
     std::string id;
     std::uint64_t sequence = 0;
@@ -88,6 +94,8 @@ using DirectoryServersResult =
     std::variant<std::vector<DirectoryServer>, DirectoryError>;
 using DirectoryInviteResult =
     std::variant<DirectoryInvite, DirectoryError>;
+using DirectoryMembersResult =
+    std::variant<std::vector<DirectoryMember>, DirectoryError>;
 using DirectoryMessageResult =
     std::variant<DirectoryMessage, DirectoryError>;
 using DirectoryMessagesResult =
@@ -127,6 +135,11 @@ load_or_create_directory_credential() noexcept;
     const DirectoryServiceConfig& service,
     std::string_view access_token,
     std::string_view invite_code) noexcept;
+
+[[nodiscard]] DirectoryMembersResult list_directory_members(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_id) noexcept;
 
 [[nodiscard]] DirectoryMessagesResult list_directory_messages(
     const DirectoryServiceConfig& service,
