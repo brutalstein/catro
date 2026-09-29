@@ -2,8 +2,8 @@
 
 Catro is a native desktop application for Windows and macOS. The repository includes a portable
 C++20 capability core, isolated passive hardware probes, low-latency native audio, bounded Opus
-voice, persistent personal/shared-server state, authenticated member rosters, bounded persistent
-text channels, a production signaling/directory service, and native desktop shells (WinUI 3 on Windows, SwiftUI on macOS).
+voice, persistent personal/shared-server state, privacy-bounded Server Code join requests,
+authenticated member rosters, bounded persistent text channels, a production signaling/directory service, and native desktop shells (WinUI 3 on Windows, SwiftUI on macOS).
 
 The Windows product path now provisions authenticated WebRTC rooms for voice, hardware-encoded
 H.264 screen sharing, native D3D11 decode/presentation, and selected-window application audio.
@@ -26,7 +26,7 @@ or a public-Internet security boundary.
 | `apps/shell` | Portable personal-server/channel navigation contract. |
 | `apps/room-runtime`, `apps/voice-runtime`, `apps/screen-runtime` | Windows runtime boundaries for shared RTC rooms, duplex voice, and full-duplex screen media. |
 | `apps/windows`, `apps/macos` | Native desktop shells. Windows includes the server-first voice and screen-stream product UI. |
-| `services/signaling` | TLS-ready identity, membership, invite, short-lived RTC/TURN provisioning, bounded API writes, metrics, and WebRTC signaling service. |
+| `services/signaling` | TLS-ready identity, membership, Server Code lookup/join requests, direct invites, short-lived RTC/TURN provisioning, bounded API access, metrics, and WebRTC signaling service. |
 | `deploy/oracle-free` | Pinned Caddy + signaling + coturn single-VM production deployment boundary with health, backup, restore, and update scripts. |
 | `tools/capability-probe` | Helper process that runs one passive probe and prints one fragment. |
 | `tools/capability-report` | Command-line capability report. |
@@ -39,7 +39,7 @@ or a public-Internet security boundary.
 
 The Windows app opens directly into the user's personal server: one real bounded/persistent
 `# general` text channel, one `Voice` channel, an authoritative server-member rail, owner state,
-invite/join connection points, and voice-local screen share controls. Shared-server members can join the same provisioned RTC room, publish a window or
+direct-invite and approval-based Server Code join flows, and voice-local screen share controls. Shared-server members can join the same provisioned RTC room, publish a window or
 display, opt into remote viewing, pop the stream out or use full screen, and optionally include the
 selected window's process audio. The shell is native WinUI 3 and intentionally avoids
 blur/backdrop/animation costs. See [`docs/ui-foundation.md`](docs/ui-foundation.md).
@@ -73,7 +73,7 @@ The scripts check prerequisites and never install tools or change system setting
 
 | Platform | Status |
 | --- | --- |
-| Windows 11 x64 | Release build, 44-test local gate, capability report, and WinUI startup pass locally. Voice/screen product integration, authoritative shared-server member rosters, bounded persistent text messaging, and the Oracle single-VM deployment bundle are implemented; real-network forced-TURN, five-client, text exchange, restart, latency, and resource acceptance remains manual and is explicitly NOT VALIDATED. The shell still has a known UI Automation issue (see troubleshooting). |
+| Windows 11 x64 | Release build, 44-test local gate, capability report, and WinUI startup pass locally. Voice/screen product integration, Server Code discovery with owner-reviewed join requests, authoritative shared-server member rosters, bounded persistent text messaging, and the Oracle single-VM deployment bundle are implemented; real-network forced-TURN, five-client, text exchange, restart, latency, and resource acceptance remains manual and is explicitly NOT VALIDATED. The shell still has a known UI Automation issue (see troubleshooting). |
 | macOS 13+ Apple Silicon | Debug build, tests, and capability-report generation pass on the `macos-15` CI runner. Windows product voice/screen/text parity is not claimed. |
 | macOS 13+ Intel | Debug build, tests, and capability-report generation pass on the `macos-15-intel` CI runner. Windows product voice/screen/text parity is not claimed. |
 

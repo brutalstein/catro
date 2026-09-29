@@ -36,7 +36,9 @@ sudo CATRO_HOSTNAME=catro.example.com \
 The installer detects the VM private IPv4, generates independent 48-byte signaling and TURN
 secrets, writes .env with mode 0600, prepares persistent directories and starts the pinned
 services. Re-running it preserves values already stored in .env; edit that protected file deliberately
-when changing production configuration.
+when changing production configuration. The default control-plane write limit is 30 mutations per
+minute/source and exact Server Code discovery is independently limited to 30 lookups per
+minute/source.
 
 Static source validation without starting containers:
 
@@ -57,7 +59,8 @@ docker compose --env-file .env logs --tail=200 signaling caddy coturn
 docker compose --env-file .env ps
 ~~~
 
-Backups are atomic copies of the signaling JSON state and the seven newest local backups are kept.
+Backups are atomic copies of the signaling JSON state — identities, memberships, Server Codes,
+join requests, retained text history, and invites — and the seven newest local backups are kept.
 To restore, stop signaling first and pass one backup file:
 
 ~~~sh

@@ -86,7 +86,7 @@ install.sh:
 1. verifies Ubuntu, architecture, Docker/Compose, DNS, and required host tools;
 2. detects the VNIC private IPv4 unless CATRO_PRIVATE_IP is explicitly supplied;
 3. creates independent 48-byte signaling and TURN secrets;
-4. writes .env with mode 0600;
+4. writes .env with mode 0600, including independent bounded mutation and exact-discovery rates;
 5. prepares signaling state, backup, and Caddy persistence directories;
 6. builds the signaling image from the checked-out source revision;
 7. starts Caddy, signaling, and coturn;
@@ -117,7 +117,8 @@ sudo docker compose --env-file .env exec caddy \
 ~~~
 
 Expected production metrics are label-free counters/gauges. They must not contain access tokens,
-TURN credentials, invite codes, SDP, ICE candidates, peer IDs, IP-address labels, or media data.
+TURN credentials, invite codes, Server Codes, join-request ids, SDP, ICE candidates, peer/user/
+server ids, IP-address labels, or media data.
 
 For coturn, inspect recent logs and allocation behavior:
 
@@ -136,8 +137,9 @@ cd deploy/oracle-free
 sudo ./backup.sh
 ~~~
 
-The script copies the atomically-persisted directory state — including retained bounded text
-history — and retains the seven newest local backup files.
+The script copies the atomically-persisted directory state — including memberships, Server Codes,
+pending/resolved retained join requests, and bounded text history — and retains the seven newest
+local backup files.
 
 Restore is deliberately offline:
 

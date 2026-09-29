@@ -36,6 +36,33 @@ Observed evidence / notes:
 
 > Pending.
 
+## Server Code discovery and approval
+
+Use two packaged production clients on different installations. Server Code lookup is an
+authenticated exact lookup; it is not public fuzzy discovery and the displayed Server Code is not
+the internal server id.
+
+- [ ] Client A can see and copy the owned server's `CAT-...` Server Code:
+- [ ] Client B finds the exact server using that Server Code:
+- [ ] Lookup exposes only server name/member count/relationship, not roster, channels, messages,
+      internal server id, owner id, RTC data, or invite data:
+- [ ] Client B submits an optional-note access request:
+- [ ] Repeating the same request does not create duplicate pending records:
+- [ ] Client A Access panel shows Client B as pending without either client joining voice:
+- [ ] A non-owner cannot read Client A's pending request queue:
+- [ ] A non-owner cannot approve/reject Client B:
+- [ ] Client A approves Client B and Client B's server rail updates without manual restart:
+- [ ] Before approval Client B cannot read roster/text or mint RTC credentials for the server:
+- [ ] A rejected request does not create membership and immediate re-request is cooldown-limited:
+- [ ] Direct Invite Code still performs the existing owner-authorized direct join path:
+- [ ] Server Code and pending request state survive signaling restart:
+- [ ] Backup + offline restore preserves Server Codes and pending requests:
+- [ ] Exact lookup rate-limit returns 429 with Retry-After at the configured bound:
+
+Observed evidence / notes:
+
+> Pending.
+
 ## Shared-server member roster convergence
 
 This gate validates server membership independently from voice-room membership.
@@ -181,7 +208,7 @@ Additional required observations:
 - [ ] .env mode is 0600:
 - [ ] State and backup directories are distinct:
 - [ ] No secret appears in docker image history/build arguments:
-- [ ] No secret or peer/IP label appears in metrics:
+- [ ] No secret or peer/IP/user/server/Server-Code label appears in metrics:
 - [ ] No paid Oracle service was added unintentionally:
 
 Observed evidence / notes:

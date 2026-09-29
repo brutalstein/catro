@@ -14,15 +14,17 @@ The personal server contract is:
 - one identity owns its personal server;
 - owner is the only elevated role;
 - everyone else is a normal member;
-- joining happens through an opaque invite code;
+- joining can happen either through an owner-created opaque direct invite or through a public
+  high-entropy Server Code followed by explicit owner approval;
 - the default server contains exactly one text channel (`general`) and one voice channel
   (`Voice`);
 - voice is where mute, deafen, and screen-share controls live;
 - the member pane always reflects server membership, not voice membership.
 
 The current branch implements the shell plus durable local identity, authenticated shared-server
-membership/invites, authoritative member rosters, bounded persistent text messaging, production
-voice rooms, and screen streaming.
+membership/invites, exact Server Code lookup with persisted owner-reviewed join requests,
+authoritative member rosters, bounded persistent text messaging, production voice rooms, and screen
+streaming.
 The UI still keeps one default text channel and one default voice channel per server; arbitrary
 channel creation, DMs, presence, reactions, edits, and attachments remain outside this slice.
 
@@ -50,7 +52,7 @@ when opened and released when leaving.
 - solid semantic brushes only;
 - only one top-level workspace attached to the window at a time;
 - fixed-count server/channel chrome on first run, so ordinary navigation is O(1);
-- dynamic message/member lists must use virtualization when their real models arrive;
+- dynamic message/member/access-request lists use native virtualization or bounded native list controls;
 - realtime media never executes on the XAML thread;
 - speaking/meter state must be snapshot-driven and rate-bounded;
 - diagnostics and device probing are not kept alive while the normal server surface is visible.
@@ -73,7 +75,10 @@ The shell should receive immutable/snapshot-style models from future services:
 
 - **Identity**: stable user id, display name, avatar token.
 - **Server**: stable server id, owner id, display name.
-- **Invite**: opaque code, server id, expiry/revocation state.
+- **Invite**: opaque direct-join code, server id, expiry/revocation state.
+- **Server access**: owner-visible public Server Code plus persisted pending/approved/rejected/
+  cancelled join-request snapshots. Pre-membership lookup never exposes channels, roster, messages,
+  internal server id, or RTC state.
 - **Channels**: stable channel id, kind, name, ordering.
 - **Members**: implemented as membership-authorized, owner-first virtualized snapshots containing
   user id, display name, and owner/member role. Presence is intentionally not inferred yet.

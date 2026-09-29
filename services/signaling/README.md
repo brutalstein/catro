@@ -2,8 +2,9 @@
 
 This service is Catro's production control plane for small native voice rooms.
 
-It owns identity registration, shared-server membership and authoritative roster reads, one-use
-invites, bounded persistent text history, short-lived RTC credentials, WebRTC SDP/ICE signaling, and RTC provisioning. Voice, screen video, and stream audio
+It owns identity registration, privacy-bounded exact Server Code lookup, persisted owner-reviewed
+join requests, shared-server membership and authoritative roster reads, one-use direct invites,
+bounded persistent text history, short-lived RTC credentials, WebRTC SDP/ICE signaling, and RTC provisioning. Voice, screen video, and stream audio
 never pass through this service: peers exchange those bounded datagrams directly over WebRTC
 DataChannels, with TURN relay available when direct ICE connectivity is impossible.
 
@@ -18,6 +19,8 @@ DataChannels, with TURN relay available when direct ICE connectivity is impossib
 - A coturn REST shared secret in `CATRO_TURN_SECRET`, at least 32 bytes. Do not place long-lived
   TURN usernames/passwords in the ICE URLs.
 - The built-in bounded per-source mutation limiter enabled (default 30 writes/minute, configurable 1..300).
+- Exact Server Code lookup has an independent per-source limiter (default 30 reads/minute,
+  configurable 1..300 with `CATRO_DISCOVERY_READS_PER_MINUTE`).
 - `CATRO_TRUST_PROXY_HEADERS=true` only when the immediate upstream is the private deployment proxy; direct public callers cannot override their source with `X-Forwarded-For`.
 - Health monitoring of `/healthz` and private metrics scraping of `/metrics`.
 
@@ -32,6 +35,7 @@ export CATRO_SIGNALING_STATE='/var/lib/catro/directory.json'
 export CATRO_PUBLIC_SIGNALING_URL='wss://catro.example.com/v1/rtc'
 export CATRO_ICE_SERVERS='stun:turn.example.com:3478;turn:turn.example.com:3478?transport=udp;turns:turn.example.com:5349?transport=tls'
 export CATRO_TURN_SECRET='replace-with-coturn-rest-shared-secret'
+export CATRO_DISCOVERY_READS_PER_MINUTE=30
 
 catro-signaling   --addr :8443   --tls-cert /run/secrets/fullchain.pem   --tls-key /run/secrets/privkey.pem
 ~~~
@@ -53,14 +57,18 @@ The normal product flow is:
 
 1. Register the stable local Catro identity.
 2. Sync the user's personal server or list servers the identity already belongs to.
-3. The owner creates a one-use invite from the server Invite button.
-4. Another computer presses `+`, pastes the invite, and becomes a member of that same server.
-5. Both clients read the membership-authorized server roster over HTTPS; this does not require
+3. Every owned server has a separate high-entropy public Server Code. The owner can copy it from
+   the Access panel; it is not the internal server id and grants no membership by itself.
+4. Another computer presses `+` and either performs an exact Server Code lookup to submit an
+   owner-reviewed access request, or uses an owner-created one-use Invite Code for direct join.
+5. The owner reviews pending Server Code requests in the Access panel. Approval atomically creates
+   membership; rejection does not reveal server content.
+6. Both clients read the membership-authorized server roster over HTTPS; this does not require
    joining voice.
-6. Pressing Join in the voice channel requests a short-lived RTC token plus WSS/STUN/TURN
+7. Pressing Join in the voice channel requests a short-lived RTC token plus WSS/STUN/TURN
    provisioning for that exact server/channel membership.
-7. The `# general` text surface reads/sends membership-authorized bounded history through HTTPS.
-8. Voice, screen video, and selected-window application audio use the same WebRTC room mesh.
+8. The `# general` text surface reads/sends membership-authorized bounded history through HTTPS.
+9. Voice, screen video, and selected-window application audio use the same WebRTC room mesh.
 
 End users do not configure `CATRO_ROOM_TOKEN`, `CATRO_SERVER_ID`, or `CATRO_ICE_SERVERS`.
 
