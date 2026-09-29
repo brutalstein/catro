@@ -1557,3 +1557,299 @@ func TestServerCodeMigrationPersistsForExistingServer(t *testing.T) {
 			code, persisted)
 	}
 }
+
+
+func TestJoinRequestCancelKeepsMembershipPrivate(t *testing.T) {
+	secret := []byte(strings.Repeat("c", 32))
+	d, err := openDirectory(
+		filepath.Join(t.TempDir(), "directory.json"),
+		secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ownerToken := registerTestUserNamed(
+		t, d, "owner-1", "Owner", testCredential(0xe1))
+	applicantToken := registerTestUserNamed(
+		t, d, "applicant-1", "Applicant", testCredential(0xe2))
+	outsiderToken := registerTestUserNamed(
+		t, d, "outsider-1", "Outsider", testCredential(0xe3))
+
+	sync := authenticatedRequest(
+		http.MethodPost,
+		"/v1/servers/sync",
+		ownerToken,
+		map[string]any{
+			"server_id":        "server-1",
+			"name":             "Privacy Server",
+			"text_channel_id":  "text-1",
+			"voice_channel_id": "voice-1",
+		})
+	syncResponse := httptest.NewRecorder()
+	d.handleServerSync(syncResponse, sync)
+	if syncResponse.Code != http.StatusCreated {
+		t.Fatalf("sync: %d %s",
+			syncResponse.Code, syncResponse.Body.String())
+	}
+	var server serverDescriptor
+	if err := json.Unmarshal(
+		syncResponse.Body.Bytes(), &server); err != nil {
+		t.Fatal(err)
+	}
+
+	create := authenticatedRequest(
+		http.MethodPost,
+		"/v1/join-requests",
+		applicantToken,
+		map[string]any{
+			"server_code": server.PublicCode,
+			"message":     "privacy test",
+		})
+	createResponse := httptest.NewRecorder()
+	d.handleJoinRequests(createResponse, create)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s",
+			createResponse.Code, createResponse.Body.String())
+	}
+	var request joinRequestDescriptor
+	if err := json.Unmarshal(
+		createResponse.Body.Bytes(), &request); err != nil {
+		t.Fatal(err)
+	}
+
+	ownerList := authenticatedRequest(
+		http.MethodGet,
+		"/v1/join-requests?server_id=server-1",
+		ownerToken,
+		nil)
+	ownerListResponse := httptest.NewRecorder()
+	d.handleJoinRequests(ownerListResponse, ownerList)
+	if ownerListResponse.Code != http.StatusOK {
+		t.Fatalf("owner list: %d %s",
+			ownerListResponse.Code, ownerListResponse.Body.String())
+	}
+	for _, forbidden := range []string{
+		`"server_id"`,
+		`"requester_id"`,
+		`"owner_id"`,
+		`"text_channel_id"`,
+		`"voice_channel_id"`,
+	} {
+		if strings.Contains(ownerListResponse.Body.String(), forbidden) {
+			t.Fatalf("owner request queue leaked %q: %s",
+				forbidden, ownerListResponse.Body.String())
+		}
+	}
+
+	outsiderCancel := authenticatedRequest(
+		http.MethodPost,
+		"/v1/join-requests/cancel",
+		outsiderToken,
+		map[string]any{"request_id": request.ID})
+	outsiderCancelResponse := httptest.NewRecorder()
+	d.handleJoinRequestCancel(
+		outsiderCancelResponse, outsiderCancel)
+	if outsiderCancelResponse.Code != http.StatusNotFound {
+		t.Fatalf("outsider cancel status = %d body %s",
+			outsiderCancelResponse.Code,
+			outsiderCancelResponse.Body.String())
+	}
+
+	cancel := authenticatedRequest(
+		http.MethodPost,
+		"/v1/join-requests/cancel",
+		applicantToken,
+		map[string]any{"request_id": request.ID})
+	cancelResponse := httptest.NewRecorder()
+	d.handleJoinRequestCancel(cancelResponse, cancel)
+	if cancelResponse.Code != http.StatusOK {
+		t.Fatalf("cancel: %d %s",
+			cancelResponse.Code, cancelResponse.Body.String())
+	}
+	var cancelled joinRequestDescriptor
+	if err := json.Unmarshal(
+		cancelResponse.Body.Bytes(), &cancelled); err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.Status != "cancelled" {
+		t.Fatalf("cancelled status = %q", cancelled.Status)
+	}
+
+	d.mu.Lock()
+	_, becameMember :=
+		d.state.Servers["server-1"].Members["applicant-1"]
+	d.mu.Unlock()
+	if becameMember {
+		t.Fatal("cancelled join request created membership")
+	}
+
+	lookup := authenticatedRequest(
+		http.MethodGet,
+		"/v1/server-lookup?code="+server.PublicCode,
+		applicantToken,
+		nil)
+	lookupResponse := httptest.NewRecorder()
+	d.handleServerLookup(lookupResponse, lookup)
+	if lookupResponse.Code != http.StatusOK {
+		t.Fatalf("lookup after cancel: %d %s",
+			lookupResponse.Code, lookupResponse.Body.String())
+	}
+	var preview serverLookupDescriptor
+	if err := json.Unmarshal(
+		lookupResponse.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	if preview.Relationship != "none" ||
+		preview.RequestID != "" {
+		t.Fatalf("cancelled lookup relationship = %#v", preview)
+	}
+}
+
+func TestDirectInviteResolvesPendingJoinRequest(t *testing.T) {
+	secret := []byte(strings.Repeat("v", 32))
+	d, err := openDirectory(
+		filepath.Join(t.TempDir(), "directory.json"),
+		secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerToken := registerTestUserNamed(
+		t, d, "owner-1", "Owner", testCredential(0xf1))
+	applicantToken := registerTestUserNamed(
+		t, d, "applicant-1", "Applicant", testCredential(0xf2))
+
+	sync := authenticatedRequest(
+		http.MethodPost,
+		"/v1/servers/sync",
+		ownerToken,
+		map[string]any{
+			"server_id":        "server-1",
+			"name":             "Invite Reconcile",
+			"text_channel_id":  "text-1",
+			"voice_channel_id": "voice-1",
+		})
+	syncResponse := httptest.NewRecorder()
+	d.handleServerSync(syncResponse, sync)
+	if syncResponse.Code != http.StatusCreated {
+		t.Fatalf("sync: %d %s",
+			syncResponse.Code, syncResponse.Body.String())
+	}
+	var server serverDescriptor
+	if err := json.Unmarshal(
+		syncResponse.Body.Bytes(), &server); err != nil {
+		t.Fatal(err)
+	}
+
+	create := authenticatedRequest(
+		http.MethodPost,
+		"/v1/join-requests",
+		applicantToken,
+		map[string]any{"server_code": server.PublicCode})
+	createResponse := httptest.NewRecorder()
+	d.handleJoinRequests(createResponse, create)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("create request: %d %s",
+			createResponse.Code, createResponse.Body.String())
+	}
+	var request joinRequestDescriptor
+	if err := json.Unmarshal(
+		createResponse.Body.Bytes(), &request); err != nil {
+		t.Fatal(err)
+	}
+
+	inviteRequest := authenticatedRequest(
+		http.MethodPost,
+		"/v1/invites",
+		ownerToken,
+		map[string]any{"server_id": "server-1"})
+	inviteResponse := httptest.NewRecorder()
+	d.handleInvites(inviteResponse, inviteRequest)
+	if inviteResponse.Code != http.StatusCreated {
+		t.Fatalf("create invite: %d %s",
+			inviteResponse.Code, inviteResponse.Body.String())
+	}
+	var invite struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(
+		inviteResponse.Body.Bytes(), &invite); err != nil {
+		t.Fatal(err)
+	}
+
+	accept := authenticatedRequest(
+		http.MethodPost,
+		"/v1/invites/accept",
+		applicantToken,
+		map[string]any{"code": invite.Code})
+	acceptResponse := httptest.NewRecorder()
+	d.handleInviteAccept(acceptResponse, accept)
+	if acceptResponse.Code != http.StatusOK {
+		t.Fatalf("accept invite: %d %s",
+			acceptResponse.Code, acceptResponse.Body.String())
+	}
+
+	d.mu.Lock()
+	joined, isMember :=
+		d.state.Servers["server-1"].Members["applicant-1"]
+	resolved := d.state.JoinRequests[request.ID]
+	d.mu.Unlock()
+	if !isMember || joined.Role != "member" {
+		t.Fatal("direct invite did not create membership")
+	}
+	if resolved.Status != "approved" {
+		t.Fatalf("pending request status after invite = %q",
+			resolved.Status)
+	}
+}
+
+func TestOpenDirectoryRejectsApprovedJoinRequestWithoutMembership(t *testing.T) {
+	secret := []byte(strings.Repeat("q", 32))
+	path := filepath.Join(t.TempDir(), "directory.json")
+	d, err := openDirectory(path, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerToken := registerTestUserNamed(
+		t, d, "owner-1", "Owner", testCredential(0xa5))
+	_ = registerTestUserNamed(
+		t, d, "applicant-1", "Applicant", testCredential(0xa6))
+
+	sync := authenticatedRequest(
+		http.MethodPost,
+		"/v1/servers/sync",
+		ownerToken,
+		map[string]any{
+			"server_id":        "server-1",
+			"name":             "Corrupt Request Server",
+			"text_channel_id":  "text-1",
+			"voice_channel_id": "voice-1",
+		})
+	syncResponse := httptest.NewRecorder()
+	d.handleServerSync(syncResponse, sync)
+	if syncResponse.Code != http.StatusCreated {
+		t.Fatalf("sync: %d %s",
+			syncResponse.Code, syncResponse.Body.String())
+	}
+
+	now := time.Now().Unix()
+	d.mu.Lock()
+	d.state.JoinRequests["request-1"] =
+		directoryJoinRequest{
+			ID:          "request-1",
+			ServerID:    "server-1",
+			RequesterID: "applicant-1",
+			Status:      "approved",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			ExpiresAt:   now + int64(resolvedJoinRequestTTL/time.Second),
+		}
+	if err := d.persistLocked(); err != nil {
+		d.mu.Unlock()
+		t.Fatal(err)
+	}
+	d.mu.Unlock()
+
+	if _, err := openDirectory(path, secret); err == nil {
+		t.Fatal("approved request without membership must be rejected")
+	}
+}
