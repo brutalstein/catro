@@ -10,12 +10,14 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 namespace winrt::Catro::implementation {
 
 struct MainWindow : MainWindowT<MainWindow> {
     MainWindow() = default;
+    ~MainWindow();
 
     void InitializeComponent();
     void OnServer(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
@@ -29,6 +31,10 @@ private:
     void ActivateDirectoryServer(std::string_view server_id);
     winrt::fire_and_forget BeginDirectoryBootstrap();
     winrt::fire_and_forget BeginJoinServer();
+    winrt::fire_and_forget BeginServerCodeLookup(std::string server_code);
+    winrt::fire_and_forget BeginInviteJoin(std::string invite_code);
+    winrt::fire_and_forget BeginOutgoingJoinRequestRefresh();
+    winrt::fire_and_forget BeginDirectoryServerRefresh();
     void RefreshDirectoryRail();
     void ApplyDirectoryServerToPage();
     void UpdateRail();
@@ -49,6 +55,11 @@ private:
     std::optional<
         catro::platform::windows::DirectoryServer>
         active_directory_server_;
+
+    Microsoft::UI::Dispatching::DispatcherQueueTimer join_request_timer_{nullptr};
+    std::unordered_set<std::string> observed_join_request_ids_;
+    bool join_request_refresh_pending_ = false;
+    bool directory_server_refresh_pending_ = false;
 };
 
 } // namespace winrt::Catro::implementation

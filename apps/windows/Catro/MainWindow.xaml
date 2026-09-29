@@ -84,8 +84,8 @@
                                 BorderThickness="0"
                                 IsEnabled="False"
                                 Click="OnJoinServer"
-                                ToolTipService.ToolTip="Join with invite code"
-                                AutomationProperties.Name="Join server">
+                                ToolTipService.ToolTip="Add server"
+                                AutomationProperties.Name="Add server">
                             <FontIcon Glyph="&#xE710;" FontSize="15" />
                         </Button>
                     </StackPanel>

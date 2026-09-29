@@ -26,7 +26,22 @@ namespace {
 namespace xaml = Microsoft::UI::Xaml;
 namespace controls = Microsoft::UI::Xaml::Controls;
 
+std::string trim_ascii(std::string value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return {};
+    }
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
 } // namespace
+
+MainWindow::~MainWindow() {
+    if (join_request_timer_) {
+        join_request_timer_.Stop();
+    }
+}
 
 void MainWindow::InitializeComponent() {
     MainWindowT<MainWindow>::InitializeComponent();
@@ -97,6 +112,13 @@ void MainWindow::InitializeComponent() {
 
     const auto scale = GetDpiForWindow(hwnd) / 96.0;
     AppWindow().Resize({static_cast<int32_t>(1280 * scale), static_cast<int32_t>(820 * scale)});
+
+    join_request_timer_ = DispatcherQueue().CreateTimer();
+    join_request_timer_.Interval(std::chrono::seconds{5});
+    join_request_timer_.Tick(
+        [this](auto&&, auto&&) {
+            BeginOutgoingJoinRequestRefresh();
+        });
 
     const auto local = catro::platform::windows::load_or_create_default_local_state();
     if (const auto* state = std::get_if<catro::community::LocalState>(&local)) {
@@ -385,7 +407,11 @@ MainWindow::BeginDirectoryBootstrap() {
                     JoinServerButton(),
                 box_value(
                     hstring{
-                        L"Join with invite code"}));
+                        L"Add server"}));
+        if (lifetime->join_request_timer_) {
+            lifetime->join_request_timer_.Start();
+        }
+        lifetime->BeginOutgoingJoinRequestRefresh();
         lifetime->
             RefreshDirectoryRail();
         lifetime->
@@ -413,34 +439,213 @@ MainWindow::BeginJoinServer() {
 
     controls::ContentDialog dialog;
     dialog.XamlRoot(AppTitleBar().XamlRoot());
-    dialog.Title(
-        box_value(
-            hstring{L"Join a Catro server"}));
-    dialog.PrimaryButtonText(L"Join");
+    dialog.Title(box_value(hstring{L"Add a Catro server"}));
+    dialog.PrimaryButtonText(L"Find by Server Code");
+    dialog.SecondaryButtonText(L"Use Invite Code");
     dialog.CloseButtonText(L"Cancel");
     dialog.DefaultButton(
-        controls::
-            ContentDialogButton::Primary);
+        controls::ContentDialogButton::Primary);
+
+    controls::StackPanel content;
+    content.Spacing(10);
+
+    controls::TextBlock code_help;
+    code_help.Text(
+        L"Server Code sends an access request. Invite Code joins directly.");
+    code_help.TextWrapping(xaml::TextWrapping::Wrap);
+    code_help.Foreground(
+        xaml::Application::Current().Resources()
+            .Lookup(box_value(hstring{L"CatroTextSecondaryBrush"}))
+            .as<Microsoft::UI::Xaml::Media::Brush>());
+    content.Children().Append(code_help);
+
+    controls::TextBox server_code_box;
+    server_code_box.Header(
+        box_value(hstring{L"Server Code"}));
+    server_code_box.PlaceholderText(
+        L"CAT-XXXX-XXXX-XXXX-XXXX-XXXX");
+    content.Children().Append(server_code_box);
 
     controls::TextBox invite_box;
     invite_box.Header(
-        box_value(hstring{L"Invite code"}));
+        box_value(hstring{L"Invite Code"}));
     invite_box.PlaceholderText(
-        L"Paste invite code");
-    dialog.Content(invite_box);
+        L"Paste an owner-provided invite code");
+    content.Children().Append(invite_box);
+    dialog.Content(content);
 
-    const auto result =
-        co_await dialog.ShowAsync();
-    if (result !=
-        controls::
-            ContentDialogResult::Primary) {
+    const auto result = co_await dialog.ShowAsync();
+    if (result == controls::ContentDialogResult::Primary) {
+        const auto code = trim_ascii(
+            winrt::to_string(server_code_box.Text()));
+        if (!code.empty()) {
+            BeginServerCodeLookup(code);
+        }
+        co_return;
+    }
+    if (result == controls::ContentDialogResult::Secondary) {
+        const auto invite = trim_ascii(
+            winrt::to_string(invite_box.Text()));
+        if (!invite.empty()) {
+            BeginInviteJoin(invite);
+        }
+    }
+}
+
+winrt::fire_and_forget
+MainWindow::BeginServerCodeLookup(
+    std::string server_code) {
+    auto lifetime = get_strong();
+    if (!directory_service_ ||
+        directory_access_token_.empty()) {
         co_return;
     }
 
-    const auto invite =
-        winrt::to_string(
-            invite_box.Text());
-    if (invite.empty()) {
+    const auto service = *directory_service_;
+    const auto access_token =
+        directory_access_token_;
+    winrt::apartment_context ui_thread;
+
+    JoinServerButton().IsEnabled(false);
+    co_await winrt::resume_background();
+    auto lookup =
+        catro::platform::windows::
+            lookup_directory_server(
+                service,
+                access_token,
+                server_code);
+    co_await ui_thread;
+    lifetime->JoinServerButton().IsEnabled(true);
+
+    if (const auto* failure =
+            std::get_if<
+                catro::platform::windows::
+                    DirectoryError>(&lookup)) {
+        controls::ToolTipService::SetToolTip(
+            lifetime->JoinServerButton(),
+            box_value(to_hstring(failure->message)));
+        co_return;
+    }
+
+    const auto preview =
+        std::get<
+            catro::platform::windows::
+                DirectoryServerLookup>(
+                    std::move(lookup));
+
+    if (preview.relationship != "none") {
+        controls::ContentDialog status;
+        status.XamlRoot(lifetime->AppTitleBar().XamlRoot());
+        status.Title(
+            box_value(to_hstring(preview.name)));
+        status.CloseButtonText(L"Close");
+
+        std::wstring message;
+        if (preview.relationship == "pending") {
+            message =
+                L"Your access request is already pending owner approval.";
+        } else {
+            message =
+                L"You are already a member of this server.";
+        }
+        controls::TextBlock text;
+        text.Text(hstring{message});
+        text.TextWrapping(xaml::TextWrapping::Wrap);
+        status.Content(text);
+        co_await status.ShowAsync();
+        co_return;
+    }
+
+    controls::ContentDialog request_dialog;
+    request_dialog.XamlRoot(
+        lifetime->AppTitleBar().XamlRoot());
+    request_dialog.Title(
+        box_value(to_hstring(preview.name)));
+    request_dialog.PrimaryButtonText(L"Request access");
+    request_dialog.CloseButtonText(L"Cancel");
+    request_dialog.DefaultButton(
+        controls::ContentDialogButton::Primary);
+
+    controls::StackPanel request_content;
+    request_content.Spacing(8);
+
+    controls::TextBlock details;
+    std::wstring detail_text =
+        L"Server Code: ";
+    detail_text += to_hstring(preview.public_code).c_str();
+    detail_text += L"\nMembers: ";
+    detail_text += std::to_wstring(preview.member_count);
+    details.Text(hstring{detail_text});
+    details.TextWrapping(xaml::TextWrapping::Wrap);
+    request_content.Children().Append(details);
+
+    controls::TextBox note_box;
+    note_box.Header(
+        box_value(hstring{L"Request note (optional)"}));
+    note_box.PlaceholderText(
+        L"Tell the owner why you want to join");
+    note_box.MaxLength(280);
+    request_content.Children().Append(note_box);
+    request_dialog.Content(request_content);
+
+    if (co_await request_dialog.ShowAsync() !=
+        controls::ContentDialogResult::Primary) {
+        co_return;
+    }
+
+    const auto note =
+        winrt::to_string(note_box.Text());
+    if (note.size() > 280) {
+        controls::ToolTipService::SetToolTip(
+            lifetime->JoinServerButton(),
+            box_value(hstring{
+                L"Request note exceeds the 280-byte UTF-8 limit."}));
+        co_return;
+    }
+
+    lifetime->JoinServerButton().IsEnabled(false);
+    co_await winrt::resume_background();
+    auto created =
+        catro::platform::windows::
+            create_directory_join_request(
+                service,
+                access_token,
+                preview.public_code,
+                note);
+    co_await ui_thread;
+    lifetime->JoinServerButton().IsEnabled(true);
+
+    if (const auto* failure =
+            std::get_if<
+                catro::platform::windows::
+                    DirectoryError>(&created)) {
+        controls::ToolTipService::SetToolTip(
+            lifetime->JoinServerButton(),
+            box_value(to_hstring(failure->message)));
+        co_return;
+    }
+
+    const auto request =
+        std::get<
+            catro::platform::windows::
+                DirectoryJoinRequest>(
+                    std::move(created));
+    std::wstring sent =
+        L"Access request sent to ";
+    sent += to_hstring(request.server_name).c_str();
+    controls::ToolTipService::SetToolTip(
+        lifetime->JoinServerButton(),
+        box_value(hstring{sent}));
+    lifetime->BeginOutgoingJoinRequestRefresh();
+}
+
+winrt::fire_and_forget
+MainWindow::BeginInviteJoin(
+    std::string invite) {
+    auto lifetime = get_strong();
+    if (!directory_service_ ||
+        directory_access_token_.empty() ||
+        invite.empty()) {
         co_return;
     }
 
@@ -452,7 +657,6 @@ MainWindow::BeginJoinServer() {
 
     JoinServerButton().IsEnabled(false);
     co_await winrt::resume_background();
-
     const auto accepted =
         catro::platform::windows::
             accept_directory_invite(
@@ -463,8 +667,7 @@ MainWindow::BeginJoinServer() {
     if (const auto* failure =
             std::get_if<
                 catro::platform::windows::
-                    DirectoryError>(
-                &accepted)) {
+                    DirectoryError>(&accepted)) {
         const auto message = failure->message;
         co_await ui_thread;
         lifetime->JoinServerButton().IsEnabled(true);
@@ -480,37 +683,171 @@ MainWindow::BeginJoinServer() {
                 DirectoryServer>(accepted);
     co_await ui_thread;
 
-        auto found =
+    auto found =
+        std::ranges::find(
+            lifetime->directory_servers_,
+            server.id,
+            &catro::platform::windows::
+                DirectoryServer::id);
+    if (found ==
+        lifetime->directory_servers_.end()) {
+        lifetime->directory_servers_
+            .push_back(server);
+    } else {
+        *found = server;
+    }
+    lifetime->active_directory_server_ =
+        server;
+    lifetime->JoinServerButton().IsEnabled(true);
+    lifetime->RefreshDirectoryRail();
+    lifetime->ApplyDirectoryServerToPage();
+    lifetime->Activate(
+        catro::app::AppDestination::server);
+}
+
+winrt::fire_and_forget
+MainWindow::BeginOutgoingJoinRequestRefresh() {
+    auto lifetime = get_strong();
+    if (join_request_refresh_pending_ ||
+        !directory_service_ ||
+        directory_access_token_.empty()) {
+        co_return;
+    }
+
+    join_request_refresh_pending_ = true;
+    const auto service = *directory_service_;
+    const auto access_token =
+        directory_access_token_;
+    winrt::apartment_context ui_thread;
+
+    co_await winrt::resume_background();
+    auto result =
+        catro::platform::windows::
+            list_outgoing_directory_join_requests(
+                service,
+                access_token);
+    co_await ui_thread;
+    lifetime->join_request_refresh_pending_ = false;
+
+    const auto* requests =
+        std::get_if<std::vector<
+            catro::platform::windows::
+                DirectoryJoinRequest>>(&result);
+    if (requests == nullptr) {
+        co_return;
+    }
+
+    bool refresh_servers = false;
+    for (const auto& request : *requests) {
+        if (request.status == "pending") {
+            continue;
+        }
+        if (!lifetime->
+                observed_join_request_ids_
+                .insert(request.id)
+                .second) {
+            continue;
+        }
+
+        if (request.status == "approved") {
+            refresh_servers = true;
+        } else {
+            std::wstring notice =
+                L"Access request ";
+            notice += request.status == "rejected"
+                ? L"rejected: "
+                : L"cancelled: ";
+            notice +=
+                to_hstring(request.server_name).c_str();
+            controls::ToolTipService::SetToolTip(
+                lifetime->JoinServerButton(),
+                box_value(hstring{notice}));
+        }
+    }
+
+    if (refresh_servers) {
+        lifetime->BeginDirectoryServerRefresh();
+    }
+}
+
+winrt::fire_and_forget
+MainWindow::BeginDirectoryServerRefresh() {
+    auto lifetime = get_strong();
+    if (directory_server_refresh_pending_ ||
+        !directory_service_ ||
+        directory_access_token_.empty()) {
+        co_return;
+    }
+
+    directory_server_refresh_pending_ = true;
+    const auto service = *directory_service_;
+    const auto access_token =
+        directory_access_token_;
+    const auto active_id =
+        active_directory_server_
+            ? active_directory_server_->id
+            : std::string{};
+    winrt::apartment_context ui_thread;
+
+    co_await winrt::resume_background();
+    auto result =
+        catro::platform::windows::
+            list_directory_servers(
+                service,
+                access_token);
+    co_await ui_thread;
+    lifetime->directory_server_refresh_pending_ =
+        false;
+
+    const auto* servers =
+        std::get_if<std::vector<
+            catro::platform::windows::
+                DirectoryServer>>(&result);
+    if (servers == nullptr) {
+        co_return;
+    }
+
+    lifetime->directory_servers_ = *servers;
+    auto active =
+        std::ranges::find(
+            lifetime->directory_servers_,
+            active_id,
+            &catro::platform::windows::
+                DirectoryServer::id);
+    if (active !=
+        lifetime->directory_servers_.end()) {
+        lifetime->active_directory_server_ =
+            *active;
+    } else if (lifetime->local_state_) {
+        const auto personal_id =
+            catro::community::to_hex(
+                lifetime->local_state_->
+                    personal_server.id);
+        const auto personal =
             std::ranges::find(
-                lifetime->
-                    directory_servers_,
-                server.id,
+                lifetime->directory_servers_,
+                personal_id,
                 &catro::platform::windows::
                     DirectoryServer::id);
-        if (found ==
-            lifetime->
-                directory_servers_
-                    .end()) {
-            lifetime->
-                directory_servers_
-                .push_back(server);
+        if (personal !=
+            lifetime->directory_servers_.end()) {
+            lifetime->active_directory_server_ =
+                *personal;
         } else {
-            *found = server;
+            lifetime->active_directory_server_.reset();
         }
-        lifetime->
-            active_directory_server_ =
-            server;
-        lifetime->
-            JoinServerButton()
-            .IsEnabled(true);
-        lifetime->
-            RefreshDirectoryRail();
-        lifetime->
-            ApplyDirectoryServerToPage();
-        lifetime->Activate(
-            catro::app::
-                AppDestination::server);
+    }
 
+    lifetime->RefreshDirectoryRail();
+    lifetime->ApplyDirectoryServerToPage();
+    if (lifetime->shell_state_.destination() ==
+            catro::app::AppDestination::server &&
+        lifetime->active_directory_server_) {
+        lifetime->TitleContext().Text(
+            to_hstring(
+                lifetime->active_directory_server_->
+                    name));
+    }
 }
 
 void MainWindow::RefreshDirectoryRail() {
