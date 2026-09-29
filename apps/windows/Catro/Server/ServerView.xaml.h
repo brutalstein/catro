@@ -49,6 +49,8 @@ private:
     void StopVoice();
     void UpdateVoiceUi();
     winrt::fire_and_forget BeginScreenShare();
+    winrt::Windows::Foundation::IAsyncOperation<bool>
+    ClaimScreenOwnership();
     void StopScreenShare();
     void UpdateScreenShareUi();
     void OpenStreamWindow(bool fullscreen);
@@ -71,6 +73,7 @@ private:
         directory_server_;
 
     CatroRoomRuntimeHandle room_runtime_ = nullptr;
+    std::string room_peer_id_;
     CatroVoiceRuntimeHandle voice_runtime_ = nullptr;
     Microsoft::UI::Dispatching::DispatcherQueueTimer voice_timer_{nullptr};
     std::unique_ptr<catro::screen::WindowsScreenShareRuntime> screen_runtime_;

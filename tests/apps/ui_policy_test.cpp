@@ -55,3 +55,17 @@ TEST_CASE("product shell palette does not regress to a blue accent") {
     CHECK(app.find("#0067C0") == std::string::npos);
     CHECK(app.find("#60CDFF") == std::string::npos);
 }
+
+TEST_CASE("room screen sharing coordinates ownership with signaling") {
+    const auto source =
+        read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) /
+             "Server/ServerView.xaml.cpp");
+
+    CHECK(source.find(".max_remote_peers") != std::string::npos);
+    CHECK(source.find("catro_room_runtime_claim_screen") != std::string::npos);
+    CHECK(source.find("catro_room_runtime_release_screen") != std::string::npos);
+    CHECK(source.find("std::chrono::milliseconds{50}") != std::string::npos);
+    CHECK(source.find("std::chrono::seconds{3}") != std::string::npos);
+    CHECK(source.find("Another participant is sharing") != std::string::npos);
+    CHECK(source.find("Screen ownership request timed out") != std::string::npos);
+}

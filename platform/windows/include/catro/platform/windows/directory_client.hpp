@@ -56,6 +56,7 @@ struct RtcProvisioning {
     std::string peer_id;
     std::string signaling_url;
     std::vector<std::string> ice_servers;
+    std::size_t max_room_peers = 0;
     bool allow_insecure_signaling = false;
     bool allow_no_turn = false;
 };

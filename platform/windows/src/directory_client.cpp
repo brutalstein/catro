@@ -1206,6 +1206,9 @@ RtcProvisioningResult request_rtc_provisioning(
         provisioning.ice_servers =
             json.at("ice_servers")
                 .get<std::vector<std::string>>();
+        provisioning.max_room_peers =
+            json.at("max_room_peers")
+                .get<std::size_t>();
         provisioning.allow_insecure_signaling =
             json.value(
                 "allow_insecure_signaling",
@@ -1219,7 +1222,9 @@ RtcProvisioningResult request_rtc_provisioning(
             provisioning.channel_id.empty() ||
             provisioning.peer_id.empty() ||
             provisioning.signaling_url.empty() ||
-            provisioning.ice_servers.empty()) {
+            provisioning.ice_servers.empty() ||
+            provisioning.max_room_peers < 2 ||
+            provisioning.max_room_peers > 5) {
             return error(
                 DirectoryErrorCode::malformed_response,
                 "RTC provisioning response is incomplete");

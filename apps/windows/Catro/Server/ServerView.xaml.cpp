@@ -694,6 +694,7 @@ void ServerView::StartVoice(
         environment("CATRO_VOICE_OUTPUT");
 
     room_mode_active_ = false;
+    room_peer_id_.clear();
     if (room_runtime_ != nullptr) {
         catro_room_runtime_stop(
             room_runtime_);
@@ -706,7 +707,9 @@ void ServerView::StartVoice(
             provisioning->channel_id.empty() ||
             provisioning->peer_id.empty() ||
             provisioning->signaling_url.empty() ||
-            provisioning->ice_servers.empty()) {
+            provisioning->ice_servers.empty() ||
+            provisioning->max_room_peers < 2 ||
+            provisioning->max_room_peers > 5) {
             VoiceStateText().Text(
                 L"RTC provisioning is incomplete");
             controls::ToolTipService::
@@ -753,6 +756,10 @@ void ServerView::StartVoice(
                     ice_urls.data(),
                 .ice_server_count =
                     ice_urls.size(),
+                .max_remote_peers =
+                    static_cast<std::uint32_t>(
+                        provisioning->
+                            max_room_peers - 1),
                 .allow_insecure_signaling =
                     provisioning->
                             allow_insecure_signaling
@@ -785,6 +792,8 @@ void ServerView::StartVoice(
             UpdateVoiceUi();
             return;
         }
+        room_peer_id_ =
+            provisioning->peer_id;
         room_mode_active_ = true;
     }
 
@@ -868,6 +877,7 @@ void ServerView::StartVoice(
         catro_room_runtime_stop(
             room_runtime_);
         room_mode_active_ = false;
+        room_peer_id_.clear();
     }
 
     UpdateVoiceUi();
@@ -895,6 +905,7 @@ void ServerView::StopVoice() {
         catro_room_runtime_stop(room_runtime_);
     }
     room_mode_active_ = false;
+    room_peer_id_.clear();
     muted_ = false;
     deafened_ = false;
     if (voice_timer_) {
@@ -932,6 +943,11 @@ void ServerView::UpdateVoiceUi() {
     const bool joined =
         snapshot.state == CATRO_VOICE_JOINED &&
         room_ready;
+    const bool another_participant_sharing =
+        room_mode_active_ &&
+        room.screen_owner[0] != '\0' &&
+        std::string_view{room.screen_owner} !=
+            room_peer_id_;
 
     bool share_active = false;
     if (screen_runtime_) {
@@ -941,7 +957,9 @@ void ServerView::UpdateVoiceUi() {
             share.state == catro::screen::ScreenShareState::sharing;
     }
     const bool can_share =
-        share_active || (joined && !share_dialog_open_);
+        share_active ||
+        (joined && !share_dialog_open_ &&
+         !another_participant_sharing);
     ShareScreenButton().IsEnabled(can_share);
     ShareScreenIconButton().IsEnabled(can_share);
 
@@ -1027,9 +1045,84 @@ void ServerView::UpdateVoiceUi() {
     }
 }
 
+winrt::Windows::Foundation::IAsyncOperation<bool>
+ServerView::ClaimScreenOwnership() {
+    auto lifetime = get_strong();
+    if (!room_mode_active_) {
+        co_return true;
+    }
+    if (room_runtime_ == nullptr ||
+        room_peer_id_.empty()) {
+        VoiceStateText().Text(
+            L"Screen ownership request failed");
+        co_return false;
+    }
+
+    const auto peer_id = room_peer_id_;
+    auto room =
+        catro_room_runtime_snapshot(
+            room_runtime_);
+    if (room.screen_owner[0] != '\0' &&
+        std::string_view{room.screen_owner} !=
+            peer_id) {
+        VoiceStateText().Text(
+            L"Another participant is sharing");
+        co_return false;
+    }
+
+    if (catro_room_runtime_claim_screen(
+            room_runtime_) != 0) {
+        VoiceStateText().Text(
+            L"Screen ownership request failed");
+        co_return false;
+    }
+    if (std::string_view{room.screen_owner} ==
+        peer_id) {
+        co_return true;
+    }
+
+    auto ui_thread =
+        winrt::apartment_context{};
+    const auto deadline =
+        std::chrono::steady_clock::now() +
+        std::chrono::seconds{3};
+
+    while (std::chrono::steady_clock::now() <
+           deadline) {
+        co_await winrt::resume_after(
+            std::chrono::milliseconds{50});
+        room = catro_room_runtime_snapshot(
+            room_runtime_);
+
+        if (std::string_view{room.screen_owner} ==
+            peer_id) {
+            co_await ui_thread;
+            co_return true;
+        }
+        if (room.screen_owner[0] != '\0') {
+            co_await ui_thread;
+            if (room_mode_active_ &&
+                room_peer_id_ == peer_id) {
+                VoiceStateText().Text(
+                    L"Another participant is sharing");
+            }
+            co_return false;
+        }
+    }
+
+    co_await ui_thread;
+    if (room_mode_active_ &&
+        room_peer_id_ == peer_id) {
+        VoiceStateText().Text(
+            L"Screen ownership request timed out");
+    }
+    co_return false;
+}
+
 winrt::fire_and_forget ServerView::BeginScreenShare() {
     [[maybe_unused]] auto lifetime = get_strong();
     share_dialog_open_ = true;
+    bool ownership_claimed = false;
     UpdateVoiceUi();
 
     try {
@@ -1349,8 +1442,21 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
             config.ssrc = 1;
         }
 
+        ownership_claimed =
+            co_await ClaimScreenOwnership();
+        if (!ownership_claimed) {
+            UpdateScreenShareUi();
+            co_return;
+        }
+
         if (const auto failure =
                 screen_runtime_->start(config)) {
+            if (room_mode_active_ &&
+                room_runtime_ != nullptr) {
+                catro_room_runtime_release_screen(
+                    room_runtime_);
+            }
+            ownership_claimed = false;
             VoiceStateText().Text(
                 to_hstring(failure->message));
             UpdateVoiceUi();
@@ -1363,12 +1469,24 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         UpdateScreenShareUi();
         UpdateVoiceUi();
     } catch (const winrt::hresult_error& failure) {
+        if (ownership_claimed &&
+            room_mode_active_ &&
+            room_runtime_ != nullptr) {
+            catro_room_runtime_release_screen(
+                room_runtime_);
+        }
         share_dialog_open_ = false;
         std::wstring message = L"Screen share UI error: ";
         message += failure.message().c_str();
         VoiceStateText().Text(hstring{message});
         UpdateVoiceUi();
     } catch (...) {
+        if (ownership_claimed &&
+            room_mode_active_ &&
+            room_runtime_ != nullptr) {
+            catro_room_runtime_release_screen(
+                room_runtime_);
+        }
         share_dialog_open_ = false;
         VoiceStateText().Text(L"Screen share UI error");
         UpdateVoiceUi();
@@ -1743,6 +1861,11 @@ void ServerView::DetachRemoteSwapChain() noexcept {
 }
 
 void ServerView::StopScreenShare() {
+    if (room_mode_active_ &&
+        room_runtime_ != nullptr) {
+        catro_room_runtime_release_screen(
+            room_runtime_);
+    }
     if (screen_runtime_) {
         screen_runtime_->stop_sharing();
     }
@@ -1777,6 +1900,32 @@ void ServerView::UpdateScreenShareUi() {
     const bool remote_available = snapshot.remote_available;
     const bool remote_viewing = snapshot.remote_viewing;
     const bool remote_active = snapshot.remote_active;
+    const auto room =
+        room_mode_active_ &&
+                room_runtime_ != nullptr
+            ? catro_room_runtime_snapshot(
+                  room_runtime_)
+            : CatroRoomRuntimeSnapshot{};
+    const bool another_participant_sharing =
+        room_mode_active_ &&
+        room.screen_owner[0] != '\0' &&
+        std::string_view{room.screen_owner} !=
+            room_peer_id_;
+    const auto voice =
+        voice_runtime_ != nullptr
+            ? catro_voice_runtime_snapshot(
+                  voice_runtime_)
+            : CatroVoiceRuntimeSnapshot{};
+    const bool joined =
+        voice.state == CATRO_VOICE_JOINED &&
+        (!room_mode_active_ ||
+         room.state == CATRO_ROOM_JOINED);
+    const bool can_share =
+        local_active ||
+        (joined && !share_dialog_open_ &&
+         !another_participant_sharing);
+    ShareScreenButton().IsEnabled(can_share);
+    ShareScreenIconButton().IsEnabled(can_share);
 
     if (stream_window_ && !remote_viewing) {
         CloseStreamWindow();
@@ -1809,10 +1958,20 @@ void ServerView::UpdateScreenShareUi() {
     ShareScreenButton().Content(
         box_value(local_active ? hstring{L"Stop sharing"}
                                : hstring{L"Share screen"}));
+    const auto share_tip =
+        another_participant_sharing &&
+                !local_active
+            ? hstring{
+                  L"Another participant is sharing"}
+            : local_active
+                  ? hstring{L"Stop sharing"}
+                  : hstring{L"Share screen"};
+    controls::ToolTipService::SetToolTip(
+        ShareScreenButton(),
+        box_value(share_tip));
     controls::ToolTipService::SetToolTip(
         ShareScreenIconButton(),
-        box_value(local_active ? hstring{L"Stop sharing"}
-                               : hstring{L"Share screen"}));
+        box_value(share_tip));
 
     VoiceIdentityPanel().Visibility(
         local_active || remote_available || remote_viewing
