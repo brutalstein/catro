@@ -30,6 +30,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal"
                                 Spacing="7"
@@ -45,8 +46,41 @@
                                   Foreground="{ThemeResource CatroAccentBrush}"
                                   ToolTipService.ToolTip="Owner" />
                     </StackPanel>
-                    <Button x:Name="InviteButton"
+                    <Button x:Name="AccessButton"
                             Grid.Column="1"
+                            Width="34"
+                            Height="30"
+                            Padding="0"
+                            Margin="0,0,2,0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Visibility="Collapsed"
+                            IsEnabled="False"
+                            Click="OnAccess"
+                            ToolTipService.ToolTip="Server access"
+                            AutomationProperties.Name="Server access">
+                        <Grid>
+                            <FontIcon Glyph="&#xE77B;"
+                                      FontSize="13" />
+                            <Border HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    MinWidth="13"
+                                    Height="13"
+                                    CornerRadius="7"
+                                    Padding="2,0"
+                                    Background="{ThemeResource CatroAccentSoftBrush}">
+                                <TextBlock x:Name="AccessRequestCount"
+                                           Text="0"
+                                           FontSize="8"
+                                           FontWeight="SemiBold"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Foreground="{ThemeResource CatroAccentBrush}" />
+                            </Border>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="InviteButton"
+                            Grid.Column="2"
                             Width="30"
                             Height="30"
                             Padding="0"
@@ -54,7 +88,7 @@
                             BorderThickness="0"
                             IsEnabled="False"
                             Click="OnInvite"
-                            ToolTipService.ToolTip="Invite"
+                            ToolTipService.ToolTip="Direct invite"
                             AutomationProperties.Name="Invite">
                         <FontIcon Glyph="&#xE8FA;" FontSize="14" />
                     </Button>

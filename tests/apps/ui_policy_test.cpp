@@ -104,3 +104,45 @@ TEST_CASE("member rail is virtualized and refreshes from bounded snapshots") {
     CHECK(source.find("member_generation_") != std::string::npos);
     CHECK(source.find("list_directory_members") != std::string::npos);
 }
+
+
+TEST_CASE("Server Code join flow stays bounded and preserves direct invites") {
+    const auto xaml =
+        read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) /
+             "MainWindow.xaml");
+    const auto source =
+        read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) /
+             "MainWindow.xaml.cpp");
+
+    CHECK(xaml.find("ToolTipService.ToolTip=\"Add server\"") != std::string::npos);
+    CHECK(source.find("Find by Server Code") != std::string::npos);
+    CHECK(source.find("Use Invite Code") != std::string::npos);
+    CHECK(source.find("lookup_directory_server") != std::string::npos);
+    CHECK(source.find("create_directory_join_request") != std::string::npos);
+    CHECK(source.find("accept_directory_invite") != std::string::npos);
+    CHECK(source.find("join_request_timer_.Interval(std::chrono::seconds{5})") !=
+          std::string::npos);
+    CHECK(source.find("join_request_refresh_pending_") != std::string::npos);
+    CHECK(source.find("list_outgoing_directory_join_requests") != std::string::npos);
+    CHECK(source.find("BeginDirectoryServerRefresh") != std::string::npos);
+}
+
+TEST_CASE("owner access requests stay virtualized authorized and bounded") {
+    const auto xaml =
+        read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) /
+             "Server/ServerView.xaml");
+    const auto source =
+        read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) /
+             "Server/ServerView.xaml.cpp");
+
+    CHECK(xaml.find("x:Name=\"AccessButton\"") != std::string::npos);
+    CHECK(xaml.find("Visibility=\"Collapsed\"") != std::string::npos);
+    CHECK(source.find("access_timer_.Interval(5s)") != std::string::npos);
+    CHECK(source.find("access_refresh_pending_") != std::string::npos);
+    CHECK(source.find("access_generation_") != std::string::npos);
+    CHECK(source.find("controls::ListView request_list") != std::string::npos);
+    CHECK(source.find("list_pending_directory_join_requests") != std::string::npos);
+    CHECK(source.find("decide_directory_join_request") != std::string::npos);
+    CHECK(source.find("directory_server_->role != \"owner\"") != std::string::npos);
+    CHECK(source.find("directory_server_->public_code.empty()") != std::string::npos);
+}

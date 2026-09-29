@@ -241,6 +241,9 @@ ServerView::~ServerView() {
     if (member_timer_) {
         member_timer_.Stop();
     }
+    if (access_timer_) {
+        access_timer_.Stop();
+    }
     if (voice_runtime_ != nullptr) {
         catro_voice_runtime_destroy(voice_runtime_);
         voice_runtime_ = nullptr;
@@ -277,6 +280,11 @@ void ServerView::InitializeComponent() {
     member_timer_.Tick(
         [this](auto&&, auto&&) { BeginMemberRefresh(); });
 
+    access_timer_ = DispatcherQueue().CreateTimer();
+    access_timer_.Interval(5s);
+    access_timer_.Tick(
+        [this](auto&&, auto&&) { BeginJoinRequestRefresh(); });
+
     Loaded([this](auto&&, auto&&) {
         page_loaded_ = true;
         if (voice_runtime_ != nullptr) {
@@ -301,8 +309,13 @@ void ServerView::InitializeComponent() {
             !directory_access_token_.empty() &&
             directory_server_) {
             member_timer_.Start();
+            if (directory_server_->role == "owner" &&
+                access_timer_) {
+                access_timer_.Start();
+            }
         }
         BeginMemberRefresh();
+        BeginJoinRequestRefresh();
         BeginMessageRefresh();
     });
     Unloaded([this](auto&&, auto&&) {
@@ -321,6 +334,9 @@ void ServerView::InitializeComponent() {
         }
         if (member_timer_) {
             member_timer_.Stop();
+        }
+        if (access_timer_) {
+            access_timer_.Stop();
         }
         if (screen_runtime_) {
             screen_runtime_->set_local_preview_enabled(false);
@@ -411,6 +427,12 @@ void ServerView::OnInvite(
     IInspectable const&,
     xaml::RoutedEventArgs const&) {
     BeginInvite();
+}
+
+void ServerView::OnAccess(
+    IInspectable const&,
+    xaml::RoutedEventArgs const&) {
+    ShowAccessDialog();
 }
 
 void ServerView::OnMuteVoice(IInspectable const&, xaml::RoutedEventArgs const&) {
@@ -611,6 +633,317 @@ ServerView::BeginMemberRefresh() {
                 DirectoryMember>>(
                     std::move(result));
     lifetime->ApplyMemberRoster(members);
+}
+
+void ServerView::ResetAccessRequests() {
+    if (++access_generation_ == 0) {
+        access_generation_ = 1;
+    }
+    pending_join_requests_.clear();
+    AccessRequestCount().Text(L"0");
+}
+
+void ServerView::UpdateAccessUi() {
+    const bool owner =
+        directory_server_ &&
+        directory_server_->role == "owner" &&
+        !directory_server_->public_code.empty();
+
+    AccessButton().Visibility(
+        owner
+            ? xaml::Visibility::Visible
+            : xaml::Visibility::Collapsed);
+    AccessButton().IsEnabled(
+        owner &&
+        !access_decision_pending_ &&
+        !access_dialog_open_);
+
+    AccessRequestCount().Text(
+        hstring{
+            std::to_wstring(
+                pending_join_requests_.size())});
+
+    if (owner) {
+        std::wstring tooltip =
+            L"Server access · ";
+        tooltip += std::to_wstring(
+            pending_join_requests_.size());
+        tooltip += L" pending";
+        controls::ToolTipService::SetToolTip(
+            AccessButton(),
+            box_value(hstring{tooltip}));
+    }
+
+    if (access_timer_) {
+        if (page_loaded_ && owner) {
+            access_timer_.Start();
+        } else {
+            access_timer_.Stop();
+        }
+    }
+}
+
+winrt::fire_and_forget
+ServerView::BeginJoinRequestRefresh() {
+    auto lifetime = get_strong();
+    if (!page_loaded_ ||
+        access_refresh_pending_ ||
+        !directory_service_ ||
+        directory_access_token_.empty() ||
+        !directory_server_ ||
+        directory_server_->role != "owner") {
+        co_return;
+    }
+
+    const auto generation = access_generation_;
+    access_refresh_pending_ = true;
+    access_refresh_generation_ = generation;
+
+    const auto service = *directory_service_;
+    const auto access_token =
+        directory_access_token_;
+    const auto server_id =
+        directory_server_->id;
+    winrt::apartment_context ui_thread;
+
+    co_await winrt::resume_background();
+    auto result =
+        catro::platform::windows::
+            list_pending_directory_join_requests(
+                service,
+                access_token,
+                server_id);
+    co_await ui_thread;
+
+    if (lifetime->access_refresh_generation_ ==
+            generation) {
+        lifetime->access_refresh_pending_ = false;
+    }
+
+    if (generation !=
+            lifetime->access_generation_ ||
+        !lifetime->directory_server_ ||
+        lifetime->directory_server_->id !=
+            server_id) {
+        if (!lifetime->access_refresh_pending_) {
+            lifetime->BeginJoinRequestRefresh();
+        }
+        co_return;
+    }
+
+    const auto* requests =
+        std::get_if<std::vector<
+            catro::platform::windows::
+                DirectoryJoinRequest>>(&result);
+    if (requests == nullptr) {
+        co_return;
+    }
+
+    lifetime->pending_join_requests_ =
+        *requests;
+    lifetime->UpdateAccessUi();
+}
+
+winrt::fire_and_forget
+ServerView::ShowAccessDialog() {
+    auto lifetime = get_strong();
+    if (access_dialog_open_ ||
+        !directory_server_ ||
+        directory_server_->role != "owner" ||
+        directory_server_->public_code.empty()) {
+        co_return;
+    }
+
+    access_dialog_open_ = true;
+    UpdateAccessUi();
+
+    const auto requests =
+        pending_join_requests_;
+    controls::ContentDialog dialog;
+    dialog.XamlRoot(
+        ServerLayout().XamlRoot());
+    dialog.Title(
+        box_value(hstring{L"Server access"}));
+    dialog.PrimaryButtonText(L"Approve");
+    dialog.SecondaryButtonText(L"Reject");
+    dialog.CloseButtonText(L"Close");
+    dialog.IsPrimaryButtonEnabled(
+        !requests.empty());
+    dialog.IsSecondaryButtonEnabled(
+        !requests.empty());
+
+    controls::StackPanel content;
+    content.Spacing(8);
+
+    controls::TextBlock label;
+    label.Text(
+        L"Share this Server Code when you want people to request access.");
+    label.TextWrapping(
+        xaml::TextWrapping::Wrap);
+    content.Children().Append(label);
+
+    controls::TextBox code_box;
+    code_box.Header(
+        box_value(hstring{L"Server Code"}));
+    code_box.Text(
+        to_hstring(
+            directory_server_->public_code));
+    code_box.IsReadOnly(true);
+    content.Children().Append(code_box);
+
+    controls::TextBlock queue_label;
+    std::wstring queue_text =
+        L"Pending requests — ";
+    queue_text += std::to_wstring(
+        requests.size());
+    queue_label.Text(
+        hstring{queue_text});
+    queue_label.FontWeight(
+        Windows::UI::Text::
+            FontWeight{600});
+    content.Children().Append(queue_label);
+
+    controls::ListView request_list;
+    request_list.Height(220);
+    request_list.SelectionMode(
+        controls::ListViewSelectionMode::Single);
+    for (const auto& request : requests) {
+        std::wstring row =
+            to_hstring(
+                request.requester_display_name)
+                .c_str();
+        const auto submitted =
+            message_time(
+                request.created_at * 1000);
+        if (!submitted.empty()) {
+            row += L"  ·  ";
+            row += submitted;
+        }
+        if (!request.message.empty()) {
+            row += L"\n";
+            row +=
+                to_hstring(
+                    request.message).c_str();
+        }
+        request_list.Items().Append(
+            box_value(hstring{row}));
+    }
+    if (!requests.empty()) {
+        request_list.SelectedIndex(0);
+    }
+    content.Children().Append(request_list);
+
+    if (requests.empty()) {
+        controls::TextBlock empty;
+        empty.Text(
+            L"No pending access requests.");
+        empty.Foreground(
+            xaml::Application::Current()
+                .Resources()
+                .Lookup(
+                    box_value(
+                        hstring{
+                            L"CatroTextTertiaryBrush"}))
+                .as<
+                    Microsoft::UI::Xaml::
+                        Media::Brush>());
+        content.Children().Append(empty);
+    }
+
+    dialog.Content(content);
+    const auto result =
+        co_await dialog.ShowAsync();
+
+    lifetime->access_dialog_open_ = false;
+    lifetime->UpdateAccessUi();
+
+    if (result !=
+            controls::ContentDialogResult::Primary &&
+        result !=
+            controls::ContentDialogResult::Secondary) {
+        co_return;
+    }
+
+    const auto selected =
+        request_list.SelectedIndex();
+    if (selected < 0 ||
+        static_cast<std::size_t>(selected) >=
+            requests.size()) {
+        co_return;
+    }
+
+    lifetime->BeginJoinRequestDecision(
+        requests[static_cast<std::size_t>(
+            selected)]
+            .id,
+        result ==
+            controls::ContentDialogResult::
+                Primary);
+}
+
+winrt::fire_and_forget
+ServerView::BeginJoinRequestDecision(
+    std::string request_id,
+    bool approve) {
+    auto lifetime = get_strong();
+    if (access_decision_pending_ ||
+        !directory_service_ ||
+        directory_access_token_.empty() ||
+        !directory_server_ ||
+        directory_server_->role != "owner") {
+        co_return;
+    }
+
+    const auto generation =
+        access_generation_;
+    const auto server_id =
+        directory_server_->id;
+    const auto service =
+        *directory_service_;
+    const auto access_token =
+        directory_access_token_;
+    access_decision_pending_ = true;
+    UpdateAccessUi();
+    winrt::apartment_context ui_thread;
+
+    co_await winrt::resume_background();
+    auto result =
+        catro::platform::windows::
+            decide_directory_join_request(
+                service,
+                access_token,
+                request_id,
+                approve);
+    co_await ui_thread;
+
+    lifetime->access_decision_pending_ =
+        false;
+    lifetime->UpdateAccessUi();
+
+    if (generation !=
+            lifetime->access_generation_ ||
+        !lifetime->directory_server_ ||
+        lifetime->directory_server_->id !=
+            server_id) {
+        co_return;
+    }
+
+    if (const auto* failure =
+            std::get_if<
+                catro::platform::windows::
+                    DirectoryError>(&result)) {
+        controls::ToolTipService::SetToolTip(
+            lifetime->AccessButton(),
+            box_value(
+                to_hstring(
+                    failure->message)));
+        co_return;
+    }
+
+    lifetime->BeginJoinRequestRefresh();
+    if (approve) {
+        lifetime->BeginMemberRefresh();
+    }
 }
 
 void ServerView::ResetMessages() {
@@ -1075,6 +1408,10 @@ void ServerView::SetDirectorySession(
         !directory_server_ ||
         directory_server_->id !=
             server.id;
+    const bool access_context_changed =
+        !directory_server_ ||
+        directory_server_->id !=
+            server.id;
     const bool message_context_changed =
         !directory_server_ ||
         directory_server_->id != server.id ||
@@ -1083,6 +1420,8 @@ void ServerView::SetDirectorySession(
     if (server_changed) {
         voice_join_pending_ = false;
         invite_pending_ = false;
+        access_decision_pending_ = false;
+        access_dialog_open_ = false;
     }
     if (server_changed &&
         voice_runtime_ != nullptr) {
@@ -1104,6 +1443,9 @@ void ServerView::SetDirectorySession(
     directory_server_ = server;
     if (member_context_changed) {
         ResetMembers();
+    }
+    if (access_context_changed) {
+        ResetAccessRequests();
     }
     if (message_context_changed) {
         ResetMessages();
@@ -1130,6 +1472,7 @@ void ServerView::SetDirectorySession(
         owner ? L"OWNER" : L"MEMBER");
     InviteButton().IsEnabled(
         owner && !invite_pending_);
+    UpdateAccessUi();
 
     ShowChannel(state_.channel_id());
     UpdateMessageUi();
@@ -1137,6 +1480,7 @@ void ServerView::SetDirectorySession(
         member_timer_.Start();
     }
     BeginMemberRefresh();
+    BeginJoinRequestRefresh();
     BeginMessageRefresh();
 }
 
