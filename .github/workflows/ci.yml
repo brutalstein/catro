@@ -12,7 +12,7 @@ permissions:
 concurrency:
   # Only the newest commit for a branch/PR is useful. Cancel obsolete matrix runs so hosted
   # Windows/macOS/sanitizer capacity is spent validating the current HEAD.
-  group: ci-v5-${{ github.workflow }}-${{ github.ref }}
+  group: ci-v6-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 # Hosted runners have no reliable GPU, encoder, or display; reports from them are collected as
