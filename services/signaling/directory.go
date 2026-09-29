@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	maxDirectoryBodyBytes = 32 * 1024
+	maxDirectoryBodyBytes  = 32 * 1024
 	maxDisplayNameBytes    = 64
 	maxServerNameBytes     = 80
 	defaultInviteTTL       = 7 * 24 * time.Hour
@@ -73,11 +73,12 @@ type directory struct {
 	secret []byte
 	state  directoryState
 
-	signalingURL             string
-	iceServers               []string
+	signalingURL           string
+	iceServers             []string
 	allowInsecureSignaling bool
 	allowNoTURN            bool
 	turnSecret             []byte
+	maxRoomPeers           int
 }
 
 type serverDescriptor struct {
@@ -95,6 +96,7 @@ func (d *directory) setRTCProvisioning(
 	allowInsecure bool,
 	allowNoTURN bool,
 	turnSecret []byte,
+	maxRoomPeers int,
 ) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -103,6 +105,7 @@ func (d *directory) setRTCProvisioning(
 	d.allowInsecureSignaling = allowInsecure
 	d.allowNoTURN = allowNoTURN
 	d.turnSecret = append([]byte(nil), turnSecret...)
+	d.maxRoomPeers = maxRoomPeers
 }
 
 func ephemeralICEServers(
@@ -397,7 +400,7 @@ func (d *directory) handleRegister(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		writeAPIJSON(w, http.StatusOK, map[string]string{
-			"user_id": request.UserID,
+			"user_id":      request.UserID,
 			"access_token": bearerToken(request.UserID, request.Credential),
 		})
 		return
@@ -417,7 +420,7 @@ func (d *directory) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeAPIJSON(w, http.StatusCreated, map[string]string{
-		"user_id": request.UserID,
+		"user_id":      request.UserID,
 		"access_token": bearerToken(request.UserID, request.Credential),
 	})
 }
@@ -475,9 +478,9 @@ func (d *directory) handleServerSync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	server := directoryServer{
-		ID: request.ServerID,
-		OwnerID: user.ID,
-		Name: request.Name,
+		ID:             request.ServerID,
+		OwnerID:        user.ID,
+		Name:           request.Name,
 		VoiceChannelID: request.VoiceChannelID,
 		Members: map[string]directoryMember{
 			user.ID: {UserID: user.ID, Role: "owner"},
@@ -498,12 +501,12 @@ func descriptorFor(server directoryServer, userID string) serverDescriptor {
 		role = member.Role
 	}
 	return serverDescriptor{
-		ID: server.ID,
-		OwnerID: server.OwnerID,
-		Name: server.Name,
+		ID:             server.ID,
+		OwnerID:        server.OwnerID,
+		Name:           server.Name,
 		VoiceChannelID: server.VoiceChannelID,
-		Role: role,
-		MemberCount: len(server.Members),
+		Role:           role,
+		MemberCount:    len(server.Members),
 	}
 }
 
@@ -597,10 +600,10 @@ func (d *directory) handleInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	invite := directoryInvite{
-		Code: code,
-		ServerID: server.ID,
+		Code:      code,
+		ServerID:  server.ID,
 		CreatorID: user.ID,
-		Expires: time.Now().Add(ttl).Unix(),
+		Expires:   time.Now().Add(ttl).Unix(),
 	}
 	d.state.Invites[code] = invite
 	if err := d.persistLocked(); err != nil {
@@ -609,8 +612,8 @@ func (d *directory) handleInvites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeAPIJSON(w, http.StatusCreated, map[string]any{
-		"code": code,
-		"server": descriptorFor(server, user.ID),
+		"code":    code,
+		"server":  descriptorFor(server, user.ID),
 		"expires": invite.Expires,
 	})
 }
@@ -709,6 +712,7 @@ func (d *directory) handleRTCToken(w http.ResponseWriter, r *http.Request) {
 	allowInsecure := d.allowInsecureSignaling
 	allowNoTURN := d.allowNoTURN
 	turnSecret := append([]byte(nil), d.turnSecret...)
+	maxRoomPeers := d.maxRoomPeers
 	d.mu.Unlock()
 	if !exists || !member || server.VoiceChannelID != request.ChannelID {
 		writeAPIError(w, http.StatusForbidden, "room membership required")
@@ -727,10 +731,10 @@ func (d *directory) handleRTCToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token, err := mintToken(d.secret, claims{
-		ServerID: server.ID,
+		ServerID:  server.ID,
 		ChannelID: server.VoiceChannelID,
-		PeerID: user.ID,
-		Expires: expires,
+		PeerID:    user.ID,
+		Expires:   expires,
 	})
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, "token mint failed")
@@ -741,14 +745,15 @@ func (d *directory) handleRTCToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, map[string]any{
-		"token": token,
-		"expires": expires,
-		"server_id": server.ID,
-		"channel_id": server.VoiceChannelID,
-		"peer_id": user.ID,
-		"signaling_url": signalingURL,
-		"ice_servers": iceServers,
+		"token":                    token,
+		"expires":                  expires,
+		"server_id":                server.ID,
+		"channel_id":               server.VoiceChannelID,
+		"peer_id":                  user.ID,
+		"signaling_url":            signalingURL,
+		"ice_servers":              iceServers,
 		"allow_insecure_signaling": allowInsecure,
-		"allow_no_turn": allowNoTURN,
+		"allow_no_turn":            allowNoTURN,
+		"max_room_peers":           maxRoomPeers,
 	})
 }

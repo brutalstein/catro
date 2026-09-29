@@ -19,10 +19,10 @@ import (
 func TestTokenRoundTripAndClaimBinding(t *testing.T) {
 	secret := []byte(strings.Repeat("s", 32))
 	want := claims{
-		ServerID: "server-1",
+		ServerID:  "server-1",
 		ChannelID: "voice-1",
-		PeerID: "user-1",
-		Expires: time.Now().Add(time.Hour).Unix(),
+		PeerID:    "user-1",
+		Expires:   time.Now().Add(time.Hour).Unix(),
 	}
 	token, err := mintToken(secret, want)
 	if err != nil {
@@ -42,10 +42,10 @@ func TestTokenRoundTripAndClaimBinding(t *testing.T) {
 func TestTamperedAndExpiredTokensAreRejected(t *testing.T) {
 	secret := []byte(strings.Repeat("x", 32))
 	value := claims{
-		ServerID: "server-1",
+		ServerID:  "server-1",
 		ChannelID: "voice-1",
-		PeerID: "user-1",
-		Expires: time.Now().Add(time.Hour).Unix(),
+		PeerID:    "user-1",
+		Expires:   time.Now().Add(time.Hour).Unix(),
 	}
 	token, err := mintToken(secret, value)
 	if err != nil {
@@ -76,7 +76,6 @@ func TestIDsAreBoundedAndURLSafe(t *testing.T) {
 	}
 }
 
-
 func testCredential(fill byte) string {
 	return base64.RawURLEncoding.EncodeToString(
 		bytes.Repeat([]byte{fill}, 32))
@@ -90,9 +89,9 @@ func registerTestUser(
 ) string {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{
-		"user_id": userID,
+		"user_id":      userID,
 		"display_name": userID,
-		"credential": credential,
+		"credential":   credential,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +135,110 @@ func authenticatedRequest(
 	return request
 }
 
+func TestRoomCapacityRejectsSixthPeer(t *testing.T) {
+	rm := &room{
+		key:      "server-1/voice-1",
+		peers:    make(map[string]*client),
+		maxPeers: 5,
+	}
+	for index := 1; index <= 5; index++ {
+		id := fmt.Sprintf("peer-%d", index)
+		if _, err := rm.add(&client{id: id, room: rm}); err != nil {
+			t.Fatalf("add %s: %v", id, err)
+		}
+	}
+
+	if _, err := rm.add(&client{id: "peer-6", room: rm}); err == nil ||
+		err.Error() != "room capacity reached" {
+		t.Fatalf("sixth peer error = %v", err)
+	}
+}
+
+func TestRoomCapacitySlotReturnsAfterDisconnect(t *testing.T) {
+	rm := &room{
+		key:      "server-1/voice-1",
+		peers:    make(map[string]*client),
+		maxPeers: 5,
+	}
+	for index := 1; index <= 5; index++ {
+		id := fmt.Sprintf("peer-%d", index)
+		if _, err := rm.add(&client{id: id, room: rm}); err != nil {
+			t.Fatalf("add %s: %v", id, err)
+		}
+	}
+
+	rm.remove("peer-3")
+	if _, err := rm.add(&client{id: "peer-6", room: rm}); err != nil {
+		t.Fatalf("replacement peer rejected: %v", err)
+	}
+}
+
+func TestRTCProvisioningIncludesRoomCapacity(t *testing.T) {
+	secret := []byte(strings.Repeat("c", 32))
+	d, err := openDirectory(
+		filepath.Join(t.TempDir(), "directory.json"),
+		secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.setRTCProvisioning(
+		"wss://rtc.example.test/v1/rtc",
+		[]string{
+			"stun:stun.example.test:3478",
+			"turn:turn.example.test:3478?transport=udp",
+		},
+		false,
+		false,
+		[]byte(strings.Repeat("t", 32)),
+		5)
+
+	token := registerTestUser(
+		t, d, "member-1", testCredential(0x61))
+	d.mu.Lock()
+	d.state.Servers["server-1"] = directoryServer{
+		ID:             "server-1",
+		OwnerID:        "member-1",
+		Name:           "Test Server",
+		VoiceChannelID: "voice-1",
+		Members: map[string]directoryMember{
+			"member-1": {
+				UserID: "member-1",
+				Role:   "owner",
+			},
+		},
+	}
+	d.mu.Unlock()
+
+	request := authenticatedRequest(
+		http.MethodPost,
+		"/v1/rtc-token",
+		token,
+		map[string]any{
+			"server_id":  "server-1",
+			"channel_id": "voice-1",
+		})
+	response := httptest.NewRecorder()
+	d.handleRTCToken(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("rtc token: %d %s",
+			response.Code, response.Body.String())
+	}
+
+	var provisioning struct {
+		MaxRoomPeers int `json:"max_room_peers"`
+	}
+	if err := json.Unmarshal(
+		response.Body.Bytes(),
+		&provisioning); err != nil {
+		t.Fatal(err)
+	}
+	if provisioning.MaxRoomPeers != 5 {
+		t.Fatalf(
+			"max_room_peers = %d, want 5",
+			provisioning.MaxRoomPeers)
+	}
+}
+
 func TestDirectoryInviteMembershipAndRTCTokenFlow(t *testing.T) {
 	secret := []byte(strings.Repeat("d", 32))
 	d, err := openDirectory(
@@ -152,7 +255,8 @@ func TestDirectoryInviteMembershipAndRTCTokenFlow(t *testing.T) {
 		},
 		false,
 		false,
-		[]byte(strings.Repeat("t", 32)))
+		[]byte(strings.Repeat("t", 32)),
+		5)
 
 	ownerToken := registerTestUser(
 		t, d, "owner-1", testCredential(0x11))
@@ -166,8 +270,8 @@ func TestDirectoryInviteMembershipAndRTCTokenFlow(t *testing.T) {
 		"/v1/servers/sync",
 		ownerToken,
 		map[string]any{
-			"server_id": "server-1",
-			"name": "Test Server",
+			"server_id":        "server-1",
+			"name":             "Test Server",
 			"voice_channel_id": "voice-1",
 		})
 	serverResponse := httptest.NewRecorder()
@@ -232,7 +336,7 @@ func TestDirectoryInviteMembershipAndRTCTokenFlow(t *testing.T) {
 		"/v1/rtc-token",
 		memberToken,
 		map[string]any{
-			"server_id": "server-1",
+			"server_id":  "server-1",
 			"channel_id": "voice-1",
 		})
 	memberRTCResponse := httptest.NewRecorder()
@@ -251,9 +355,9 @@ func TestDirectoryInviteMembershipAndRTCTokenFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := verifyToken(secret, rtc.Token, claims{
-		ServerID: "server-1",
+		ServerID:  "server-1",
 		ChannelID: "voice-1",
-		PeerID: "member-1",
+		PeerID:    "member-1",
 	}); err != nil {
 		t.Fatalf("issued rtc token rejected: %v", err)
 	}
@@ -263,7 +367,7 @@ func TestDirectoryInviteMembershipAndRTCTokenFlow(t *testing.T) {
 		"/v1/rtc-token",
 		outsiderToken,
 		map[string]any{
-			"server_id": "server-1",
+			"server_id":  "server-1",
 			"channel_id": "voice-1",
 		})
 	outsiderRTCResponse := httptest.NewRecorder()
@@ -306,9 +410,9 @@ func TestDirectoryRegistrationIsCredentialBoundAndPersistent(t *testing.T) {
 	}
 
 	conflictBody, _ := json.Marshal(map[string]any{
-		"user_id": "user-1",
+		"user_id":      "user-1",
 		"display_name": "user-1",
-		"credential": testCredential(0x55),
+		"credential":   testCredential(0x55),
 	})
 	conflictRequest := httptest.NewRequest(
 		http.MethodPost,
@@ -321,7 +425,6 @@ func TestDirectoryRegistrationIsCredentialBoundAndPersistent(t *testing.T) {
 			conflictResponse.Code)
 	}
 }
-
 
 func TestEphemeralTurnCredentialsAreBoundAndShortLived(t *testing.T) {
 	secret := []byte(strings.Repeat("q", 32))

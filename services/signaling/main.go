@@ -24,16 +24,17 @@ import (
 )
 
 const (
-	maxSignalBytes      = 64 * 1024
-	maxCandidateBytes   = 4096
-	maxIDBytes          = 128
-	defaultMaxRoom      = 16
-	writeTimeout        = 5 * time.Second
-	readTimeout         = 45 * time.Second
-	pingInterval        = 20 * time.Second
-	joinTimeout         = 8 * time.Second
-	signalWindow        = 10 * time.Second
-	maxSignalsPerWindow = 256
+	maxSignalBytes        = 64 * 1024
+	maxCandidateBytes     = 4096
+	maxIDBytes            = 128
+	defaultMaxRoom        = 5
+	maximumProductionRoom = 5
+	writeTimeout          = 5 * time.Second
+	readTimeout           = 45 * time.Second
+	pingInterval          = 20 * time.Second
+	joinTimeout           = 8 * time.Second
+	signalWindow          = 10 * time.Second
+	maxSignalsPerWindow   = 256
 )
 
 type claims struct {
@@ -127,8 +128,8 @@ func main() {
 	if len(*secret) < 32 {
 		log.Fatal("CATRO signaling secret must be at least 32 bytes")
 	}
-	if *maxRoom < 2 || *maxRoom > 64 {
-		log.Fatal("max-room-peers must be between 2 and 64")
+	if *maxRoom < 2 || *maxRoom > maximumProductionRoom {
+		log.Fatal("max-room-peers must be between 2 and 5")
 	}
 
 	if *mint {
@@ -209,7 +210,8 @@ func main() {
 		iceServers,
 		*allowHTTP,
 		*allowNoTURN,
-		[]byte(*turnSecret))
+		[]byte(*turnSecret),
+		*maxRoom)
 
 	s := &service{
 		secret: []byte(*secret), maxRoomPeers: *maxRoom,
@@ -230,8 +232,8 @@ func main() {
 	httpServer := &http.Server{
 		Addr: *addr, Handler: mux,
 		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout: 60 * time.Second,
-		MaxHeaderBytes: 16 * 1024,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    16 * 1024,
 	}
 
 	errs := make(chan error, 1)
