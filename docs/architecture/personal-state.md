@@ -67,6 +67,8 @@ The Windows server shell now reads the persisted personal-server state at startu
 server name, local display name, member count, and default channel names into WinUI. If local state
 cannot be loaded safely, Catro does not fabricate a replacement identity.
 
-The next product slice should put a real authenticated service behind the existing invite/join
-connection points. That service must treat client ids and roles as untrusted input and authorize
-membership/invite operations on the server.
+The authenticated service now exists behind the invite/join connection points. It treats client ids
+and roles as untrusted input, authorizes membership/invite operations server-side, provisions RTC
+rooms, and stores the bounded default text-channel history. Local identifiers remain identity
+references rather than credentials; the per-install directory credential is stored separately with
+DPAPI on Windows.

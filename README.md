@@ -2,8 +2,8 @@
 
 Catro is a native desktop application for Windows and macOS. The repository includes a portable
 C++20 capability core, isolated passive hardware probes, low-latency native audio, bounded Opus
-voice, persistent personal/shared-server state, a production signaling and directory service, and
-native desktop shells (WinUI 3 on Windows, SwiftUI on macOS).
+voice, persistent personal/shared-server state, bounded persistent text channels, a production
+signaling/directory service, and native desktop shells (WinUI 3 on Windows, SwiftUI on macOS).
 
 The Windows product path now provisions authenticated WebRTC rooms for voice, hardware-encoded
 H.264 screen sharing, native D3D11 decode/presentation, and selected-window application audio.
@@ -37,9 +37,9 @@ or a public-Internet security boundary.
 
 ## Windows product shell
 
-The Windows app opens directly into the user's personal server: one `# general` text channel, one
-`Voice` channel, a member rail, owner state, invite/join connection points, and voice-local screen
-share controls. Shared-server members can join the same provisioned RTC room, publish a window or
+The Windows app opens directly into the user's personal server: one real bounded/persistent
+`# general` text channel, one `Voice` channel, a member rail, owner state, invite/join connection
+points, and voice-local screen share controls. Shared-server members can join the same provisioned RTC room, publish a window or
 display, opt into remote viewing, pop the stream out or use full screen, and optionally include the
 selected window's process audio. The shell is native WinUI 3 and intentionally avoids
 blur/backdrop/animation costs. See [`docs/ui-foundation.md`](docs/ui-foundation.md).
@@ -73,9 +73,9 @@ The scripts check prerequisites and never install tools or change system setting
 
 | Platform | Status |
 | --- | --- |
-| Windows 11 x64 | Release build, 44-test local gate, capability report, and WinUI startup pass locally. Voice/screen product integration and the Oracle single-VM deployment bundle are implemented; real-network forced-TURN, five-client, restart, latency, and resource acceptance remains manual and is explicitly NOT VALIDATED. The shell still has a known UI Automation issue (see troubleshooting). |
-| macOS 13+ Apple Silicon | Code written; waiting for its first build on the `macos-15` CI runner. |
-| macOS 13+ Intel | Code written; waiting for its first build on the `macos-15-intel` CI runner. |
+| Windows 11 x64 | Release build, 44-test local gate, capability report, and WinUI startup pass locally. Voice/screen product integration, bounded persistent text messaging, and the Oracle single-VM deployment bundle are implemented; real-network forced-TURN, five-client, text exchange, restart, latency, and resource acceptance remains manual and is explicitly NOT VALIDATED. The shell still has a known UI Automation issue (see troubleshooting). |
+| macOS 13+ Apple Silicon | Debug build, tests, and capability-report generation pass on the `macos-15` CI runner. Windows product voice/screen/text parity is not claimed. |
+| macOS 13+ Intel | Debug build, tests, and capability-report generation pass on the `macos-15-intel` CI runner. Windows product voice/screen/text parity is not claimed. |
 
 Hosted CI runners have no reliable GPU, encoder, or display. Their reports are build evidence,
 not hardware evidence.

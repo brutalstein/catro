@@ -22,6 +22,7 @@
 #include <chrono>
 #include <cmath>
 #include <ctime>
+#include <cwchar>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -202,7 +203,7 @@ std::wstring message_time(std::int64_t unix_milliseconds) {
         return {};
     }
     wchar_t buffer[16]{};
-    if (std::wcsftime(buffer, std::size(buffer), L"%H:%M", &local) == 0) {
+    if (std::wcsftime(buffer, 16, L"%H:%M", &local) == 0) {
         return {};
     }
     return buffer;
@@ -541,7 +542,7 @@ void ServerView::AppendMessage(
         Windows::UI::Text::FontWeights::SemiBold());
     author.Foreground(
         xaml::Application::Current().Resources()
-            .Lookup(box_value(L"CatroTextBrush"))
+            .Lookup(box_value(hstring{L"CatroTextBrush"}))
             .as<Microsoft::UI::Xaml::Media::Brush>());
     header.Children().Append(author);
 
@@ -550,7 +551,7 @@ void ServerView::AppendMessage(
     timestamp.FontSize(11);
     timestamp.Foreground(
         xaml::Application::Current().Resources()
-            .Lookup(box_value(L"CatroTextTertiaryBrush"))
+            .Lookup(box_value(hstring{L"CatroTextTertiaryBrush"}))
             .as<Microsoft::UI::Xaml::Media::Brush>());
     header.Children().Append(timestamp);
 
@@ -560,7 +561,7 @@ void ServerView::AppendMessage(
     content.IsTextSelectionEnabled(true);
     content.Foreground(
         xaml::Application::Current().Resources()
-            .Lookup(box_value(L"CatroTextSecondaryBrush"))
+            .Lookup(box_value(hstring{L"CatroTextSecondaryBrush"}))
             .as<Microsoft::UI::Xaml::Media::Brush>());
 
     item.Children().Append(header);

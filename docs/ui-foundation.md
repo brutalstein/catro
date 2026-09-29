@@ -20,9 +20,10 @@ The personal server contract is:
 - voice is where mute, deafen, and screen-share controls live;
 - the member pane always reflects server membership, not voice membership.
 
-The current branch implements the shell and its state contract. Identity generation, durable
-persistence, invite resolution, messaging, membership synchronization, and production voice
-sessions are deliberately not faked in the UI.
+The current branch implements the shell plus durable local identity, authenticated shared-server
+membership/invites, bounded persistent text messaging, production voice rooms, and screen streaming.
+The UI still keeps one default text channel and one default voice channel per server; arbitrary
+channel creation, DMs, presence, reactions, edits, and attachments remain outside this slice.
 
 ## Windows layout
 
@@ -74,7 +75,7 @@ The shell should receive immutable/snapshot-style models from future services:
 - **Invite**: opaque code, server id, expiry/revocation state.
 - **Channels**: stable channel id, kind, name, ordering.
 - **Members**: user id, presence, owner/member role.
-- **Text**: virtualized message snapshots plus send command.
+- **Text**: implemented as a virtualized native timeline plus bounded HTTPS history/send commands; polling runs only while the text channel is active and never on the XAML thread.
 - **Voice**: join/leave/mute/deafen/share commands plus bounded speaking/session snapshots.
 
 XAML controls do not own those records. The existing native audio/voice core remains below these

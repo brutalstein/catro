@@ -36,6 +36,28 @@ Observed evidence / notes:
 
 > Pending.
 
+## Text-channel exchange and persistence
+
+Use packaged production clients and the real HTTPS control plane. This gate is independent from
+voice-room membership; a server member must be able to use `# general` without joining voice.
+
+- [ ] Client A and Client B are members of the same shared server:
+- [ ] Both clients load the same retained `# general` history:
+- [ ] Client A sends a message and Client B receives it through bounded polling:
+- [ ] Client B sends a reply and Client A receives it:
+- [ ] A local send is rendered only once even when the next poll overlaps it:
+- [ ] Switching servers does not allow a late response from the previous server into the new timeline:
+- [ ] A non-member cannot read the text channel:
+- [ ] A non-member cannot send to the text channel:
+- [ ] A message at the documented UTF-8 byte bound is handled as expected:
+- [ ] An over-bound message is rejected without corrupting retained history:
+- [ ] Restarting the signaling service preserves the retained history and sequence order:
+- [ ] Backup + offline restore preserves the expected retained text history:
+
+Observed evidence / notes:
+
+> Pending.
+
 ## Five-client voice capacity
 
 - [ ] Five distinct Windows clients join the same authorized voice room:

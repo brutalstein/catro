@@ -1,11 +1,12 @@
 # Catro — Full Project Context
 
-> **Current-development note (2026-09-27):** Sections describing the original native-foundation
+> **Current-development note (2026-09-30):** Sections describing the original native-foundation
 > milestone are historical constraints for that completed phase. The repository has since progressed
-> through native audio and a validated two-client/WinUI voice path. The active vertical sequence is
-> now **Windows native screen capture -> real-machine capture validation -> hardware video encode ->
-> two-client screen stream**. Do not interpret the historical "no voice/real capture" milestone text
-> below as a prohibition on the current media work.
+> through native audio, production Windows voice/screen rooms, authenticated shared-server state,
+> an Oracle single-VM deployment boundary, and a bounded persistent `# general` text-channel slice.
+> Do not interpret the historical "no voice/real capture/server/messaging" milestone text below as
+> a prohibition on the implemented product paths. Real Internet production acceptance is still
+> explicitly NOT VALIDATED until the Oracle acceptance record is completed.
 
 > **Purpose of this document**  
 > This file consolidates the complete working context established so far between the user, ChatGPT, and the coding agent/Codex for the **Catro** project. It is intended to be dropped into a fresh coding-agent session so the project can continue without losing architectural intent, constraints, priorities, or the reasoning behind previous decisions.
@@ -1820,19 +1821,27 @@ The agent should ask for user input only when a decision materially changes the 
 
 # 47. Current Immediate Next Step
 
-The native-foundation, audio, and Windows voice validation phases have moved past the original
-planning-only state described in the historical sections above.
+The native foundation, native audio, Windows voice, hardware-encoded screen streaming,
+selected-window application audio, shared-server directory/signaling, Oracle deployment
+implementation, and bounded persistent text-channel vertical slice have all moved past the
+historical planning-only state described above.
 
-The active sequence is now:
+The current validation sequence is:
 
-1. Windows Graphics Capture into bounded GPU-resident D3D11 frames. **Validated on real Windows hardware.**
-2. Same-adapter BGRA -> NV12 GPU conversion and H.264 hardware encoder activation. **Current slice.**
-3. Real Windows machine hardware-encode validation with explicit latency/failure counters.
-4. Two-client screen stream.
-5. Game/system audio integration.
+1. Keep the bounded text-channel slice green across signaling tests/race/vet, Windows/macOS builds,
+   sanitizers, and deployment validation.
+2. Pull the current branch on the real Windows development machine and run the Release verification
+   gate before packaging.
+3. Deploy the pinned Oracle single-VM bundle behind the real production hostname.
+4. Use two packaged Windows clients on genuinely different Internet connections to verify
+   membership-authorized `# general` exchange and retained history across a signaling restart.
+5. Complete the existing five-client voice, forced-TURN, screen/application-audio, restart/restore,
+   latency, resource, and exposure checks in the Oracle production acceptance record.
 
-Keep the repository buildable and testable after every slice. Do not stack hardware encoding on an
-unvalidated capture path, and do not claim hardware behavior that was not actually run.
+Keep implementation evidence separate from real-hardware/network evidence. CI proves builds,
+deterministic tests, and static deployment policy; it does not prove GPU behavior, TURN relay
+behavior, Internet latency, or production resource bounds. Do not change the production acceptance
+status from NOT VALIDATED without observed evidence.
 
 ---
 

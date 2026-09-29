@@ -967,3 +967,12 @@ func TestDirectoryTextMessageRetentionDropsOldestInChannel(t *testing.T) {
 			retained[len(retained)-1].Content)
 	}
 }
+
+
+func TestMessageKeySeparatesColonBearingIdentifiers(t *testing.T) {
+	left := messageKey("a:b", "c")
+	right := messageKey("a", "b:c")
+	if left == right {
+		t.Fatalf("message key collision: %q", left)
+	}
+}

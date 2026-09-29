@@ -136,8 +136,8 @@ cd deploy/oracle-free
 sudo ./backup.sh
 ~~~
 
-The script copies the atomically-persisted directory state and retains the seven newest local
-backup files.
+The script copies the atomically-persisted directory state — including retained bounded text
+history — and retains the seven newest local backup files.
 
 Restore is deliberately offline:
 

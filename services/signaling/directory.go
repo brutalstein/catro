@@ -772,7 +772,7 @@ func (d *directory) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 }
 
 func messageKey(serverID, channelID string) string {
-	return serverID + ":" + channelID
+	return strconv.Itoa(len(serverID)) + ":" + serverID + channelID
 }
 
 func randomMessageID() (string, error) {
