@@ -528,45 +528,19 @@ void ServerView::AppendMessage(
         return;
     }
 
-    controls::StackPanel item;
-    item.Spacing(3);
-    item.Margin(xaml::Thickness{8, 6, 8, 6});
+    std::wstring display =
+        to_hstring(message.author_display_name).c_str();
+    const auto timestamp =
+        message_time(message.created_at);
+    if (!timestamp.empty()) {
+        display += L"  ·  ";
+        display += timestamp;
+    }
+    display += L"\n";
+    display += to_hstring(message.content).c_str();
 
-    controls::StackPanel header;
-    header.Orientation(controls::Orientation::Horizontal);
-    header.Spacing(8);
-
-    controls::TextBlock author;
-    author.Text(to_hstring(message.author_display_name));
-    author.FontWeight(
-        Windows::UI::Text::FontWeights::SemiBold());
-    author.Foreground(
-        xaml::Application::Current().Resources()
-            .Lookup(box_value(hstring{L"CatroTextBrush"}))
-            .as<Microsoft::UI::Xaml::Media::Brush>());
-    header.Children().Append(author);
-
-    controls::TextBlock timestamp;
-    timestamp.Text(hstring{message_time(message.created_at)});
-    timestamp.FontSize(11);
-    timestamp.Foreground(
-        xaml::Application::Current().Resources()
-            .Lookup(box_value(hstring{L"CatroTextTertiaryBrush"}))
-            .as<Microsoft::UI::Xaml::Media::Brush>());
-    header.Children().Append(timestamp);
-
-    controls::TextBlock content;
-    content.Text(to_hstring(message.content));
-    content.TextWrapping(xaml::TextWrapping::Wrap);
-    content.IsTextSelectionEnabled(true);
-    content.Foreground(
-        xaml::Application::Current().Resources()
-            .Lookup(box_value(hstring{L"CatroTextSecondaryBrush"}))
-            .as<Microsoft::UI::Xaml::Media::Brush>());
-
-    item.Children().Append(header);
-    item.Children().Append(content);
-    MessageList().Items().Append(item);
+    MessageList().Items().Append(
+        box_value(hstring{display}));
 
     message_cursor_ = message.sequence;
     while (MessageList().Items().Size() > 512) {

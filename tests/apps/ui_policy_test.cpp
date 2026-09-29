@@ -69,3 +69,21 @@ TEST_CASE("room screen sharing coordinates ownership with signaling") {
     CHECK(source.find("Another participant is sharing") != std::string::npos);
     CHECK(source.find("Screen ownership request timed out") != std::string::npos);
 }
+
+
+TEST_CASE("text channel timeline remains virtualized and bounded") {
+    const auto xaml =
+        read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) /
+             "Server/ServerView.xaml");
+    const auto source =
+        read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) /
+             "Server/ServerView.xaml.cpp");
+
+    CHECK(xaml.find("<ListView x:Name=\"MessageList\"") != std::string::npos);
+    CHECK(xaml.find("<ListView.ItemTemplate>") != std::string::npos);
+    CHECK(xaml.find("<DataTemplate>") != std::string::npos);
+    CHECK(source.find("message_timer_.Interval(1s)") != std::string::npos);
+    CHECK(source.find("MessageList().Items().Size() > 512") != std::string::npos);
+    CHECK(source.find("winrt::resume_background()") != std::string::npos);
+    CHECK(source.find("message_generation_") != std::string::npos);
+}

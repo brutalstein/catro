@@ -255,7 +255,17 @@
                               ScrollViewer.HorizontalScrollMode="Disabled"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               ScrollViewer.VerticalScrollMode="Auto"
-                              ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}"
+                                           Margin="8,6"
+                                           TextWrapping="Wrap"
+                                           IsTextSelectionEnabled="True"
+                                           Foreground="{ThemeResource CatroTextSecondaryBrush}" />
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
 
                     <StackPanel x:Name="TextEmptyState"
                                 HorizontalAlignment="Center"
