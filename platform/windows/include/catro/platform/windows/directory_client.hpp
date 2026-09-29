@@ -37,6 +37,7 @@ struct DirectoryServer {
     std::string id;
     std::string owner_id;
     std::string name;
+    std::string text_channel_id;
     std::string voice_channel_id;
     std::string role;
     std::size_t member_count = 0;
@@ -46,6 +47,22 @@ struct DirectoryInvite {
     std::string code;
     std::int64_t expires = 0;
     DirectoryServer server;
+};
+
+struct DirectoryMessage {
+    std::string id;
+    std::uint64_t sequence = 0;
+    std::string server_id;
+    std::string channel_id;
+    std::string author_id;
+    std::string author_display_name;
+    std::string content;
+    std::int64_t created_at = 0;
+};
+
+struct DirectoryMessagePage {
+    std::vector<DirectoryMessage> messages;
+    std::uint64_t next_after = 0;
 };
 
 struct RtcProvisioning {
@@ -71,6 +88,10 @@ using DirectoryServersResult =
     std::variant<std::vector<DirectoryServer>, DirectoryError>;
 using DirectoryInviteResult =
     std::variant<DirectoryInvite, DirectoryError>;
+using DirectoryMessageResult =
+    std::variant<DirectoryMessage, DirectoryError>;
+using DirectoryMessagesResult =
+    std::variant<DirectoryMessagePage, DirectoryError>;
 using RtcProvisioningResult =
     std::variant<RtcProvisioning, DirectoryError>;
 
@@ -106,6 +127,21 @@ load_or_create_directory_credential() noexcept;
     const DirectoryServiceConfig& service,
     std::string_view access_token,
     std::string_view invite_code) noexcept;
+
+[[nodiscard]] DirectoryMessagesResult list_directory_messages(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_id,
+    std::string_view channel_id,
+    std::uint64_t after = 0,
+    std::size_t limit = 100) noexcept;
+
+[[nodiscard]] DirectoryMessageResult send_directory_message(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_id,
+    std::string_view channel_id,
+    std::string_view content) noexcept;
 
 [[nodiscard]] RtcProvisioningResult request_rtc_provisioning(
     const DirectoryServiceConfig& service,

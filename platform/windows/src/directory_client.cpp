@@ -34,6 +34,8 @@ using namespace std::chrono_literals;
 constexpr std::size_t kCredentialBytes = 32;
 constexpr std::size_t kMaxConfigBytes = 16U * 1024U;
 constexpr std::size_t kMaxResponseBytes = 256U * 1024U;
+constexpr std::size_t kMaxMessageContentBytes = 2000;
+constexpr std::size_t kMaxMessagePage = 100;
 constexpr int kHttpTimeoutMs = 10'000;
 
 struct InternetHandleCloser {
@@ -475,6 +477,23 @@ successful_json(
     }
 }
 
+[[nodiscard]] bool valid_remote_id(std::string_view value) noexcept {
+    if (value.empty() || value.size() > 128) {
+        return false;
+    }
+    for (const auto ch : value) {
+        const bool alpha =
+            (ch >= 'a' && ch <= 'z') ||
+            (ch >= 'A' && ch <= 'Z');
+        const bool digit = ch >= '0' && ch <= '9';
+        if (!alpha && !digit &&
+            ch != '-' && ch != '_' && ch != ':') {
+            return false;
+        }
+    }
+    return true;
+}
+
 [[nodiscard]] std::optional<DirectoryServer>
 parse_server(const Json& value) {
     try {
@@ -484,6 +503,8 @@ parse_server(const Json& value) {
             value.at("owner_id").get<std::string>();
         server.name =
             value.at("name").get<std::string>();
+        server.text_channel_id =
+            value.value("text_channel_id", std::string{});
         server.voice_channel_id =
             value.at("voice_channel_id")
                 .get<std::string>();
@@ -492,10 +513,13 @@ parse_server(const Json& value) {
         server.member_count =
             value.at("member_count")
                 .get<std::size_t>();
-        if (server.id.empty() ||
-            server.owner_id.empty() ||
+        if (!valid_remote_id(server.id) ||
+            !valid_remote_id(server.owner_id) ||
             server.name.empty() ||
-            server.voice_channel_id.empty() ||
+            server.name.size() > community::kMaxServerNameBytes ||
+            (!server.text_channel_id.empty() &&
+             !valid_remote_id(server.text_channel_id)) ||
+            !valid_remote_id(server.voice_channel_id) ||
             (server.role != "owner" &&
              server.role != "member") ||
             server.member_count == 0 ||
@@ -504,6 +528,47 @@ parse_server(const Json& value) {
             return std::nullopt;
         }
         return server;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+[[nodiscard]] std::optional<DirectoryMessage>
+parse_message(const Json& value) {
+    try {
+        DirectoryMessage message;
+        message.id =
+            value.at("id").get<std::string>();
+        message.sequence =
+            value.at("sequence").get<std::uint64_t>();
+        message.server_id =
+            value.at("server_id").get<std::string>();
+        message.channel_id =
+            value.at("channel_id").get<std::string>();
+        message.author_id =
+            value.at("author_id").get<std::string>();
+        message.author_display_name =
+            value.at("author_display_name").get<std::string>();
+        message.content =
+            value.at("content").get<std::string>();
+        message.created_at =
+            value.at("created_at").get<std::int64_t>();
+
+        if (!valid_remote_id(message.id) ||
+            message.sequence == 0 ||
+            !valid_remote_id(message.server_id) ||
+            !valid_remote_id(message.channel_id) ||
+            !valid_remote_id(message.author_id) ||
+            message.author_display_name.empty() ||
+            message.author_display_name.size() >
+                community::kMaxDisplayNameBytes ||
+            message.content.empty() ||
+            message.content.size() >
+                kMaxMessageContentBytes ||
+            message.created_at <= 0) {
+            return std::nullopt;
+        }
+        return message;
     } catch (...) {
         return std::nullopt;
     }
@@ -797,11 +862,11 @@ load_or_create_credential_bytes() {
 
 [[nodiscard]] std::optional<
     community::Channel>
-voice_channel(
-    const community::PersonalServer& server) {
+channel_of_kind(
+    const community::PersonalServer& server,
+    community::ChannelKind kind) {
     for (const auto& channel : server.channels) {
-        if (channel.kind ==
-            community::ChannelKind::voice) {
+        if (channel.kind == kind) {
             return channel;
         }
     }
@@ -973,17 +1038,25 @@ DirectoryServerResult sync_personal_server(
     std::string_view access_token,
     const community::PersonalServer& server) noexcept {
     try {
+        const auto text =
+            channel_of_kind(
+                server,
+                community::ChannelKind::text);
         const auto voice =
-            voice_channel(server);
-        if (!voice) {
+            channel_of_kind(
+                server,
+                community::ChannelKind::voice);
+        if (!text || !voice) {
             return error(
                 DirectoryErrorCode::invalid_config,
-                "personal server has no voice channel");
+                "personal server is missing a required channel");
         }
         const Json body{
             {"server_id",
              community::to_hex(server.id)},
             {"name", server.name},
+            {"text_channel_id",
+             community::to_hex(text->id)},
             {"voice_channel_id",
              community::to_hex(voice->id)},
         };
@@ -1153,6 +1226,155 @@ DirectoryServerResult accept_directory_invite(
         return error(
             DirectoryErrorCode::malformed_response,
             "invite acceptance response is invalid");
+    }
+}
+
+DirectoryMessagesResult list_directory_messages(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_id,
+    std::string_view channel_id,
+    std::uint64_t after,
+    std::size_t limit) noexcept {
+    try {
+        if (!valid_remote_id(server_id) ||
+            !valid_remote_id(channel_id) ||
+            limit == 0 || limit > kMaxMessagePage) {
+            return error(
+                DirectoryErrorCode::invalid_config,
+                "message query is invalid");
+        }
+
+        const auto server = wide(server_id);
+        const auto channel = wide(channel_id);
+        if (server.empty() || channel.empty()) {
+            return error(
+                DirectoryErrorCode::invalid_config,
+                "message query encoding failed");
+        }
+
+        std::wstring endpoint =
+            L"/v1/messages?server_id=";
+        endpoint += server;
+        endpoint += L"&channel_id=";
+        endpoint += channel;
+        endpoint += L"&after=";
+        endpoint += std::to_wstring(after);
+        endpoint += L"&limit=";
+        endpoint += std::to_wstring(limit);
+
+        const auto response =
+            successful_json(
+                request_json(
+                    service,
+                    L"GET",
+                    endpoint,
+                    access_token,
+                    nullptr));
+        if (const auto* failure =
+                std::get_if<DirectoryError>(
+                    &response)) {
+            return *failure;
+        }
+
+        const auto& json = std::get<Json>(response);
+        const auto& items = json.at("messages");
+        if (!items.is_array() ||
+            items.size() > limit) {
+            return error(
+                DirectoryErrorCode::malformed_response,
+                "message page is invalid");
+        }
+
+        DirectoryMessagePage page;
+        page.next_after =
+            json.at("next_after").get<std::uint64_t>();
+        page.messages.reserve(items.size());
+        std::uint64_t previous = after;
+        for (const auto& item : items) {
+            const auto parsed = parse_message(item);
+            if (!parsed ||
+                parsed->server_id != server_id ||
+                parsed->channel_id != channel_id ||
+                parsed->sequence <= previous) {
+                return error(
+                    DirectoryErrorCode::malformed_response,
+                    "message page contains invalid data");
+            }
+            previous = parsed->sequence;
+            page.messages.push_back(*parsed);
+        }
+        if (!page.messages.empty() &&
+            page.next_after !=
+                page.messages.back().sequence) {
+            return error(
+                DirectoryErrorCode::malformed_response,
+                "message cursor is inconsistent");
+        }
+        if (page.messages.empty() &&
+            page.next_after != after) {
+            return error(
+                DirectoryErrorCode::malformed_response,
+                "empty message cursor is inconsistent");
+        }
+        return page;
+    } catch (...) {
+        return error(
+            DirectoryErrorCode::malformed_response,
+            "message page response is invalid");
+    }
+}
+
+DirectoryMessageResult send_directory_message(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_id,
+    std::string_view channel_id,
+    std::string_view content) noexcept {
+    try {
+        if (!valid_remote_id(server_id) ||
+            !valid_remote_id(channel_id) ||
+            content.empty() ||
+            content.size() > kMaxMessageContentBytes) {
+            return error(
+                DirectoryErrorCode::invalid_config,
+                "message is invalid");
+        }
+
+        const Json body{
+            {"server_id", std::string{server_id}},
+            {"channel_id", std::string{channel_id}},
+            {"content", std::string{content}},
+        };
+        const auto response =
+            successful_json(
+                request_json(
+                    service,
+                    L"POST",
+                    L"/v1/messages",
+                    access_token,
+                    &body));
+        if (const auto* failure =
+                std::get_if<DirectoryError>(
+                    &response)) {
+            return *failure;
+        }
+
+        const auto parsed =
+            parse_message(std::get<Json>(response));
+        if (!parsed ||
+            parsed->server_id != server_id ||
+            parsed->channel_id != channel_id ||
+            parsed->content != content) {
+            return error(
+                DirectoryErrorCode::malformed_response,
+                "sent message response is invalid");
+        }
+        return *parsed;
+    } catch (...) {
+        return error(
+            DirectoryErrorCode::malformed_response,
+            "sent message response is invalid");
     }
 }
 
