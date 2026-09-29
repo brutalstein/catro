@@ -36,6 +36,24 @@ Observed evidence / notes:
 
 > Pending.
 
+## Shared-server member roster convergence
+
+This gate validates server membership independently from voice-room membership.
+
+- [ ] Client A owns a shared server and creates an invite:
+- [ ] Client B accepts the invite from a different installation:
+- [ ] Client A member rail converges to both members without joining voice:
+- [ ] Client B member rail converges to the same two members without joining voice:
+- [ ] The owner appears first and is labeled Owner on both clients:
+- [ ] Each client identifies its own row without changing server-side authorization:
+- [ ] A non-member cannot enumerate the roster:
+- [ ] Switching servers cannot apply a late roster response from the previous server:
+- [ ] Restarting signaling preserves the same authoritative roster:
+
+Observed evidence / notes:
+
+> Pending.
+
 ## Text-channel exchange and persistence
 
 Use packaged production clients and the real HTTPS control plane. This gate is independent from

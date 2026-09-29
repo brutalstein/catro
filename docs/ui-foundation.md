@@ -21,7 +21,8 @@ The personal server contract is:
 - the member pane always reflects server membership, not voice membership.
 
 The current branch implements the shell plus durable local identity, authenticated shared-server
-membership/invites, bounded persistent text messaging, production voice rooms, and screen streaming.
+membership/invites, authoritative member rosters, bounded persistent text messaging, production
+voice rooms, and screen streaming.
 The UI still keeps one default text channel and one default voice channel per server; arbitrary
 channel creation, DMs, presence, reactions, edits, and attachments remain outside this slice.
 
@@ -74,7 +75,8 @@ The shell should receive immutable/snapshot-style models from future services:
 - **Server**: stable server id, owner id, display name.
 - **Invite**: opaque code, server id, expiry/revocation state.
 - **Channels**: stable channel id, kind, name, ordering.
-- **Members**: user id, presence, owner/member role.
+- **Members**: implemented as membership-authorized, owner-first virtualized snapshots containing
+  user id, display name, and owner/member role. Presence is intentionally not inferred yet.
 - **Text**: implemented as a virtualized native timeline plus bounded HTTPS history/send commands; polling runs only while the text channel is active and never on the XAML thread.
 - **Voice**: join/leave/mute/deafen/share commands plus bounded speaking/session snapshots.
 

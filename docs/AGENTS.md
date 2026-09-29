@@ -3,7 +3,8 @@
 > **Current-development note (2026-09-30):** Sections describing the original native-foundation
 > milestone are historical constraints for that completed phase. The repository has since progressed
 > through native audio, production Windows voice/screen rooms, authenticated shared-server state,
-> an Oracle single-VM deployment boundary, and a bounded persistent `# general` text-channel slice.
+> authoritative server-member rosters, an Oracle single-VM deployment boundary, and a bounded
+> persistent `# general` text-channel slice.
 > Do not interpret the historical "no voice/real capture/server/messaging" milestone text below as
 > a prohibition on the implemented product paths. Real Internet production acceptance is still
 > explicitly NOT VALIDATED until the Oracle acceptance record is completed.
@@ -1822,20 +1823,21 @@ The agent should ask for user input only when a decision materially changes the 
 # 47. Current Immediate Next Step
 
 The native foundation, native audio, Windows voice, hardware-encoded screen streaming,
-selected-window application audio, shared-server directory/signaling, Oracle deployment
-implementation, and bounded persistent text-channel vertical slice have all moved past the
-historical planning-only state described above.
+selected-window application audio, shared-server directory/signaling, authoritative member roster,
+Oracle deployment implementation, and bounded persistent text-channel vertical slice have all moved
+past the historical planning-only state described above.
 
 The current validation sequence is:
 
-1. Keep the bounded text-channel slice green across signaling tests/race/vet, Windows/macOS builds,
-   sanitizers, and deployment validation.
+1. Keep the member-roster and bounded text slices green across signaling tests/race/vet,
+   Windows/macOS builds, sanitizers, and deployment validation.
 2. Pull the current branch on the real Windows development machine and run the Release verification
    gate before packaging.
 3. Deploy the pinned Oracle single-VM bundle behind the real production hostname.
-4. Use two packaged Windows clients on genuinely different Internet connections to verify
-   membership-authorized `# general` exchange and retained history across a signaling restart.
-5. Complete the existing five-client voice, forced-TURN, screen/application-audio, restart/restore,
+4. Use two packaged Windows clients on genuinely different Internet connections to verify invite
+   acceptance converges both clients on the same server-member roster without requiring voice.
+5. Verify membership-authorized `# general` exchange and retained history across a signaling restart.
+6. Complete the existing five-client voice, forced-TURN, screen/application-audio, restart/restore,
    latency, resource, and exposure checks in the Oracle production acceptance record.
 
 Keep implementation evidence separate from real-hardware/network evidence. CI proves builds,

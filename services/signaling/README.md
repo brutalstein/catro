@@ -2,8 +2,8 @@
 
 This service is Catro's production control plane for small native voice rooms.
 
-It owns identity registration, shared-server membership, one-use invites, bounded persistent text
-history, short-lived RTC credentials, WebRTC SDP/ICE signaling, and RTC provisioning. Voice, screen video, and stream audio
+It owns identity registration, shared-server membership and authoritative roster reads, one-use
+invites, bounded persistent text history, short-lived RTC credentials, WebRTC SDP/ICE signaling, and RTC provisioning. Voice, screen video, and stream audio
 never pass through this service: peers exchange those bounded datagrams directly over WebRTC
 DataChannels, with TURN relay available when direct ICE connectivity is impossible.
 
@@ -55,10 +55,12 @@ The normal product flow is:
 2. Sync the user's personal server or list servers the identity already belongs to.
 3. The owner creates a one-use invite from the server Invite button.
 4. Another computer presses `+`, pastes the invite, and becomes a member of that same server.
-5. Pressing Join in the voice channel requests a short-lived RTC token plus WSS/STUN/TURN
+5. Both clients read the membership-authorized server roster over HTTPS; this does not require
+   joining voice.
+6. Pressing Join in the voice channel requests a short-lived RTC token plus WSS/STUN/TURN
    provisioning for that exact server/channel membership.
-6. The `# general` text surface reads/sends membership-authorized bounded history through HTTPS.
-7. Voice, screen video, and selected-window application audio use the same WebRTC room mesh.
+7. The `# general` text surface reads/sends membership-authorized bounded history through HTTPS.
+8. Voice, screen video, and selected-window application audio use the same WebRTC room mesh.
 
 End users do not configure `CATRO_ROOM_TOKEN`, `CATRO_SERVER_ID`, or `CATRO_ICE_SERVERS`.
 
