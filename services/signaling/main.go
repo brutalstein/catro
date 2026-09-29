@@ -37,6 +37,8 @@ const (
 	maxSignalsPerWindow   = 256
 )
 
+var errRoomCapacity = errors.New("room capacity reached")
+
 type claims struct {
 	ServerID  string `json:"server_id"`
 	ChannelID string `json:"channel_id"`
@@ -82,19 +84,37 @@ type room struct {
 }
 
 type service struct {
-	secret        []byte
-	maxRoomPeers  int
-	allowedOrigin string
+	secret            []byte
+	maxRoomPeers      int
+	allowedOrigin     string
+	apiLimiter        *sourceLimiter
+	trustProxyHeaders bool
 
 	roomsMu sync.Mutex
 	rooms   map[string]*room
 
-	activeConnections atomic.Int64
-	signalMessages    atomic.Uint64
-	rejectedMessages  atomic.Uint64
+	activeConnections      atomic.Int64
+	signalMessages         atomic.Uint64
+	rejectedMessages       atomic.Uint64
+	roomCapacityRejections atomic.Uint64
+	screenClaims           atomic.Uint64
+	screenReleases         atomic.Uint64
+	screenBusyRejections   atomic.Uint64
+	apiRateLimitRejections atomic.Uint64
 }
 
 func main() {
+	apiWritesDefault, err := environmentInt(
+		"CATRO_API_WRITES_PER_MINUTE", defaultAPIWritesPerMinute)
+	if err != nil {
+		log.Fatal(err)
+	}
+	trustProxyDefault, err := environmentBool(
+		"CATRO_TRUST_PROXY_HEADERS", false)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	addr := flag.String("addr", ":8443", "listen address")
 	secret := flag.String("secret", os.Getenv("CATRO_SIGNALING_SECRET"), "HMAC secret")
 	stateFileDefault := os.Getenv("CATRO_SIGNALING_STATE")
@@ -105,6 +125,14 @@ func main() {
 	tlsCert := flag.String("tls-cert", os.Getenv("CATRO_SIGNALING_TLS_CERT"), "TLS certificate path")
 	tlsKey := flag.String("tls-key", os.Getenv("CATRO_SIGNALING_TLS_KEY"), "TLS private key path")
 	maxRoom := flag.Int("max-room-peers", defaultMaxRoom, "maximum peers per voice room")
+	apiWritesPerMinute := flag.Int(
+		"api-writes-per-minute",
+		apiWritesDefault,
+		"per-source directory mutations allowed per minute")
+	trustProxyHeaders := flag.Bool(
+		"trust-proxy-headers",
+		trustProxyDefault,
+		"trust X-Forwarded-For only from private/loopback proxy peers")
 	origin := flag.String("allowed-origin", "", "optional exact browser Origin")
 	allowHTTP := flag.Bool("allow-insecure-http", false, "engineering only: plaintext HTTP/WebSocket")
 	allowNoTURN := flag.Bool("allow-no-turn", false, "engineering only: permit RTC provisioning without TURN")
@@ -132,6 +160,10 @@ func main() {
 	}
 	if *maxRoom < 2 || *maxRoom > maximumProductionRoom {
 		log.Fatal("max-room-peers must be between 2 and 5")
+	}
+	if *apiWritesPerMinute < 1 ||
+		*apiWritesPerMinute > maximumAPIWritesPerMinute {
+		log.Fatal("api-writes-per-minute must be between 1 and 300")
 	}
 
 	if *mint {
@@ -216,19 +248,33 @@ func main() {
 		*maxRoom)
 
 	s := &service{
-		secret: []byte(*secret), maxRoomPeers: *maxRoom,
-		allowedOrigin: *origin, rooms: make(map[string]*room),
+		secret:            []byte(*secret),
+		maxRoomPeers:      *maxRoom,
+		allowedOrigin:     *origin,
+		apiLimiter:        newSourceLimiter(*apiWritesPerMinute),
+		trustProxyHeaders: *trustProxyHeaders,
+		rooms:             make(map[string]*room),
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.health)
 	mux.HandleFunc("/metrics", s.metrics)
-	mux.HandleFunc("/v1/users/register", directory.handleRegister)
-	mux.HandleFunc("/v1/servers/sync", directory.handleServerSync)
+	mux.HandleFunc(
+		"/v1/users/register",
+		s.limitDirectoryMutation(directory.handleRegister))
+	mux.HandleFunc(
+		"/v1/servers/sync",
+		s.limitDirectoryMutation(directory.handleServerSync))
 	mux.HandleFunc("/v1/servers", directory.handleServers)
-	mux.HandleFunc("/v1/invites", directory.handleInvites)
-	mux.HandleFunc("/v1/invites/accept", directory.handleInviteAccept)
-	mux.HandleFunc("/v1/rtc-token", directory.handleRTCToken)
+	mux.HandleFunc(
+		"/v1/invites",
+		s.limitDirectoryMutation(directory.handleInvites))
+	mux.HandleFunc(
+		"/v1/invites/accept",
+		s.limitDirectoryMutation(directory.handleInviteAccept))
+	mux.HandleFunc(
+		"/v1/rtc-token",
+		s.limitDirectoryMutation(directory.handleRTCToken))
 	mux.HandleFunc("/v1/rtc", s.websocket)
 
 	httpServer := &http.Server{
@@ -271,13 +317,45 @@ func (s *service) health(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *service) metrics(w http.ResponseWriter, _ *http.Request) {
-	s.roomsMu.Lock()
-	rooms := len(s.rooms)
-	s.roomsMu.Unlock()
+	activeRooms, activeScreenPublishers := s.roomGauges()
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-	_, _ = fmt.Fprintf(w,
-		"catro_signaling_active_connections %d\ncatro_signaling_rooms %d\ncatro_signaling_messages_total %d\ncatro_signaling_rejected_total %d\n",
-		s.activeConnections.Load(), rooms, s.signalMessages.Load(), s.rejectedMessages.Load())
+	_, _ = fmt.Fprintf(
+		w,
+		"catro_signaling_active_connections %d\n"+
+			"catro_signaling_active_rooms %d\n"+
+			"catro_signaling_active_screen_publishers %d\n"+
+			"catro_signaling_messages_total %d\n"+
+			"catro_signaling_rejected_total %d\n"+
+			"catro_signaling_room_capacity_rejections_total %d\n"+
+			"catro_signaling_screen_claims_total %d\n"+
+			"catro_signaling_screen_releases_total %d\n"+
+			"catro_signaling_screen_busy_rejections_total %d\n"+
+			"catro_signaling_api_rate_limit_rejections_total %d\n",
+		s.activeConnections.Load(),
+		activeRooms,
+		activeScreenPublishers,
+		s.signalMessages.Load(),
+		s.rejectedMessages.Load(),
+		s.roomCapacityRejections.Load(),
+		s.screenClaims.Load(),
+		s.screenReleases.Load(),
+		s.screenBusyRejections.Load(),
+		s.apiRateLimitRejections.Load())
+}
+
+func (s *service) roomGauges() (int, int) {
+	s.roomsMu.Lock()
+	defer s.roomsMu.Unlock()
+
+	activeScreenPublishers := 0
+	for _, rm := range s.rooms {
+		rm.mu.RLock()
+		if rm.screenOwner != "" {
+			activeScreenPublishers++
+		}
+		rm.mu.RUnlock()
+	}
+	return len(s.rooms), activeScreenPublishers
 }
 
 func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
@@ -328,6 +406,9 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 	existing, err := rm.add(c)
 	if err != nil {
 		s.rejectedMessages.Add(1)
+		if errors.Is(err, errRoomCapacity) {
+			s.roomCapacityRejections.Add(1)
+		}
 		_ = c.write(message{Type: "error", Message: err.Error()})
 		return
 	}
@@ -335,6 +416,7 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 		_, releasedScreen := rm.remove(c.id)
 		rm.broadcastExcept(c.id, message{Type: "peer_left", PeerID: c.id})
 		if releasedScreen {
+			s.screenReleases.Add(1)
 			rm.broadcast(message{Type: "screen_state"})
 		}
 		s.dropEmptyRoom(rm)
@@ -388,11 +470,13 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 		case "screen_claim":
 			owner, acquired := rm.claimScreen(c.id)
 			if acquired {
+				s.screenClaims.Add(1)
 				rm.broadcast(message{
 					Type:        "screen_state",
 					ScreenOwner: owner,
 				})
 			} else {
+				s.screenBusyRejections.Add(1)
 				_ = c.write(message{
 					Type:        "screen_busy",
 					ScreenOwner: owner,
@@ -401,6 +485,7 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 			continue
 		case "screen_release":
 			if rm.releaseScreen(c.id) {
+				s.screenReleases.Add(1)
 				rm.broadcast(message{Type: "screen_state"})
 			}
 			continue
@@ -477,7 +562,7 @@ func (r *room) add(c *client) ([]string, error) {
 		return nil, errors.New("peer already joined")
 	}
 	if len(r.peers) >= r.maxPeers {
-		return nil, errors.New("room capacity reached")
+		return nil, errRoomCapacity
 	}
 	existing := make([]string, 0, len(r.peers))
 	for id := range r.peers {
