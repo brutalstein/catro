@@ -502,6 +502,7 @@ func TestDirectoryInviteMembershipAndRTCTokenFlow(t *testing.T) {
 		map[string]any{
 			"server_id":        "server-1",
 			"name":             "Test Server",
+			"text_channel_id":  "text-1",
 			"voice_channel_id": "voice-1",
 		})
 	serverResponse := httptest.NewRecorder()
@@ -713,5 +714,256 @@ func TestTurnProvisioningRequiresSecret(t *testing.T) {
 		time.Now().Add(time.Minute).Unix())
 	if err == nil {
 		t.Fatal("TURN provisioning without secret must fail")
+	}
+}
+
+
+func TestDirectoryTextMessagesAreAuthorizedPersistentAndCursorBounded(t *testing.T) {
+	secret := []byte(strings.Repeat("m", 32))
+	path := filepath.Join(t.TempDir(), "directory.json")
+	d, err := openDirectory(path, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ownerToken := registerTestUser(t, d, "owner-1", testCredential(0x71))
+	memberToken := registerTestUser(t, d, "member-1", testCredential(0x72))
+	outsiderToken := registerTestUser(t, d, "outsider-1", testCredential(0x73))
+
+	serverRequest := authenticatedRequest(
+		http.MethodPost,
+		"/v1/servers/sync",
+		ownerToken,
+		map[string]any{
+			"server_id":        "server-1",
+			"name":             "Text Server",
+			"text_channel_id":  "text-1",
+			"voice_channel_id": "voice-1",
+		})
+	serverResponse := httptest.NewRecorder()
+	d.handleServerSync(serverResponse, serverRequest)
+	if serverResponse.Code != http.StatusCreated {
+		t.Fatalf("sync server: %d %s",
+			serverResponse.Code, serverResponse.Body.String())
+	}
+
+	inviteRequest := authenticatedRequest(
+		http.MethodPost,
+		"/v1/invites",
+		ownerToken,
+		map[string]any{"server_id": "server-1"})
+	inviteResponse := httptest.NewRecorder()
+	d.handleInvites(inviteResponse, inviteRequest)
+	if inviteResponse.Code != http.StatusCreated {
+		t.Fatalf("create invite: %d %s",
+			inviteResponse.Code, inviteResponse.Body.String())
+	}
+	var invite struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(inviteResponse.Body.Bytes(), &invite); err != nil {
+		t.Fatal(err)
+	}
+
+	acceptRequest := authenticatedRequest(
+		http.MethodPost,
+		"/v1/invites/accept",
+		memberToken,
+		map[string]any{"code": invite.Code})
+	acceptResponse := httptest.NewRecorder()
+	d.handleInviteAccept(acceptResponse, acceptRequest)
+	if acceptResponse.Code != http.StatusOK {
+		t.Fatalf("accept invite: %d %s",
+			acceptResponse.Code, acceptResponse.Body.String())
+	}
+
+	firstRequest := authenticatedRequest(
+		http.MethodPost,
+		"/v1/messages",
+		ownerToken,
+		map[string]any{
+			"server_id":  "server-1",
+			"channel_id": "text-1",
+			"content":    "hello from owner",
+		})
+	firstResponse := httptest.NewRecorder()
+	d.handleMessages(firstResponse, firstRequest)
+	if firstResponse.Code != http.StatusCreated {
+		t.Fatalf("send first message: %d %s",
+			firstResponse.Code, firstResponse.Body.String())
+	}
+	var first messageDescriptor
+	if err := json.Unmarshal(firstResponse.Body.Bytes(), &first); err != nil {
+		t.Fatal(err)
+	}
+	if first.Sequence == 0 ||
+		first.AuthorID != "owner-1" ||
+		first.AuthorDisplayName != "owner-1" ||
+		first.Content != "hello from owner" {
+		t.Fatalf("unexpected first message: %#v", first)
+	}
+
+	outsiderRead := authenticatedRequest(
+		http.MethodGet,
+		"/v1/messages?server_id=server-1&channel_id=text-1",
+		outsiderToken,
+		nil)
+	outsiderResponse := httptest.NewRecorder()
+	d.handleMessages(outsiderResponse, outsiderRead)
+	if outsiderResponse.Code != http.StatusForbidden {
+		t.Fatalf("outsider read status = %d", outsiderResponse.Code)
+	}
+
+	secondRequest := authenticatedRequest(
+		http.MethodPost,
+		"/v1/messages",
+		memberToken,
+		map[string]any{
+			"server_id":  "server-1",
+			"channel_id": "text-1",
+			"content":    "reply",
+		})
+	secondResponse := httptest.NewRecorder()
+	d.handleMessages(secondResponse, secondRequest)
+	if secondResponse.Code != http.StatusCreated {
+		t.Fatalf("send second message: %d %s",
+			secondResponse.Code, secondResponse.Body.String())
+	}
+	var second messageDescriptor
+	if err := json.Unmarshal(secondResponse.Body.Bytes(), &second); err != nil {
+		t.Fatal(err)
+	}
+	if second.Sequence <= first.Sequence {
+		t.Fatalf("message sequence did not advance: %d -> %d",
+			first.Sequence, second.Sequence)
+	}
+
+	listRequest := authenticatedRequest(
+		http.MethodGet,
+		fmt.Sprintf(
+			"/v1/messages?server_id=server-1&channel_id=text-1&after=%d&limit=100",
+			first.Sequence),
+		memberToken,
+		nil)
+	listResponse := httptest.NewRecorder()
+	d.handleMessages(listResponse, listRequest)
+	if listResponse.Code != http.StatusOK {
+		t.Fatalf("list messages: %d %s",
+			listResponse.Code, listResponse.Body.String())
+	}
+	var page struct {
+		Messages  []messageDescriptor `json:"messages"`
+		NextAfter uint64              `json:"next_after"`
+	}
+	if err := json.Unmarshal(listResponse.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Messages) != 1 ||
+		page.Messages[0].ID != second.ID ||
+		page.NextAfter != second.Sequence {
+		t.Fatalf("unexpected cursor page: %#v", page)
+	}
+
+	reloaded, err := openDirectory(path, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloadedRead := authenticatedRequest(
+		http.MethodGet,
+		"/v1/messages?server_id=server-1&channel_id=text-1&limit=100",
+		memberToken,
+		nil)
+	reloadedResponse := httptest.NewRecorder()
+	reloaded.handleMessages(reloadedResponse, reloadedRead)
+	if reloadedResponse.Code != http.StatusOK {
+		t.Fatalf("reloaded list: %d %s",
+			reloadedResponse.Code, reloadedResponse.Body.String())
+	}
+	var reloadedPage struct {
+		Messages []messageDescriptor `json:"messages"`
+	}
+	if err := json.Unmarshal(reloadedResponse.Body.Bytes(), &reloadedPage); err != nil {
+		t.Fatal(err)
+	}
+	if len(reloadedPage.Messages) != 2 {
+		t.Fatalf("reloaded message count = %d, want 2",
+			len(reloadedPage.Messages))
+	}
+}
+
+func TestDirectoryTextMessageRetentionDropsOldestInChannel(t *testing.T) {
+	secret := []byte(strings.Repeat("n", 32))
+	path := filepath.Join(t.TempDir(), "directory.json")
+	d, err := openDirectory(path, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := registerTestUser(t, d, "owner-1", testCredential(0x81))
+
+	serverRequest := authenticatedRequest(
+		http.MethodPost,
+		"/v1/servers/sync",
+		token,
+		map[string]any{
+			"server_id":        "server-1",
+			"name":             "Retention Server",
+			"text_channel_id":  "text-1",
+			"voice_channel_id": "voice-1",
+		})
+	serverResponse := httptest.NewRecorder()
+	d.handleServerSync(serverResponse, serverRequest)
+	if serverResponse.Code != http.StatusCreated {
+		t.Fatalf("sync server: %d %s",
+			serverResponse.Code, serverResponse.Body.String())
+	}
+
+	d.mu.Lock()
+	log := make([]directoryMessage, 0, maxMessagesPerChannel)
+	for index := 1; index <= maxMessagesPerChannel; index++ {
+		log = append(log, directoryMessage{
+			ID:        fmt.Sprintf("message-%d", index),
+			Sequence:  uint64(index),
+			ServerID:  "server-1",
+			ChannelID: "text-1",
+			AuthorID:  "owner-1",
+			Content:   "retained",
+			CreatedAt: int64(index),
+		})
+	}
+	d.state.Messages[messageKey("server-1", "text-1")] = log
+	d.state.NextMessageSequence = maxMessagesPerChannel + 1
+	if err := d.persistLocked(); err != nil {
+		d.mu.Unlock()
+		t.Fatal(err)
+	}
+	d.mu.Unlock()
+
+	sendRequest := authenticatedRequest(
+		http.MethodPost,
+		"/v1/messages",
+		token,
+		map[string]any{
+			"server_id":  "server-1",
+			"channel_id": "text-1",
+			"content":    "newest",
+		})
+	sendResponse := httptest.NewRecorder()
+	d.handleMessages(sendResponse, sendRequest)
+	if sendResponse.Code != http.StatusCreated {
+		t.Fatalf("send retained message: %d %s",
+			sendResponse.Code, sendResponse.Body.String())
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	retained := d.state.Messages[messageKey("server-1", "text-1")]
+	if len(retained) != maxMessagesPerChannel {
+		t.Fatalf("retained message count = %d", len(retained))
+	}
+	if retained[0].Sequence != 2 ||
+		retained[len(retained)-1].Content != "newest" {
+		t.Fatalf("retention window is incorrect: first=%d last=%q",
+			retained[0].Sequence,
+			retained[len(retained)-1].Content)
 	}
 }

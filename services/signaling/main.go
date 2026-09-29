@@ -284,6 +284,9 @@ func main() {
 		"/v1/invites/accept",
 		s.limitDirectoryMutation(directory.handleInviteAccept))
 	mux.HandleFunc(
+		"/v1/messages",
+		s.limitDirectoryMutation(directory.handleMessages))
+	mux.HandleFunc(
 		"/v1/rtc-token",
 		s.limitDirectoryMutation(directory.handleRTCToken))
 	mux.HandleFunc("/v1/rtc", s.websocket)

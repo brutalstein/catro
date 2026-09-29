@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,8 +32,12 @@ const (
 	maxDirectoryServers    = 1024
 	maxDirectoryInvites    = 4096
 	maxInvitesPerServer    = 32
-	maxDirectoryMembers    = 256
-	maxDirectoryStateBytes = 32 * 1024 * 1024
+	maxDirectoryMembers     = 256
+	maxMessageContentBytes  = 2000
+	maxMessagesPerChannel   = 512
+	maxDirectoryMessages    = 8192
+	maxMessagePage          = 100
+	maxDirectoryStateBytes  = 32 * 1024 * 1024
 )
 
 type directoryUser struct {
@@ -50,8 +55,19 @@ type directoryServer struct {
 	ID             string                     `json:"id"`
 	OwnerID        string                     `json:"owner_id"`
 	Name           string                     `json:"name"`
+	TextChannelID  string                     `json:"text_channel_id,omitempty"`
 	VoiceChannelID string                     `json:"voice_channel_id"`
 	Members        map[string]directoryMember `json:"members"`
+}
+
+type directoryMessage struct {
+	ID        string `json:"id"`
+	Sequence  uint64 `json:"sequence"`
+	ServerID  string `json:"server_id"`
+	ChannelID string `json:"channel_id"`
+	AuthorID  string `json:"author_id"`
+	Content   string `json:"content"`
+	CreatedAt int64  `json:"created_at"`
 }
 
 type directoryInvite struct {
@@ -62,9 +78,11 @@ type directoryInvite struct {
 }
 
 type directoryState struct {
-	Users   map[string]directoryUser   `json:"users"`
-	Servers map[string]directoryServer `json:"servers"`
-	Invites map[string]directoryInvite `json:"invites"`
+	Users               map[string]directoryUser      `json:"users"`
+	Servers             map[string]directoryServer    `json:"servers"`
+	Invites             map[string]directoryInvite    `json:"invites"`
+	Messages            map[string][]directoryMessage `json:"messages,omitempty"`
+	NextMessageSequence uint64                        `json:"next_message_sequence,omitempty"`
 }
 
 type directory struct {
@@ -85,9 +103,21 @@ type serverDescriptor struct {
 	ID             string `json:"id"`
 	OwnerID        string `json:"owner_id"`
 	Name           string `json:"name"`
+	TextChannelID  string `json:"text_channel_id,omitempty"`
 	VoiceChannelID string `json:"voice_channel_id"`
 	Role           string `json:"role"`
 	MemberCount    int    `json:"member_count"`
+}
+
+type messageDescriptor struct {
+	ID                string `json:"id"`
+	Sequence          uint64 `json:"sequence"`
+	ServerID          string `json:"server_id"`
+	ChannelID         string `json:"channel_id"`
+	AuthorID          string `json:"author_id"`
+	AuthorDisplayName string `json:"author_display_name"`
+	Content           string `json:"content"`
+	CreatedAt         int64  `json:"created_at"`
 }
 
 func (d *directory) setRTCProvisioning(
@@ -165,9 +195,11 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 		path:   path,
 		secret: append([]byte(nil), secret...),
 		state: directoryState{
-			Users:   make(map[string]directoryUser),
-			Servers: make(map[string]directoryServer),
-			Invites: make(map[string]directoryInvite),
+			Users:               make(map[string]directoryUser),
+			Servers:             make(map[string]directoryServer),
+			Invites:             make(map[string]directoryInvite),
+			Messages:            make(map[string][]directoryMessage),
+			NextMessageSequence: 1,
 		},
 	}
 	raw, err := os.ReadFile(path)
@@ -195,6 +227,12 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 	if d.state.Invites == nil {
 		d.state.Invites = make(map[string]directoryInvite)
 	}
+	if d.state.Messages == nil {
+		d.state.Messages = make(map[string][]directoryMessage)
+	}
+	if d.state.NextMessageSequence == 0 {
+		d.state.NextMessageSequence = 1
+	}
 	if len(d.state.Users) > maxDirectoryUsers ||
 		len(d.state.Servers) > maxDirectoryServers ||
 		len(d.state.Invites) > maxDirectoryInvites {
@@ -208,6 +246,49 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 		if len(server.Members) > maxDirectoryMembers {
 			return nil, errors.New("directory server exceeds member bound")
 		}
+	}
+
+	totalMessages := 0
+	var maximumSequence uint64
+	for key, messages := range d.state.Messages {
+		if len(messages) > maxMessagesPerChannel {
+			return nil, errors.New("directory message channel exceeds retention bound")
+		}
+		totalMessages += len(messages)
+		if totalMessages > maxDirectoryMessages {
+			return nil, errors.New("directory message count exceeds retention bound")
+		}
+		var previous uint64
+		for _, message := range messages {
+			if key != messageKey(message.ServerID, message.ChannelID) ||
+				!validID(message.ID) ||
+				!validID(message.ServerID) ||
+				!validID(message.ChannelID) ||
+				!validID(message.AuthorID) ||
+				message.Sequence == 0 ||
+				message.Sequence <= previous ||
+				message.CreatedAt <= 0 ||
+				!validBoundedText(message.Content, maxMessageContentBytes) {
+				return nil, errors.New("directory contains invalid message state")
+			}
+			server, exists := d.state.Servers[message.ServerID]
+			if !exists || server.TextChannelID != message.ChannelID {
+				return nil, errors.New("directory message references invalid channel")
+			}
+			if _, exists := d.state.Users[message.AuthorID]; !exists {
+				return nil, errors.New("directory message references invalid author")
+			}
+			previous = message.Sequence
+			if message.Sequence > maximumSequence {
+				maximumSequence = message.Sequence
+			}
+		}
+	}
+	if d.state.NextMessageSequence <= maximumSequence {
+		if maximumSequence == ^uint64(0) {
+			return nil, errors.New("directory message sequence exhausted")
+		}
+		d.state.NextMessageSequence = maximumSequence + 1
 	}
 	return d, nil
 }
@@ -238,6 +319,9 @@ func (d *directory) persistLocked() error {
 	raw, err := json.MarshalIndent(d.state, "", "  ")
 	if err != nil {
 		return err
+	}
+	if len(raw) > maxDirectoryStateBytes {
+		return errors.New("directory state exceeds configured bound")
 	}
 	tmp := d.path + ".tmp"
 	file, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
@@ -439,13 +523,16 @@ func (d *directory) handleServerSync(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		ServerID       string `json:"server_id"`
 		Name           string `json:"name"`
+		TextChannelID  string `json:"text_channel_id"`
 		VoiceChannelID string `json:"voice_channel_id"`
 	}
 	if !decodeJSON(w, r, &request) {
 		return
 	}
 	if !validID(request.ServerID) ||
+		!validID(request.TextChannelID) ||
 		!validID(request.VoiceChannelID) ||
+		request.TextChannelID == request.VoiceChannelID ||
 		!validBoundedText(request.Name, maxServerNameBytes) {
 		writeAPIError(w, http.StatusBadRequest, "invalid server")
 		return
@@ -461,6 +548,7 @@ func (d *directory) handleServerSync(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing.Name = request.Name
+		existing.TextChannelID = request.TextChannelID
 		existing.VoiceChannelID = request.VoiceChannelID
 		d.state.Servers[request.ServerID] = existing
 		if err := d.persistLocked(); err != nil {
@@ -481,6 +569,7 @@ func (d *directory) handleServerSync(w http.ResponseWriter, r *http.Request) {
 		ID:             request.ServerID,
 		OwnerID:        user.ID,
 		Name:           request.Name,
+		TextChannelID:  request.TextChannelID,
 		VoiceChannelID: request.VoiceChannelID,
 		Members: map[string]directoryMember{
 			user.ID: {UserID: user.ID, Role: "owner"},
@@ -504,6 +593,7 @@ func descriptorFor(server directoryServer, userID string) serverDescriptor {
 		ID:             server.ID,
 		OwnerID:        server.OwnerID,
 		Name:           server.Name,
+		TextChannelID:  server.TextChannelID,
 		VoiceChannelID: server.VoiceChannelID,
 		Role:           role,
 		MemberCount:    len(server.Members),
@@ -679,6 +769,264 @@ func (d *directory) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, descriptorFor(server, user.ID))
+}
+
+func messageKey(serverID, channelID string) string {
+	return serverID + ":" + channelID
+}
+
+func randomMessageID() (string, error) {
+	raw := make([]byte, 18)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func (d *directory) totalMessagesLocked() int {
+	total := 0
+	for _, messages := range d.state.Messages {
+		total += len(messages)
+	}
+	return total
+}
+
+func (d *directory) oldestMessageChannelLocked() string {
+	var key string
+	var sequence uint64
+	for candidate, messages := range d.state.Messages {
+		if len(messages) == 0 {
+			continue
+		}
+		if key == "" || messages[0].Sequence < sequence {
+			key = candidate
+			sequence = messages[0].Sequence
+		}
+	}
+	return key
+}
+
+func (d *directory) messageDescriptorLocked(message directoryMessage) messageDescriptor {
+	displayName := message.AuthorID
+	if user, exists := d.state.Users[message.AuthorID]; exists &&
+		validBoundedText(user.DisplayName, maxDisplayNameBytes) {
+		displayName = user.DisplayName
+	}
+	return messageDescriptor{
+		ID:                message.ID,
+		Sequence:          message.Sequence,
+		ServerID:          message.ServerID,
+		ChannelID:         message.ChannelID,
+		AuthorID:          message.AuthorID,
+		AuthorDisplayName: displayName,
+		Content:           message.Content,
+		CreatedAt:         message.CreatedAt,
+	}
+}
+
+func (d *directory) authorizeTextChannelLocked(
+	userID string,
+	serverID string,
+	channelID string,
+) (directoryServer, bool) {
+	server, exists := d.state.Servers[serverID]
+	if !exists || server.TextChannelID == "" ||
+		server.TextChannelID != channelID {
+		return directoryServer{}, false
+	}
+	if _, member := server.Members[userID]; !member {
+		return directoryServer{}, false
+	}
+	return server, true
+}
+
+func (d *directory) handleMessages(w http.ResponseWriter, r *http.Request) {
+	user, ok := d.authenticate(r)
+	if !ok {
+		writeAPIError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		d.handleMessageList(w, r, user)
+	case http.MethodPost:
+		d.handleMessageSend(w, r, user)
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeAPIError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (d *directory) handleMessageList(
+	w http.ResponseWriter,
+	r *http.Request,
+	user directoryUser,
+) {
+	query := r.URL.Query()
+	serverID := query.Get("server_id")
+	channelID := query.Get("channel_id")
+	if !validID(serverID) || !validID(channelID) {
+		writeAPIError(w, http.StatusBadRequest, "invalid message channel")
+		return
+	}
+
+	var after uint64
+	if raw := query.Get("after"); raw != "" {
+		value, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			writeAPIError(w, http.StatusBadRequest, "invalid message cursor")
+			return
+		}
+		after = value
+	}
+	limit := maxMessagePage
+	if raw := query.Get("limit"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > maxMessagePage {
+			writeAPIError(w, http.StatusBadRequest, "invalid message limit")
+			return
+		}
+		limit = value
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if _, allowed := d.authorizeTextChannelLocked(user.ID, serverID, channelID); !allowed {
+		writeAPIError(w, http.StatusForbidden, "text channel membership required")
+		return
+	}
+
+	messages := d.state.Messages[messageKey(serverID, channelID)]
+	result := make([]messageDescriptor, 0, min(limit, len(messages)))
+	nextAfter := after
+	for _, message := range messages {
+		if message.Sequence <= after {
+			continue
+		}
+		result = append(result, d.messageDescriptorLocked(message))
+		nextAfter = message.Sequence
+		if len(result) == limit {
+			break
+		}
+	}
+	writeAPIJSON(w, http.StatusOK, map[string]any{
+		"messages":   result,
+		"next_after": nextAfter,
+	})
+}
+
+func (d *directory) handleMessageSend(
+	w http.ResponseWriter,
+	r *http.Request,
+	user directoryUser,
+) {
+	var request struct {
+		ServerID  string `json:"server_id"`
+		ChannelID string `json:"channel_id"`
+		Content   string `json:"content"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if !validID(request.ServerID) ||
+		!validID(request.ChannelID) ||
+		!validBoundedText(request.Content, maxMessageContentBytes) ||
+		strings.TrimSpace(request.Content) == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid message")
+		return
+	}
+
+	messageID, err := randomMessageID()
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "message entropy failed")
+		return
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if _, allowed := d.authorizeTextChannelLocked(
+		user.ID, request.ServerID, request.ChannelID); !allowed {
+		writeAPIError(w, http.StatusForbidden, "text channel membership required")
+		return
+	}
+	if d.state.NextMessageSequence == 0 ||
+		d.state.NextMessageSequence == ^uint64(0) {
+		writeAPIError(w, http.StatusServiceUnavailable, "message sequence unavailable")
+		return
+	}
+
+	key := messageKey(request.ServerID, request.ChannelID)
+	previousCurrent, currentExisted := d.state.Messages[key]
+	previousCurrent = append([]directoryMessage(nil), previousCurrent...)
+
+	var previousOther []directoryMessage
+	otherKey := ""
+	otherExisted := false
+
+	current := append([]directoryMessage(nil), d.state.Messages[key]...)
+	if len(current) >= maxMessagesPerChannel {
+		current = current[1:]
+	} else if d.totalMessagesLocked() >= maxDirectoryMessages {
+		oldestKey := d.oldestMessageChannelLocked()
+		if oldestKey == "" {
+			writeAPIError(w, http.StatusServiceUnavailable, "message retention unavailable")
+			return
+		}
+		if oldestKey == key {
+			if len(current) != 0 {
+				current = current[1:]
+			}
+		} else {
+			previousOther, otherExisted = d.state.Messages[oldestKey]
+			previousOther = append([]directoryMessage(nil), previousOther...)
+			pruned := append([]directoryMessage(nil), d.state.Messages[oldestKey]...)
+			if len(pruned) != 0 {
+				pruned = pruned[1:]
+			}
+			if len(pruned) == 0 {
+				delete(d.state.Messages, oldestKey)
+			} else {
+				d.state.Messages[oldestKey] = pruned
+			}
+			otherKey = oldestKey
+		}
+	}
+
+	sequence := d.state.NextMessageSequence
+	previousSequence := sequence
+	d.state.NextMessageSequence++
+	message := directoryMessage{
+		ID:        messageID,
+		Sequence:  sequence,
+		ServerID:  request.ServerID,
+		ChannelID: request.ChannelID,
+		AuthorID:  user.ID,
+		Content:   request.Content,
+		CreatedAt: time.Now().UnixMilli(),
+	}
+	current = append(current, message)
+	d.state.Messages[key] = current
+
+	if err := d.persistLocked(); err != nil {
+		d.state.NextMessageSequence = previousSequence
+		if currentExisted {
+			d.state.Messages[key] = previousCurrent
+		} else {
+			delete(d.state.Messages, key)
+		}
+		if otherKey != "" {
+			if otherExisted {
+				d.state.Messages[otherKey] = previousOther
+			} else {
+				delete(d.state.Messages, otherKey)
+			}
+		}
+		writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
+		return
+	}
+
+	writeAPIJSON(w, http.StatusCreated, d.messageDescriptorLocked(message))
 }
 
 func (d *directory) handleRTCToken(w http.ResponseWriter, r *http.Request) {
