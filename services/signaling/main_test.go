@@ -976,3 +976,74 @@ func TestMessageKeySeparatesColonBearingIdentifiers(t *testing.T) {
 		t.Fatalf("message key collision: %q", left)
 	}
 }
+
+
+func TestServerSyncDoesNotOrphanTextHistoryByChangingChannelIdentity(t *testing.T) {
+	secret := []byte(strings.Repeat("i", 32))
+	d, err := openDirectory(
+		filepath.Join(t.TempDir(), "directory.json"),
+		secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := registerTestUser(t, d, "owner-1", testCredential(0x91))
+
+	first := authenticatedRequest(
+		http.MethodPost,
+		"/v1/servers/sync",
+		token,
+		map[string]any{
+			"server_id":        "server-1",
+			"name":             "Stable Server",
+			"text_channel_id":  "text-1",
+			"voice_channel_id": "voice-1",
+		})
+	firstResponse := httptest.NewRecorder()
+	d.handleServerSync(firstResponse, first)
+	if firstResponse.Code != http.StatusCreated {
+		t.Fatalf("initial sync: %d %s",
+			firstResponse.Code, firstResponse.Body.String())
+	}
+
+	send := authenticatedRequest(
+		http.MethodPost,
+		"/v1/messages",
+		token,
+		map[string]any{
+			"server_id":  "server-1",
+			"channel_id": "text-1",
+			"content":    "history must stay addressable",
+		})
+	sendResponse := httptest.NewRecorder()
+	d.handleMessages(sendResponse, send)
+	if sendResponse.Code != http.StatusCreated {
+		t.Fatalf("send: %d %s",
+			sendResponse.Code, sendResponse.Body.String())
+	}
+
+	change := authenticatedRequest(
+		http.MethodPost,
+		"/v1/servers/sync",
+		token,
+		map[string]any{
+			"server_id":        "server-1",
+			"name":             "Stable Server",
+			"text_channel_id":  "text-2",
+			"voice_channel_id": "voice-1",
+		})
+	changeResponse := httptest.NewRecorder()
+	d.handleServerSync(changeResponse, change)
+	if changeResponse.Code != http.StatusConflict {
+		t.Fatalf("text channel identity change status = %d body %s",
+			changeResponse.Code, changeResponse.Body.String())
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.state.Servers["server-1"].TextChannelID != "text-1" {
+		t.Fatal("rejected sync changed text channel identity")
+	}
+	if len(d.state.Messages[messageKey("server-1", "text-1")]) != 1 {
+		t.Fatal("rejected sync orphaned retained history")
+	}
+}

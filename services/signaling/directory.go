@@ -547,6 +547,11 @@ func (d *directory) handleServerSync(w http.ResponseWriter, r *http.Request) {
 			writeAPIError(w, http.StatusForbidden, "server owner required")
 			return
 		}
+		if existing.TextChannelID != "" &&
+			existing.TextChannelID != request.TextChannelID {
+			writeAPIError(w, http.StatusConflict, "text channel identity is immutable")
+			return
+		}
 		existing.Name = request.Name
 		existing.TextChannelID = request.TextChannelID
 		existing.VoiceChannelID = request.VoiceChannelID

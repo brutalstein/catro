@@ -717,16 +717,15 @@ ServerView::BeginSendMessage() {
         co_return;
     }
 
-    auto message =
-        std::get<
-            catro::platform::windows::DirectoryMessage>(
-                std::move(result));
-    lifetime->AppendMessage(message);
+    // Do not advance the timeline cursor from the POST response. A history refresh that started
+    // before this send may still contain lower sequences; letting only ordered GET pages advance
+    // message_cursor_ prevents poll/send completion order from skipping retained messages.
     lifetime->Composer().Text(L"");
     lifetime->TextStatusText().Text(L"");
     lifetime->TextStatusText().Visibility(
         xaml::Visibility::Collapsed);
     lifetime->UpdateMessageUi();
+    lifetime->BeginMessageRefresh();
 }
 
 winrt::fire_and_forget
