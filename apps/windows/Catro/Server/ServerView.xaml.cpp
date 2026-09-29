@@ -937,6 +937,10 @@ ServerView::BeginJoinRequestDecision(
             box_value(
                 to_hstring(
                     failure->message)));
+        // A requester may have cancelled or another owner-side action may have resolved the
+        // snapshot while the dialog was open. Refresh immediately so the stale row disappears
+        // without waiting for the next five-second poll.
+        lifetime->BeginJoinRequestRefresh();
         co_return;
     }
 
