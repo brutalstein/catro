@@ -1,4 +1,5 @@
 #include <catro/rtc/room_mesh_transport.hpp>
+#include <catro/rtc/room_media_policy.hpp>
 
 #include <nlohmann/json.hpp>
 #include <rtc/rtc.hpp>
@@ -23,7 +24,7 @@ namespace {
 
 using Json = nlohmann::json;
 
-constexpr std::size_t kMaximumPeers = 64;
+constexpr std::size_t kMaximumPeers = 4;
 constexpr std::size_t kMaximumMediaDatagram = 2048;
 constexpr std::size_t kMaximumSignalMessage = 64U * 1024U;
 constexpr std::size_t kVoiceBufferedBytes = 8U * 1024U;
@@ -190,6 +191,7 @@ struct RoomMeshTransport::Impl {
         std::shared_ptr<::rtc::WebSocket> websocket;
         std::vector<std::shared_ptr<Peer>> peers;
         RoomTransportCallbacks callbacks;
+        bool cleared_screen_owner = false;
 
         {
             std::scoped_lock lock(mutex_);
@@ -200,6 +202,9 @@ struct RoomMeshTransport::Impl {
                 peers.push_back(peer);
             }
             peers_.clear();
+            cleared_screen_owner =
+                !screen_owner_.empty();
+            screen_owner_.clear();
             callbacks = callbacks_;
         }
 
@@ -211,6 +216,14 @@ struct RoomMeshTransport::Impl {
             try {
                 websocket->resetCallbacks();
                 websocket->close();
+            } catch (...) {
+            }
+        }
+
+        if (cleared_screen_owner &&
+            callbacks.on_screen_owner) {
+            try {
+                callbacks.on_screen_owner({});
             } catch (...) {
             }
         }
@@ -240,6 +253,29 @@ struct RoomMeshTransport::Impl {
     [[nodiscard]] std::size_t send_stream_audio(
         std::span<const std::byte> datagram) noexcept {
         return broadcast(kStreamAudioLabel, datagram);
+    }
+
+    [[nodiscard]] bool claim_screen() noexcept {
+        if (state_.load(std::memory_order_acquire) !=
+            RoomTransportState::joined) {
+            return false;
+        }
+        return send_json(
+            Json{{"type", "screen_claim"}});
+    }
+
+    void release_screen() noexcept {
+        if (state_.load(std::memory_order_acquire) ==
+            RoomTransportState::joined) {
+            (void)send_json(
+                Json{{"type", "screen_release"}});
+        }
+    }
+
+    [[nodiscard]] std::string screen_owner()
+        const {
+        std::scoped_lock lock(mutex_);
+        return screen_owner_;
     }
 
     [[nodiscard]] std::size_t broadcast(
@@ -513,9 +549,19 @@ struct RoomMeshTransport::Impl {
                 }
 
                 RoomTransportCallbacks callbacks;
+                bool media_allowed = voice;
                 {
                     std::scoped_lock lock(mutex_);
                     callbacks = callbacks_;
+                    if (!voice) {
+                        media_allowed =
+                            screen_media_allowed(
+                                screen_owner_,
+                                peer_id);
+                    }
+                }
+                if (!media_allowed) {
+                    return;
                 }
 
                 const auto bytes =
@@ -560,6 +606,9 @@ struct RoomMeshTransport::Impl {
                 message.value("type", "");
 
             if (type == "joined") {
+                set_screen_owner(
+                    message.value(
+                        "screen_owner", ""));
                 state_.store(
                     RoomTransportState::joined,
                     std::memory_order_release);
@@ -587,6 +636,14 @@ struct RoomMeshTransport::Impl {
                         }
                     }
                 }
+                return;
+            }
+
+            if (type == "screen_state" ||
+                type == "screen_busy") {
+                set_screen_owner(
+                    message.value(
+                        "screen_owner", ""));
                 return;
             }
 
@@ -701,23 +758,46 @@ struct RoomMeshTransport::Impl {
             });
     }
 
-    void send_json(const Json& message) noexcept {
+    bool send_json(const Json& message) noexcept {
         std::shared_ptr<::rtc::WebSocket> websocket;
         {
             std::scoped_lock lock(mutex_);
             websocket = websocket_;
         }
         if (!websocket || !websocket->isOpen()) {
-            return;
+            return false;
         }
 
         try {
             const auto encoded = message.dump();
             if (encoded.size() <=
                 kMaximumSignalMessage) {
-                (void)websocket->send(encoded);
+                return websocket->send(encoded);
             }
         } catch (...) {
+        }
+        return false;
+    }
+
+    void set_screen_owner(
+        std::string next_owner) noexcept {
+        RoomTransportCallbacks callbacks;
+        std::string published_owner;
+        {
+            std::scoped_lock lock(mutex_);
+            if (screen_owner_ == next_owner) {
+                return;
+            }
+            screen_owner_ = std::move(next_owner);
+            published_owner = screen_owner_;
+            callbacks = callbacks_;
+        }
+        if (callbacks.on_screen_owner) {
+            try {
+                callbacks.on_screen_owner(
+                    published_owner);
+            } catch (...) {
+            }
         }
     }
 
@@ -827,6 +907,7 @@ struct RoomMeshTransport::Impl {
         std::string,
         std::shared_ptr<Peer>>
         peers_;
+    std::string screen_owner_;
     std::atomic<RoomTransportState> state_{
         RoomTransportState::idle};
     std::atomic_bool stopping_{true};
@@ -865,6 +946,18 @@ std::size_t RoomMeshTransport::send_video(
 std::size_t RoomMeshTransport::send_stream_audio(
     std::span<const std::byte> datagram) noexcept {
     return impl_->send_stream_audio(datagram);
+}
+
+bool RoomMeshTransport::claim_screen() noexcept {
+    return impl_->claim_screen();
+}
+
+void RoomMeshTransport::release_screen() noexcept {
+    impl_->release_screen();
+}
+
+std::string RoomMeshTransport::screen_owner() const {
+    return impl_->screen_owner();
 }
 
 RoomTransportState RoomMeshTransport::state()

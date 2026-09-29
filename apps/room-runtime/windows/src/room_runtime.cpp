@@ -120,7 +120,9 @@ public:
             raw.channel_id == nullptr ||
             raw.user_id == nullptr ||
             raw.ice_server_urls == nullptr ||
-            raw.ice_server_count == 0) {
+            raw.ice_server_count == 0 ||
+            raw.max_remote_peers < 1 ||
+            raw.max_remote_peers > 4) {
             set_error("invalid room runtime configuration");
             state_.store(CATRO_ROOM_FAILED, std::memory_order_release);
             return -1;
@@ -133,6 +135,8 @@ public:
             config.server_id = raw.server_id;
             config.channel_id = raw.channel_id;
             config.user_id = raw.user_id;
+            config.max_peers =
+                raw.max_remote_peers;
             config.allow_insecure_signaling =
                 raw.allow_insecure_signaling != 0;
             config.allow_no_turn = raw.allow_no_turn != 0;
@@ -167,6 +171,10 @@ public:
                     stream_audio_.push(data);
                     stream_audio_received_.fetch_add(
                         1, std::memory_order_relaxed);
+                };
+            callbacks.on_screen_owner =
+                [this](std::string_view owner) {
+                    set_screen_owner(owner);
                 };
             callbacks.on_state =
                 [this](catro::rtc::RoomTransportState next) {
@@ -216,7 +224,23 @@ public:
         voice_.clear();
         video_.clear();
         stream_audio_.clear();
+        set_screen_owner({});
         state_.store(CATRO_ROOM_IDLE, std::memory_order_release);
+    }
+
+    std::int32_t claim_screen() noexcept {
+        if (state_.load(std::memory_order_acquire) !=
+            CATRO_ROOM_JOINED) {
+            return -1;
+        }
+        return transport_.claim_screen() ? 0 : -1;
+    }
+
+    void release_screen() noexcept {
+        if (state_.load(std::memory_order_acquire) ==
+            CATRO_ROOM_JOINED) {
+            transport_.release_screen();
+        }
     }
 
     std::size_t send_voice(std::span<const std::byte> data) noexcept {
@@ -300,6 +324,19 @@ public:
         result.stream_audio_queue_drops =
             stream_audio_.drops();
 
+        {
+            std::scoped_lock lock(screen_owner_mutex_);
+            if (!screen_owner_.empty()) {
+                std::snprintf(
+                    result.screen_owner,
+                    sizeof(result.screen_owner),
+                    "%.*s",
+                    static_cast<int>(
+                        sizeof(result.screen_owner) - 1),
+                    screen_owner_.c_str());
+            }
+        }
+
         std::scoped_lock lock(error_mutex_);
         if (!error_.empty()) {
             std::snprintf(
@@ -313,6 +350,19 @@ public:
     }
 
 private:
+    void set_screen_owner(
+        std::string_view owner) noexcept {
+        try {
+            std::scoped_lock lock(
+                screen_owner_mutex_);
+            screen_owner_.assign(owner);
+            if (screen_owner_.size() > 128) {
+                screen_owner_.resize(128);
+            }
+        } catch (...) {
+        }
+    }
+
     void set_error(std::string_view message) noexcept {
         try {
             std::scoped_lock lock(error_mutex_);
@@ -338,6 +388,8 @@ private:
     std::atomic<std::uint64_t> stream_audio_sent_{0};
     std::atomic<std::uint64_t> stream_audio_received_{0};
 
+    mutable std::mutex screen_owner_mutex_;
+    std::string screen_owner_;
     mutable std::mutex error_mutex_;
     std::string error_;
 };
@@ -370,6 +422,20 @@ std::int32_t catro_room_runtime_start(
 void catro_room_runtime_stop(CatroRoomRuntimeHandle handle) noexcept {
     if (handle != nullptr) {
         runtime(handle)->stop();
+    }
+}
+
+std::int32_t catro_room_runtime_claim_screen(
+    CatroRoomRuntimeHandle handle) noexcept {
+    return handle != nullptr
+               ? runtime(handle)->claim_screen()
+               : -1;
+}
+
+void catro_room_runtime_release_screen(
+    CatroRoomRuntimeHandle handle) noexcept {
+    if (handle != nullptr) {
+        runtime(handle)->release_screen();
     }
 }
 

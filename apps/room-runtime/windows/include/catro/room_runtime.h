@@ -33,6 +33,7 @@ struct CatroRoomRuntimeConfig {
 
     const char* const* ice_server_urls;
     std::size_t ice_server_count;
+    std::uint32_t max_remote_peers;
 
     std::uint8_t allow_insecure_signaling;
     std::uint8_t allow_no_turn;
@@ -50,6 +51,7 @@ struct CatroRoomRuntimeSnapshot {
     std::uint64_t voice_queue_drops;
     std::uint64_t video_queue_drops;
     std::uint64_t stream_audio_queue_drops;
+    char screen_owner[129];
     char error[256];
 };
 
@@ -60,6 +62,10 @@ CATRO_ROOM_API std::int32_t catro_room_runtime_start(
     CatroRoomRuntimeHandle handle,
     const CatroRoomRuntimeConfig* config) noexcept;
 CATRO_ROOM_API void catro_room_runtime_stop(
+    CatroRoomRuntimeHandle handle) noexcept;
+CATRO_ROOM_API std::int32_t catro_room_runtime_claim_screen(
+    CatroRoomRuntimeHandle handle) noexcept;
+CATRO_ROOM_API void catro_room_runtime_release_screen(
     CatroRoomRuntimeHandle handle) noexcept;
 
 CATRO_ROOM_API std::size_t catro_room_runtime_send_voice(

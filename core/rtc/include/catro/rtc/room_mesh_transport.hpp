@@ -39,7 +39,7 @@ struct RoomMeshConfig {
     std::string user_id;
     std::vector<std::string> ice_server_urls;
 
-    std::size_t max_peers = 16;
+    std::size_t max_peers = 4;
 
     // Production defaults are intentionally strict. Engineering/local tests must explicitly opt
     // out instead of accidentally shipping plaintext signaling or a no-TURN configuration.
@@ -56,6 +56,7 @@ struct RoomTransportCallbacks {
         on_video_datagram;
     std::function<void(std::string_view, std::span<const std::byte>)>
         on_stream_audio_datagram;
+    std::function<void(std::string_view)> on_screen_owner;
     std::function<void(RoomTransportState)> on_state;
     std::function<void(std::string_view)> on_error;
 };
@@ -86,6 +87,10 @@ public:
         std::span<const std::byte> datagram) noexcept;
     [[nodiscard]] std::size_t send_stream_audio(
         std::span<const std::byte> datagram) noexcept;
+
+    [[nodiscard]] bool claim_screen() noexcept;
+    void release_screen() noexcept;
+    [[nodiscard]] std::string screen_owner() const;
 
     [[nodiscard]] RoomTransportState state() const noexcept;
     [[nodiscard]] std::size_t peer_count() const noexcept;
