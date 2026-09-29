@@ -13,6 +13,7 @@
 
 #include <winrt/Windows.Graphics.Capture.h>
 #include <winrt/Windows.Security.Authorization.AppCapabilityAccess.h>
+#include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Text.h>
 
@@ -20,6 +21,7 @@
 #include <charconv>
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -189,6 +191,23 @@ std::wstring capture_source_label(
     return label;
 }
 
+std::wstring message_time(std::int64_t unix_milliseconds) {
+    if (unix_milliseconds <= 0) {
+        return {};
+    }
+    const auto seconds =
+        static_cast<std::time_t>(unix_milliseconds / 1000);
+    std::tm local{};
+    if (localtime_s(&local, &seconds) != 0) {
+        return {};
+    }
+    wchar_t buffer[16]{};
+    if (std::wcsftime(buffer, std::size(buffer), L"%H:%M", &local) == 0) {
+        return {};
+    }
+    return buffer;
+}
+
 bool chromium_window(
     const catro::platform::windows::CaptureSource& source) noexcept {
     if (source.kind != catro::platform::windows::CaptureSourceKind::window) {
@@ -215,6 +234,9 @@ ServerView::~ServerView() {
     if (voice_timer_) {
         voice_timer_.Stop();
     }
+    if (message_timer_) {
+        message_timer_.Stop();
+    }
     if (voice_runtime_ != nullptr) {
         catro_voice_runtime_destroy(voice_runtime_);
         voice_runtime_ = nullptr;
@@ -240,7 +262,14 @@ void ServerView::InitializeComponent() {
     voice_timer_ = DispatcherQueue().CreateTimer();
     voice_timer_.Interval(500ms);
     voice_timer_.Tick([this](auto&&, auto&&) { UpdateVoiceUi(); });
+
+    message_timer_ = DispatcherQueue().CreateTimer();
+    message_timer_.Interval(1s);
+    message_timer_.Tick(
+        [this](auto&&, auto&&) { BeginMessageRefresh(); });
+
     Loaded([this](auto&&, auto&&) {
+        page_loaded_ = true;
         if (voice_runtime_ != nullptr) {
             const auto snapshot = catro_voice_runtime_snapshot(voice_runtime_);
             if (snapshot.state == CATRO_VOICE_STARTING || snapshot.state == CATRO_VOICE_JOINED) {
@@ -258,8 +287,11 @@ void ServerView::InitializeComponent() {
         }
         UpdateVoiceUi();
         UpdateScreenShareUi();
+        UpdateMessageUi();
+        BeginMessageRefresh();
     });
     Unloaded([this](auto&&, auto&&) {
+        page_loaded_ = false;
         // Voice and screen share are room state, not page state. Navigating to Settings/System must
         // not disconnect either media worker. Suspend only presentation/polling work that cannot be
         // seen while this page is unloaded; transport and encode continue uninterrupted.
@@ -268,6 +300,9 @@ void ServerView::InitializeComponent() {
         }
         if (screen_timer_) {
             screen_timer_.Stop();
+        }
+        if (message_timer_) {
+            message_timer_.Stop();
         }
         if (screen_runtime_) {
             screen_runtime_->set_local_preview_enabled(false);
@@ -281,6 +316,7 @@ void ServerView::InitializeComponent() {
     ShowChannel("general");
     UpdateVoiceUi();
     UpdateScreenShareUi();
+    UpdateMessageUi();
 }
 
 void ServerView::SetLocalState(const catro::community::LocalState& state) {
@@ -316,6 +352,21 @@ void ServerView::OnTextChannel(IInspectable const&, xaml::RoutedEventArgs const&
 
 void ServerView::OnVoiceChannel(IInspectable const&, xaml::RoutedEventArgs const&) {
     ShowChannel("voice");
+}
+
+void ServerView::OnComposerKeyDown(
+    IInspectable const&,
+    Microsoft::UI::Xaml::Input::KeyRoutedEventArgs const& args) {
+    if (args.Key() == Windows::System::VirtualKey::Enter) {
+        args.Handled(true);
+        BeginSendMessage();
+    }
+}
+
+void ServerView::OnSendMessage(
+    IInspectable const&,
+    xaml::RoutedEventArgs const&) {
+    BeginSendMessage();
 }
 
 void ServerView::OnJoinVoice(
@@ -420,6 +471,287 @@ void ServerView::OnSizeChanged(IInspectable const&, xaml::SizeChangedEventArgs c
     MembersPane().Visibility(show_members ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
     ChannelsColumn().Width(xaml::GridLengthHelper::FromPixels(width >= 760.0 ? 232.0 : 196.0));
     UpdateScreenShareUi();
+}
+
+void ServerView::ResetMessages() {
+    if (++message_generation_ == 0) {
+        message_generation_ = 1;
+    }
+    message_cursor_ = 0;
+    MessageList().Items().Clear();
+    TextEmptyState().Visibility(
+        xaml::Visibility::Visible);
+    TextStatusText().Text(L"");
+    TextStatusText().Visibility(
+        xaml::Visibility::Collapsed);
+}
+
+void ServerView::UpdateMessageUi() {
+    const bool text_active =
+        state_.active_channel_kind() ==
+        catro::community::ChannelKind::text;
+    const bool configured =
+        directory_service_.has_value() &&
+        !directory_access_token_.empty() &&
+        directory_server_.has_value() &&
+        !directory_server_->text_channel_id.empty();
+    const bool sending =
+        message_send_pending_ &&
+        message_send_generation_ ==
+            message_generation_;
+
+    Composer().IsEnabled(
+        text_active && configured && !sending);
+    SendMessageButton().IsEnabled(
+        text_active && configured && !sending);
+
+    if (message_timer_) {
+        if (page_loaded_ && text_active && configured) {
+            message_timer_.Start();
+        } else {
+            message_timer_.Stop();
+        }
+    }
+
+    if (text_active && !configured) {
+        TextStatusText().Text(
+            L"Online text is unavailable until this server is synchronized.");
+        TextStatusText().Visibility(
+            xaml::Visibility::Visible);
+    }
+}
+
+void ServerView::AppendMessage(
+    const catro::platform::windows::DirectoryMessage& message) {
+    if (message.sequence <= message_cursor_) {
+        return;
+    }
+
+    controls::StackPanel item;
+    item.Spacing(3);
+    item.Margin(xaml::Thickness{8, 6, 8, 6});
+
+    controls::StackPanel header;
+    header.Orientation(controls::Orientation::Horizontal);
+    header.Spacing(8);
+
+    controls::TextBlock author;
+    author.Text(to_hstring(message.author_display_name));
+    author.FontWeight(
+        Windows::UI::Text::FontWeights::SemiBold());
+    author.Foreground(
+        xaml::Application::Current().Resources()
+            .Lookup(box_value(L"CatroTextBrush"))
+            .as<Microsoft::UI::Xaml::Media::Brush>());
+    header.Children().Append(author);
+
+    controls::TextBlock timestamp;
+    timestamp.Text(hstring{message_time(message.created_at)});
+    timestamp.FontSize(11);
+    timestamp.Foreground(
+        xaml::Application::Current().Resources()
+            .Lookup(box_value(L"CatroTextTertiaryBrush"))
+            .as<Microsoft::UI::Xaml::Media::Brush>());
+    header.Children().Append(timestamp);
+
+    controls::TextBlock content;
+    content.Text(to_hstring(message.content));
+    content.TextWrapping(xaml::TextWrapping::Wrap);
+    content.IsTextSelectionEnabled(true);
+    content.Foreground(
+        xaml::Application::Current().Resources()
+            .Lookup(box_value(L"CatroTextSecondaryBrush"))
+            .as<Microsoft::UI::Xaml::Media::Brush>());
+
+    item.Children().Append(header);
+    item.Children().Append(content);
+    MessageList().Items().Append(item);
+
+    message_cursor_ = message.sequence;
+    while (MessageList().Items().Size() > 512) {
+        MessageList().Items().RemoveAt(0);
+    }
+    TextEmptyState().Visibility(
+        xaml::Visibility::Collapsed);
+
+    const auto size = MessageList().Items().Size();
+    if (size != 0) {
+        MessageList().ScrollIntoView(
+            MessageList().Items().GetAt(size - 1));
+    }
+}
+
+void ServerView::AppendMessages(
+    const std::vector<
+        catro::platform::windows::DirectoryMessage>& messages) {
+    for (const auto& message : messages) {
+        AppendMessage(message);
+    }
+}
+
+winrt::fire_and_forget
+ServerView::BeginMessageRefresh() {
+    auto lifetime = get_strong();
+    if (!page_loaded_ ||
+        state_.active_channel_kind() !=
+            catro::community::ChannelKind::text ||
+        !directory_service_ ||
+        directory_access_token_.empty() ||
+        !directory_server_ ||
+        directory_server_->text_channel_id.empty()) {
+        co_return;
+    }
+
+    const auto generation = message_generation_;
+    if (message_refresh_pending_ &&
+        message_refresh_generation_ == generation) {
+        co_return;
+    }
+    message_refresh_pending_ = true;
+    message_refresh_generation_ = generation;
+
+    const auto service = *directory_service_;
+    const auto access_token = directory_access_token_;
+    const auto server = *directory_server_;
+    const auto after = message_cursor_;
+    winrt::apartment_context ui_thread;
+
+    co_await winrt::resume_background();
+    auto result =
+        catro::platform::windows::list_directory_messages(
+            service,
+            access_token,
+            server.id,
+            server.text_channel_id,
+            after,
+            100);
+
+    co_await ui_thread;
+    if (lifetime->message_refresh_generation_ == generation) {
+        lifetime->message_refresh_pending_ = false;
+    }
+    if (generation != lifetime->message_generation_ ||
+        !lifetime->directory_server_ ||
+        lifetime->directory_server_->id != server.id ||
+        lifetime->directory_server_->text_channel_id !=
+            server.text_channel_id) {
+        co_return;
+    }
+
+    if (const auto* failure =
+            std::get_if<
+                catro::platform::windows::DirectoryError>(&result)) {
+        lifetime->TextStatusText().Text(
+            to_hstring(failure->message));
+        lifetime->TextStatusText().Visibility(
+            xaml::Visibility::Visible);
+        lifetime->UpdateMessageUi();
+        co_return;
+    }
+
+    auto page =
+        std::get<
+            catro::platform::windows::DirectoryMessagePage>(
+                std::move(result));
+    lifetime->AppendMessages(page.messages);
+    lifetime->TextStatusText().Text(L"");
+    lifetime->TextStatusText().Visibility(
+        xaml::Visibility::Collapsed);
+    lifetime->UpdateMessageUi();
+}
+
+winrt::fire_and_forget
+ServerView::BeginSendMessage() {
+    auto lifetime = get_strong();
+    if (state_.active_channel_kind() !=
+            catro::community::ChannelKind::text ||
+        !directory_service_ ||
+        directory_access_token_.empty() ||
+        !directory_server_ ||
+        directory_server_->text_channel_id.empty()) {
+        co_return;
+    }
+
+    const auto generation = message_generation_;
+    if (message_send_pending_ &&
+        message_send_generation_ == generation) {
+        co_return;
+    }
+
+    const auto original = Composer().Text();
+    const auto content = winrt::to_string(original);
+    const bool only_whitespace =
+        std::all_of(
+            content.begin(),
+            content.end(),
+            [](unsigned char value) {
+                return value == ' ' ||
+                       value == '\t' ||
+                       value == '\r' ||
+                       value == '\n';
+            });
+    if (content.empty() || only_whitespace) {
+        co_return;
+    }
+    if (content.size() > 2000) {
+        TextStatusText().Text(
+            L"Message is too long. The UTF-8 limit is 2,000 bytes.");
+        TextStatusText().Visibility(
+            xaml::Visibility::Visible);
+        co_return;
+    }
+
+    message_send_pending_ = true;
+    message_send_generation_ = generation;
+    UpdateMessageUi();
+
+    const auto service = *directory_service_;
+    const auto access_token = directory_access_token_;
+    const auto server = *directory_server_;
+    winrt::apartment_context ui_thread;
+
+    co_await winrt::resume_background();
+    auto result =
+        catro::platform::windows::send_directory_message(
+            service,
+            access_token,
+            server.id,
+            server.text_channel_id,
+            content);
+
+    co_await ui_thread;
+    if (lifetime->message_send_generation_ == generation) {
+        lifetime->message_send_pending_ = false;
+    }
+    if (generation != lifetime->message_generation_ ||
+        !lifetime->directory_server_ ||
+        lifetime->directory_server_->id != server.id ||
+        lifetime->directory_server_->text_channel_id !=
+            server.text_channel_id) {
+        co_return;
+    }
+
+    if (const auto* failure =
+            std::get_if<
+                catro::platform::windows::DirectoryError>(&result)) {
+        lifetime->TextStatusText().Text(
+            to_hstring(failure->message));
+        lifetime->TextStatusText().Visibility(
+            xaml::Visibility::Visible);
+        lifetime->UpdateMessageUi();
+        co_return;
+    }
+
+    auto message =
+        std::get<
+            catro::platform::windows::DirectoryMessage>(
+                std::move(result));
+    lifetime->AppendMessage(message);
+    lifetime->Composer().Text(L"");
+    lifetime->TextStatusText().Text(L"");
+    lifetime->TextStatusText().Visibility(
+        xaml::Visibility::Collapsed);
+    lifetime->UpdateMessageUi();
 }
 
 winrt::fire_and_forget
@@ -626,6 +958,11 @@ void ServerView::SetDirectorySession(
         directory_server_ &&
         directory_server_->id !=
             server.id;
+    const bool message_context_changed =
+        !directory_server_ ||
+        directory_server_->id != server.id ||
+        directory_server_->text_channel_id !=
+            server.text_channel_id;
     if (server_changed) {
         voice_join_pending_ = false;
         invite_pending_ = false;
@@ -648,6 +985,9 @@ void ServerView::SetDirectorySession(
     directory_access_token_ =
         std::move(access_token);
     directory_server_ = server;
+    if (message_context_changed) {
+        ResetMessages();
+    }
 
     ServerName().Text(
         to_hstring(server.name));
@@ -676,6 +1016,8 @@ void ServerView::SetDirectorySession(
         owner && !invite_pending_);
 
     ShowChannel(state_.channel_id());
+    UpdateMessageUi();
+    BeginMessageRefresh();
 }
 
 void ServerView::StartVoice(
@@ -2216,6 +2558,10 @@ void ServerView::ShowChannel(std::string_view id) {
     ChannelTitle().Text(voice ? VoiceChannelName().Text() : TextChannelName().Text());
     if (voice) {
         UpdateVoiceUi();
+    }
+    UpdateMessageUi();
+    if (!voice) {
+        BeginMessageRefresh();
     }
 }
 

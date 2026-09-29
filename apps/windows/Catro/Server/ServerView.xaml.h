@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace winrt::Catro::implementation {
 
@@ -23,6 +24,10 @@ struct ServerView : ServerViewT<ServerView> {
     void InitializeComponent();
     void OnTextChannel(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnVoiceChannel(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnComposerKeyDown(
+        IInspectable const&,
+        Microsoft::UI::Xaml::Input::KeyRoutedEventArgs const&);
+    void OnSendMessage(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnJoinVoice(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnInvite(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnMuteVoice(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
@@ -41,6 +46,14 @@ struct ServerView : ServerViewT<ServerView> {
 
 private:
     void ShowChannel(std::string_view id);
+    void ResetMessages();
+    void UpdateMessageUi();
+    void AppendMessages(
+        const std::vector<catro::platform::windows::DirectoryMessage>& messages);
+    void AppendMessage(
+        const catro::platform::windows::DirectoryMessage& message);
+    winrt::fire_and_forget BeginMessageRefresh();
+    winrt::fire_and_forget BeginSendMessage();
     winrt::fire_and_forget BeginVoiceJoin();
     winrt::fire_and_forget BeginInvite();
     winrt::fire_and_forget ShowInviteCode(std::string code);
@@ -76,6 +89,7 @@ private:
     std::string room_peer_id_;
     CatroVoiceRuntimeHandle voice_runtime_ = nullptr;
     Microsoft::UI::Dispatching::DispatcherQueueTimer voice_timer_{nullptr};
+    Microsoft::UI::Dispatching::DispatcherQueueTimer message_timer_{nullptr};
     std::unique_ptr<catro::screen::WindowsScreenShareRuntime> screen_runtime_;
     Microsoft::UI::Dispatching::DispatcherQueueTimer screen_timer_{nullptr};
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> attached_preview_swap_chain_;
@@ -91,6 +105,13 @@ private:
     bool stream_window_fullscreen_ = false;
     bool stream_window_topmost_ = false;
 
+    std::uint64_t message_cursor_ = 0;
+    std::uint64_t message_generation_ = 1;
+    std::uint64_t message_refresh_generation_ = 0;
+    std::uint64_t message_send_generation_ = 0;
+    bool page_loaded_ = false;
+    bool message_refresh_pending_ = false;
+    bool message_send_pending_ = false;
     bool room_mode_active_ = false;
     bool voice_join_pending_ = false;
     bool invite_pending_ = false;

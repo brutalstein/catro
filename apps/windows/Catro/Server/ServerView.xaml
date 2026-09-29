@@ -245,7 +245,20 @@
                         <RowDefinition x:Name="VoiceControlsRow" Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <StackPanel HorizontalAlignment="Center"
+                    <ListView x:Name="MessageList"
+                              Grid.Row="0"
+                              Margin="8,8,8,0"
+                              Padding="6,4,6,8"
+                              SelectionMode="None"
+                              IsItemClickEnabled="False"
+                              IsTabStop="False"
+                              ScrollViewer.HorizontalScrollMode="Disabled"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              ScrollViewer.VerticalScrollMode="Auto"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto" />
+
+                    <StackPanel x:Name="TextEmptyState"
+                                HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Spacing="8">
                         <Border Width="54"
@@ -265,17 +278,43 @@
                                    FontWeight="SemiBold"
                                    Foreground="{ThemeResource CatroTextBrush}"
                                    HorizontalAlignment="Center" />
+                        <TextBlock Text="This is the beginning of the channel."
+                                   FontSize="12"
+                                   Foreground="{ThemeResource CatroTextTertiaryBrush}"
+                                   HorizontalAlignment="Center" />
                     </StackPanel>
 
-                    <TextBox Grid.Row="1"
-                             Margin="14"
-                             MinHeight="42"
-                             IsEnabled="False"
-                             x:Name="Composer"
-                             PlaceholderText="Message #general"
-                             Background="{ThemeResource CatroSurfaceAltBrush}"
-                             BorderThickness="0"
-                             CornerRadius="12" />
+                    <StackPanel Grid.Row="1"
+                                Margin="14,6,14,14"
+                                Spacing="5">
+                        <TextBlock x:Name="TextStatusText"
+                                   FontSize="11"
+                                   Foreground="{ThemeResource CatroTextTertiaryBrush}"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0"
+                                     MinHeight="42"
+                                     MaxLength="2000"
+                                     IsEnabled="False"
+                                     x:Name="Composer"
+                                     PlaceholderText="Message #general"
+                                     Background="{ThemeResource CatroSurfaceAltBrush}"
+                                     BorderThickness="0"
+                                     CornerRadius="12"
+                                     KeyDown="OnComposerKeyDown" />
+                            <Button Grid.Column="1"
+                                    x:Name="SendMessageButton"
+                                    Content="Send"
+                                    MinWidth="72"
+                                    IsEnabled="False"
+                                    Click="OnSendMessage" />
+                        </Grid>
+                    </StackPanel>
                 </Grid>
 
                 <Grid x:Name="VoicePanel" Visibility="Collapsed">
