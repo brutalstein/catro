@@ -61,6 +61,13 @@ mkdir -p   "$CATRO_STATE_DIR"   "$CATRO_BACKUP_DIR"   "$CATRO_CADDY_DATA_DIR"   
 chown 65532:65532 "$CATRO_STATE_DIR"
 chmod 0700 "$CATRO_STATE_DIR" "$CATRO_BACKUP_DIR"
 
+state_file="$CATRO_STATE_DIR/directory.json"
+if [[ ! -e "$state_file" ]]; then
+  printf '{"users":{},"servers":{},"invites":{}}\n' >"$state_file"
+fi
+chown 65532:65532 "$state_file"
+chmod 0600 "$state_file"
+
 cat >"$ENV_FILE" <<EOF
 CATRO_HOSTNAME=$CATRO_HOSTNAME
 CATRO_PUBLIC_IP=$CATRO_PUBLIC_IP
@@ -89,6 +96,11 @@ printf '[catro] install: source commit %s\n' "$commit"
   docker compose --env-file "$ENV_FILE" up -d --remove-orphans
 )
 ENV_FILE="$ENV_FILE" "$SCRIPT_DIR/verify.sh"
+
+snapshot="$REPO_ROOT/out/deploy-active"
+rm -rf -- "$snapshot"
+mkdir -p "$snapshot"
+cp -- "$SCRIPT_DIR/compose.yaml" "$SCRIPT_DIR/Caddyfile" "$SCRIPT_DIR/coturn.conf" "$snapshot/"
 
 for service in signaling caddy coturn; do
   id="$(cd "$SCRIPT_DIR" && docker compose --env-file "$ENV_FILE" ps -q "$service")"

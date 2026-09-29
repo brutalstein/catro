@@ -35,7 +35,8 @@ sudo CATRO_HOSTNAME=catro.example.com \
 
 The installer detects the VM private IPv4, generates independent 48-byte signaling and TURN
 secrets, writes .env with mode 0600, prepares persistent directories and starts the pinned
-services. Re-running it preserves existing secrets unless explicitly overridden.
+services. Re-running it preserves values already stored in .env; edit that protected file deliberately
+when changing production configuration.
 
 Static source validation without starting containers:
 
@@ -67,7 +68,9 @@ docker compose --env-file .env up -d signaling
 ~~~
 
 update.sh requires a clean checkout, backs up state before recreation, retains the previous
-signaling image temporarily and restores it if health verification fails.
+signaling image temporarily, and keeps the last successful Compose/Caddy/coturn definition under
+the gitignored out/deploy-active snapshot. If health verification fails, both the previous image
+and previous deployment definition are restored.
 
 ## Security boundary
 

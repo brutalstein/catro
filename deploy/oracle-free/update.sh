@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
+ACTIVE_SNAPSHOT="$REPO_ROOT/out/deploy-active"
 
 fail() {
   printf '[catro] update: %s\n' "$*" >&2
@@ -45,9 +46,19 @@ rollback() {
   if (( rc == 0 )); then
     return
   fi
-  printf '[catro] update: deployment failed; attempting signaling image rollback\n' >&2
+  printf '[catro] update: deployment failed; attempting previous deployment rollback\n' >&2
   if (( had_previous == 1 )); then
     docker tag "$rollback_tag" "$image"
+  fi
+  if [[ -f "$ACTIVE_SNAPSHOT/compose.yaml" &&
+        -f "$ACTIVE_SNAPSHOT/Caddyfile" &&
+        -f "$ACTIVE_SNAPSHOT/coturn.conf" ]]; then
+    (
+      cd "$ACTIVE_SNAPSHOT"
+      docker compose -f "$ACTIVE_SNAPSHOT/compose.yaml" --env-file "$ENV_FILE"         up -d --force-recreate --remove-orphans
+    ) || true
+    ENV_FILE="$ENV_FILE" "$SCRIPT_DIR/verify.sh" || true
+  elif (( had_previous == 1 )); then
     (
       cd "$SCRIPT_DIR"
       docker compose --env-file "$ENV_FILE" up -d --force-recreate --remove-orphans
@@ -64,6 +75,10 @@ trap rollback EXIT
   docker compose --env-file "$ENV_FILE" up -d --force-recreate --remove-orphans
 )
 ENV_FILE="$ENV_FILE" "$SCRIPT_DIR/verify.sh"
+
+rm -rf -- "$ACTIVE_SNAPSHOT"
+mkdir -p "$ACTIVE_SNAPSHOT"
+cp -- "$SCRIPT_DIR/compose.yaml" "$SCRIPT_DIR/Caddyfile" "$SCRIPT_DIR/coturn.conf" "$ACTIVE_SNAPSHOT/"
 
 trap - EXIT
 if (( had_previous == 1 )); then

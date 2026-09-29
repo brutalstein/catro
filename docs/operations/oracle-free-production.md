@@ -166,8 +166,10 @@ sudo ./update.sh
 ~~~
 
 update.sh records the source commit, creates a state backup, saves the previous signaling image,
-builds the current revision, recreates changed services, and runs health verification. A failed
-health gate retags the previous signaling image and attempts to restore service.
+and uses the gitignored out/deploy-active directory to retain the last successful Compose, Caddy,
+and coturn definition. It then builds the current revision, recreates services, and runs health
+verification. A failed health gate restores the previous signaling image and previous deployment
+definition before re-running health checks.
 
 Do not run unattended application updates for this milestone. Review each Caddy, coturn, Go, base
 image, and Catro revision before deploying it.
