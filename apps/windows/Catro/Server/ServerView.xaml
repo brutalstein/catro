@@ -585,7 +585,12 @@
                 Background="{ThemeResource CatroSurfaceBrush}"
                 BorderBrush="{ThemeResource CatroStrokeBrush}"
                 BorderThickness="1,0,0,0">
-            <StackPanel Padding="14,16" Spacing="12">
+            <Grid Padding="14,16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
                 <TextBlock x:Name="MemberCountLabel"
                            Text="MEMBERS — 1"
                            FontSize="10"
@@ -593,47 +598,27 @@
                            CharacterSpacing="80"
                            Foreground="{ThemeResource CatroTextTertiaryBrush}" />
 
-                <Grid Height="42">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="34" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid Width="30" Height="30">
-                        <Border CornerRadius="15"
-                                Background="{ThemeResource CatroAccentSoftBrush}">
-                            <TextBlock Text="Y"
-                                       FontSize="11"
-                                       FontWeight="SemiBold"
-                                       Foreground="{ThemeResource CatroAccentBrush}"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center" />
-                        </Border>
-                        <Ellipse Width="10"
-                                 Height="10"
-                                 Fill="{ThemeResource CatroSageBrush}"
-                                 Stroke="{ThemeResource CatroSurfaceBrush}"
-                                 StrokeThickness="2"
-                                 HorizontalAlignment="Right"
-                                 VerticalAlignment="Bottom" />
-                    </Grid>
-                    <TextBlock x:Name="MemberLocalName"
-                               Grid.Column="1"
-                               Text="You"
-                               Margin="7,0,0,0"
-                               FontSize="12"
-                               FontWeight="SemiBold"
-                               Foreground="{ThemeResource CatroTextBrush}"
-                               VerticalAlignment="Center" />
-                    <FontIcon x:Name="MemberRoleIcon"
-                              Grid.Column="2"
-                              Glyph="&#xE735;"
-                              FontSize="11"
-                              Foreground="{ThemeResource CatroAccentBrush}"
-                              VerticalAlignment="Center"
-                              ToolTipService.ToolTip="Owner" />
-                </Grid>
-            </StackPanel>
+                <ListView x:Name="MemberList"
+                          Grid.Row="1"
+                          Margin="0,8,0,0"
+                          SelectionMode="None"
+                          IsItemClickEnabled="False"
+                          IsTabStop="False"
+                          ScrollViewer.HorizontalScrollMode="Disabled"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          ScrollViewer.VerticalScrollMode="Auto"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       Margin="4,7"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Foreground="{ThemeResource CatroTextBrush}" />
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

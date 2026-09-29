@@ -46,6 +46,11 @@ struct ServerView : ServerViewT<ServerView> {
 
 private:
     void ShowChannel(std::string_view id);
+    void ResetMembers();
+    void ShowLocalMemberFallback();
+    void ApplyMemberRoster(
+        const std::vector<catro::platform::windows::DirectoryMember>& members);
+    winrt::fire_and_forget BeginMemberRefresh();
     void ResetMessages();
     void UpdateMessageUi();
     void AppendMessages(
@@ -90,6 +95,7 @@ private:
     CatroVoiceRuntimeHandle voice_runtime_ = nullptr;
     Microsoft::UI::Dispatching::DispatcherQueueTimer voice_timer_{nullptr};
     Microsoft::UI::Dispatching::DispatcherQueueTimer message_timer_{nullptr};
+    Microsoft::UI::Dispatching::DispatcherQueueTimer member_timer_{nullptr};
     std::unique_ptr<catro::screen::WindowsScreenShareRuntime> screen_runtime_;
     Microsoft::UI::Dispatching::DispatcherQueueTimer screen_timer_{nullptr};
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> attached_preview_swap_chain_;
@@ -105,11 +111,14 @@ private:
     bool stream_window_fullscreen_ = false;
     bool stream_window_topmost_ = false;
 
+    std::uint64_t member_generation_ = 1;
+    std::uint64_t member_refresh_generation_ = 0;
     std::uint64_t message_cursor_ = 0;
     std::uint64_t message_generation_ = 1;
     std::uint64_t message_refresh_generation_ = 0;
     std::uint64_t message_send_generation_ = 0;
     bool page_loaded_ = false;
+    bool member_refresh_pending_ = false;
     bool message_refresh_pending_ = false;
     bool message_send_pending_ = false;
     bool room_mode_active_ = false;

@@ -238,6 +238,9 @@ ServerView::~ServerView() {
     if (message_timer_) {
         message_timer_.Stop();
     }
+    if (member_timer_) {
+        member_timer_.Stop();
+    }
     if (voice_runtime_ != nullptr) {
         catro_voice_runtime_destroy(voice_runtime_);
         voice_runtime_ = nullptr;
@@ -269,6 +272,11 @@ void ServerView::InitializeComponent() {
     message_timer_.Tick(
         [this](auto&&, auto&&) { BeginMessageRefresh(); });
 
+    member_timer_ = DispatcherQueue().CreateTimer();
+    member_timer_.Interval(5s);
+    member_timer_.Tick(
+        [this](auto&&, auto&&) { BeginMemberRefresh(); });
+
     Loaded([this](auto&&, auto&&) {
         page_loaded_ = true;
         if (voice_runtime_ != nullptr) {
@@ -289,6 +297,12 @@ void ServerView::InitializeComponent() {
         UpdateVoiceUi();
         UpdateScreenShareUi();
         UpdateMessageUi();
+        if (directory_service_ &&
+            !directory_access_token_.empty() &&
+            directory_server_) {
+            member_timer_.Start();
+        }
+        BeginMemberRefresh();
         BeginMessageRefresh();
     });
     Unloaded([this](auto&&, auto&&) {
@@ -304,6 +318,9 @@ void ServerView::InitializeComponent() {
         }
         if (message_timer_) {
             message_timer_.Stop();
+        }
+        if (member_timer_) {
+            member_timer_.Stop();
         }
         if (screen_runtime_) {
             screen_runtime_->set_local_preview_enabled(false);
@@ -325,10 +342,9 @@ void ServerView::SetLocalState(const catro::community::LocalState& state) {
     ServerName().Text(to_hstring(state.personal_server.name));
     ProfileName().Text(to_hstring(state.identity.display_name));
     VoiceLocalName().Text(to_hstring(state.identity.display_name));
-    MemberLocalName().Text(to_hstring(state.identity.display_name));
-    std::wstring member_count = L"MEMBERS \u2014 ";
-    member_count += std::to_wstring(state.personal_server.members.size());
-    MemberCountLabel().Text(hstring{member_count});
+    if (!directory_server_) {
+        ShowLocalMemberFallback();
+    }
 
     for (const auto& channel : state.personal_server.channels) {
         if (channel.kind == catro::community::ChannelKind::text) {
@@ -472,6 +488,129 @@ void ServerView::OnSizeChanged(IInspectable const&, xaml::SizeChangedEventArgs c
     MembersPane().Visibility(show_members ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
     ChannelsColumn().Width(xaml::GridLengthHelper::FromPixels(width >= 760.0 ? 232.0 : 196.0));
     UpdateScreenShareUi();
+}
+
+void ServerView::ResetMembers() {
+    if (++member_generation_ == 0) {
+        member_generation_ = 1;
+    }
+    MemberList().Items().Clear();
+}
+
+void ServerView::ShowLocalMemberFallback() {
+    MemberList().Items().Clear();
+    if (!local_state_) {
+        MemberCountLabel().Text(L"MEMBERS — 0");
+        return;
+    }
+
+    std::wstring row = L"★ ";
+    row += to_hstring(
+        local_state_->identity.display_name).c_str();
+    row += L"  ·  YOU\nOwner";
+    MemberList().Items().Append(
+        box_value(hstring{row}));
+    MemberCountLabel().Text(L"MEMBERS — 1");
+}
+
+void ServerView::ApplyMemberRoster(
+    const std::vector<
+        catro::platform::windows::DirectoryMember>& members) {
+    MemberList().Items().Clear();
+
+    std::string local_id;
+    if (local_state_) {
+        local_id =
+            catro::community::to_hex(
+                local_state_->identity.id);
+    }
+
+    for (const auto& member : members) {
+        std::wstring row;
+        if (member.role == "owner") {
+            row += L"★ ";
+        }
+        row += to_hstring(member.display_name).c_str();
+        if (!local_id.empty() &&
+            member.user_id == local_id) {
+            row += L"  ·  YOU";
+        }
+        row += L"\n";
+        row += member.role == "owner"
+            ? L"Owner"
+            : L"Member";
+        MemberList().Items().Append(
+            box_value(hstring{row}));
+    }
+
+    std::wstring count = L"MEMBERS — ";
+    count += std::to_wstring(members.size());
+    MemberCountLabel().Text(hstring{count});
+}
+
+winrt::fire_and_forget
+ServerView::BeginMemberRefresh() {
+    auto lifetime = get_strong();
+    if (!page_loaded_ ||
+        !directory_service_ ||
+        directory_access_token_.empty() ||
+        !directory_server_) {
+        co_return;
+    }
+
+    if (member_refresh_pending_) {
+        co_return;
+    }
+
+    const auto generation = member_generation_;
+    member_refresh_pending_ = true;
+    member_refresh_generation_ = generation;
+
+    const auto service = *directory_service_;
+    const auto access_token = directory_access_token_;
+    const auto server_id = directory_server_->id;
+    winrt::apartment_context ui_thread;
+
+    co_await winrt::resume_background();
+    auto result =
+        catro::platform::windows::
+            list_directory_members(
+                service,
+                access_token,
+                server_id);
+
+    co_await ui_thread;
+    if (lifetime->member_refresh_generation_ ==
+            generation) {
+        lifetime->member_refresh_pending_ = false;
+    }
+
+    if (generation !=
+            lifetime->member_generation_ ||
+        !lifetime->directory_server_ ||
+        lifetime->directory_server_->id !=
+            server_id) {
+        if (!lifetime->member_refresh_pending_) {
+            lifetime->BeginMemberRefresh();
+        }
+        co_return;
+    }
+
+    if (std::holds_alternative<
+            catro::platform::windows::
+                DirectoryError>(result)) {
+        // Keep the last valid roster visible. A later bounded timer tick
+        // retries without turning a transient network failure into fake
+        // membership state.
+        co_return;
+    }
+
+    auto members =
+        std::get<std::vector<
+            catro::platform::windows::
+                DirectoryMember>>(
+                    std::move(result));
+    lifetime->ApplyMemberRoster(members);
 }
 
 void ServerView::ResetMessages() {
@@ -932,6 +1071,10 @@ void ServerView::SetDirectorySession(
         directory_server_ &&
         directory_server_->id !=
             server.id;
+    const bool member_context_changed =
+        !directory_server_ ||
+        directory_server_->id !=
+            server.id;
     const bool message_context_changed =
         !directory_server_ ||
         directory_server_->id != server.id ||
@@ -959,6 +1102,9 @@ void ServerView::SetDirectorySession(
     directory_access_token_ =
         std::move(access_token);
     directory_server_ = server;
+    if (member_context_changed) {
+        ResetMembers();
+    }
     if (message_context_changed) {
         ResetMessages();
     }
@@ -978,10 +1124,6 @@ void ServerView::SetDirectorySession(
         owner
             ? xaml::Visibility::Visible
             : xaml::Visibility::Collapsed);
-    MemberRoleIcon().Visibility(
-        owner
-            ? xaml::Visibility::Visible
-            : xaml::Visibility::Collapsed);
     ProfileRoleText().Text(
         owner ? L"Owner" : L"Member");
     VoiceRoleText().Text(
@@ -991,6 +1133,10 @@ void ServerView::SetDirectorySession(
 
     ShowChannel(state_.channel_id());
     UpdateMessageUi();
+    if (page_loaded_ && member_timer_) {
+        member_timer_.Start();
+    }
+    BeginMemberRefresh();
     BeginMessageRefresh();
 }
 

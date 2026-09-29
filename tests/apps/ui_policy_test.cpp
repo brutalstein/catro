@@ -87,3 +87,20 @@ TEST_CASE("text channel timeline remains virtualized and bounded") {
     CHECK(source.find("winrt::resume_background()") != std::string::npos);
     CHECK(source.find("message_generation_") != std::string::npos);
 }
+
+
+TEST_CASE("member rail is virtualized and refreshes from bounded snapshots") {
+    const auto xaml =
+        read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) /
+             "Server/ServerView.xaml");
+    const auto source =
+        read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) /
+             "Server/ServerView.xaml.cpp");
+
+    CHECK(xaml.find("<ListView x:Name=\"MemberList\"") != std::string::npos);
+    CHECK(xaml.find("<ListView.ItemTemplate>") != std::string::npos);
+    CHECK(source.find("member_timer_.Interval(5s)") != std::string::npos);
+    CHECK(source.find("member_refresh_pending_") != std::string::npos);
+    CHECK(source.find("member_generation_") != std::string::npos);
+    CHECK(source.find("list_directory_members") != std::string::npos);
+}
