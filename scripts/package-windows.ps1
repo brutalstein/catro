@@ -4,7 +4,8 @@ param(
     [switch] $SkipBuild,
     [string] $ServiceUrl = $env:CATRO_SERVICE_URL,
     [switch] $AllowInsecureService,
-    [switch] $Engineering
+    [switch] $Engineering,
+    [switch] $ValidateConfigurationOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,6 +16,56 @@ $distRoot = Join-Path $root 'out\dist'
 $staging = Join-Path $distRoot "Catro-windows-$arch"
 $zip = Join-Path $distRoot "Catro-windows-$arch.zip"
 $sha = "$zip.sha256"
+
+function Resolve-ProductionServiceUri {
+    param([string] $RawUrl)
+
+    if ([string]::IsNullOrWhiteSpace($RawUrl)) {
+        throw 'Production package requires -ServiceUrl https://your-catro-service (or CATRO_SERVICE_URL). Use -Engineering only for local direct-peer validation packages.'
+    }
+
+    $uri = $null
+    if (-not [Uri]::TryCreate($RawUrl, [UriKind]::Absolute, [ref]$uri)) {
+        throw "Invalid Catro service URL: $RawUrl"
+    }
+    if ($uri.Scheme -ne 'https') {
+        throw 'Production Catro service URL must use HTTPS.'
+    }
+    if ($uri.IsLoopback -or
+        $uri.DnsSafeHost.Equals('localhost', [StringComparison]::OrdinalIgnoreCase) -or
+        $uri.DnsSafeHost.EndsWith('.localhost', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Production Catro service URL must not use localhost or a loopback address.'
+    }
+
+    $parsedIp = $null
+    if ([Net.IPAddress]::TryParse($uri.DnsSafeHost, [ref]$parsedIp) -and
+        [Net.IPAddress]::IsLoopback($parsedIp)) {
+        throw 'Production Catro service URL must not use a loopback address.'
+    }
+    if (-not [string]::IsNullOrEmpty($uri.UserInfo) -or
+        -not [string]::IsNullOrEmpty($uri.Query) -or
+        -not [string]::IsNullOrEmpty($uri.Fragment)) {
+        throw 'Production Catro service URL must not contain credentials, query parameters, or fragments.'
+    }
+    return $uri
+}
+
+$serviceUri = $null
+if (-not $Engineering) {
+    if ($AllowInsecureService) {
+        throw '-AllowInsecureService is not valid for production packages. Use -Engineering for explicit local validation.'
+    }
+    $serviceUri = Resolve-ProductionServiceUri -RawUrl $ServiceUrl
+}
+
+if ($ValidateConfigurationOnly) {
+    if ($Engineering) {
+        Write-Host '[catro] Engineering package configuration is valid.'
+    } else {
+        Write-Host "[catro] Production service URL is valid: $($serviceUri.AbsoluteUri.TrimEnd('/'))"
+    }
+    return
+}
 
 Push-Location $root
 try {
@@ -56,22 +107,9 @@ try {
     Copy-Item -Path (Join-Path $source '*') -Destination $staging -Recurse -Force
 
     if (-not $Engineering) {
-        if ([string]::IsNullOrWhiteSpace($ServiceUrl)) {
-            throw 'Production package requires -ServiceUrl https://your-catro-service (or CATRO_SERVICE_URL). Use -Engineering only for local direct-peer validation packages.'
-        }
-
-        $serviceUri = $null
-        if (-not [Uri]::TryCreate($ServiceUrl, [UriKind]::Absolute, [ref]$serviceUri)) {
-            throw "Invalid Catro service URL: $ServiceUrl"
-        }
-        if ($serviceUri.Scheme -ne 'https' -and
-            -not ($AllowInsecureService -and $serviceUri.Scheme -eq 'http')) {
-            throw 'Production Catro service URL must use HTTPS. -AllowInsecureService is engineering/LAN-only.'
-        }
-
         $networkConfig = [ordered]@{
             api_base_url = $serviceUri.AbsoluteUri.TrimEnd('/')
-            allow_insecure_http = [bool]$AllowInsecureService
+            allow_insecure_http = $false
         } | ConvertTo-Json -Depth 4
 
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)

@@ -101,3 +101,27 @@ jobs:
       - name: Validate Compose model
         working-directory: deploy/oracle-free
         run: docker compose --env-file .env.example config >/dev/null
+      - name: Validate Windows production package endpoint policy
+        shell: pwsh
+        run: |
+          ./scripts/package-windows.ps1 -SkipBuild -ValidateConfigurationOnly -ServiceUrl https://catro.example.com
+          ./scripts/package-windows.ps1 -SkipBuild -ValidateConfigurationOnly -Engineering
+          $badUrls = @(
+            'http://catro.example.com',
+            'https://localhost',
+            'https://127.0.0.1',
+            'https://user:secret@catro.example.com',
+            'https://catro.example.com?token=secret',
+            'https://catro.example.com/#secret'
+          )
+          foreach ($url in $badUrls) {
+            $failed = $false
+            try {
+              ./scripts/package-windows.ps1 -SkipBuild -ValidateConfigurationOnly -ServiceUrl $url
+            } catch {
+              $failed = $true
+            }
+            if (-not $failed) {
+              throw "Production package validation unexpectedly accepted $url"
+            }
+          }

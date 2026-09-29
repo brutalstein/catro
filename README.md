@@ -26,7 +26,8 @@ or a public-Internet security boundary.
 | `apps/shell` | Portable personal-server/channel navigation contract. |
 | `apps/room-runtime`, `apps/voice-runtime`, `apps/screen-runtime` | Windows runtime boundaries for shared RTC rooms, duplex voice, and full-duplex screen media. |
 | `apps/windows`, `apps/macos` | Native desktop shells. Windows includes the server-first voice and screen-stream product UI. |
-| `services/signaling` | TLS-ready identity, membership, invite, short-lived RTC/TURN provisioning, and WebRTC signaling service. |
+| `services/signaling` | TLS-ready identity, membership, invite, short-lived RTC/TURN provisioning, bounded API writes, metrics, and WebRTC signaling service. |
+| `deploy/oracle-free` | Pinned Caddy + signaling + coturn single-VM production deployment boundary with health, backup, restore, and update scripts. |
 | `tools/capability-probe` | Helper process that runs one passive probe and prints one fragment. |
 | `tools/capability-report` | Command-line capability report. |
 | `tools/audio-check` | Command-line audio session check (meter, tone, monitor). |
@@ -72,7 +73,7 @@ The scripts check prerequisites and never install tools or change system setting
 
 | Platform | Status |
 | --- | --- |
-| Windows 11 x64 | Release build, 44-test local gate, capability report, and WinUI startup pass locally. Voice/screen product integration is implemented; two-real-machine glass-to-glass latency and resource validation remains a manual acceptance gate. The shell still has a known UI Automation issue (see troubleshooting). |
+| Windows 11 x64 | Release build, 44-test local gate, capability report, and WinUI startup pass locally. Voice/screen product integration and the Oracle single-VM deployment bundle are implemented; real-network forced-TURN, five-client, restart, latency, and resource acceptance remains manual and is explicitly NOT VALIDATED. The shell still has a known UI Automation issue (see troubleshooting). |
 | macOS 13+ Apple Silicon | Code written; waiting for its first build on the `macos-15` CI runner. |
 | macOS 13+ Intel | Code written; waiting for its first build on the `macos-15-intel` CI runner. |
 
@@ -83,5 +84,7 @@ not hardware evidence.
 
 - [Personal identity and server state](docs/architecture/personal-state.md)
 - [Capability system architecture](docs/architecture/capability-system.md)
+- [Oracle production operations](docs/operations/oracle-free-production.md)
+- [Oracle production acceptance record](docs/validation/oracle-free-production-acceptance.md)
 - [Decision records](docs/architecture/decisions)
 - [Dependencies](DEPENDENCIES.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)

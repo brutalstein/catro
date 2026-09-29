@@ -16,8 +16,9 @@ DataChannels, with TURN relay available when direct ICE connectivity is impossib
 - STUN plus TURN URLs in `CATRO_ICE_SERVERS`.
 - A coturn REST shared secret in `CATRO_TURN_SECRET`, at least 32 bytes. Do not place long-lived
   TURN usernames/passwords in the ICE URLs.
-- Reverse-proxy/IP rate limiting in front of the registration and invite endpoints.
-- Health monitoring of `/healthz` and metrics scraping of `/metrics`.
+- The built-in bounded per-source mutation limiter enabled (default 30 writes/minute, configurable 1..300).
+- `CATRO_TRUST_PROXY_HEADERS=true` only when the immediate upstream is the private deployment proxy; direct public callers cannot override their source with `X-Forwarded-For`.
+- Health monitoring of `/healthz` and private metrics scraping of `/metrics`.
 
 The service derives a fresh coturn REST username/password for every 15-minute RTC room token.
 The TURN shared secret never leaves the server.
@@ -36,7 +37,9 @@ catro-signaling   --addr :8443   --tls-cert /run/secrets/fullchain.pem   --tls-k
 
 If TLS terminates at a trusted reverse proxy, the service can listen on a private HTTP socket behind
 that proxy by using `--allow-insecure-http`; the externally returned
-`CATRO_PUBLIC_SIGNALING_URL` should still be `wss://...`.
+`CATRO_PUBLIC_SIGNALING_URL` should still be `wss://...`. The repository's
+`deploy/oracle-free` bundle implements this boundary with Caddy and does not publish the signaling
+container directly.
 
 ## Client flow
 
@@ -67,6 +70,10 @@ Build a production-ready portable ZIP with the public HTTPS control-plane endpoi
 
 The generated `catro-network.json` contains only the API URL. It never contains the signaling HMAC
 secret, TURN secret, device credential, or room token.
+
+Production packaging rejects plaintext HTTP, localhost/loopback service URLs, and URLs containing
+credentials, query parameters, or fragments. The generated network file contains only the HTTPS API
+base URL.
 
 For local engineering only, a package without an Internet control plane can be made explicitly:
 
