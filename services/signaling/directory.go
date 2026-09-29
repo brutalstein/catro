@@ -33,8 +33,16 @@ const (
 	maxDirectoryServers    = 1024
 	maxDirectoryInvites    = 4096
 	maxInvitesPerServer    = 32
-	maxDirectoryMembers     = 256
-	maxMessageContentBytes  = 2000
+	maxDirectoryMembers           = 256
+	serverCodeEntropyBytes         = 10
+	maxJoinRequestMessageBytes     = 280
+	maxDirectoryJoinRequests       = 4096
+	maxPendingJoinRequestsServer   = 64
+	maxPendingJoinRequestsRequester = 16
+	joinRequestTTL                 = 7 * 24 * time.Hour
+	resolvedJoinRequestTTL         = 24 * time.Hour
+	rejectedJoinRequestCooldown    = time.Hour
+	maxMessageContentBytes         = 2000
 	maxMessagesPerChannel   = 512
 	maxDirectoryMessages    = 8192
 	maxMessagePage          = 100
@@ -56,9 +64,21 @@ type directoryServer struct {
 	ID             string                     `json:"id"`
 	OwnerID        string                     `json:"owner_id"`
 	Name           string                     `json:"name"`
+	PublicCode     string                     `json:"public_code,omitempty"`
 	TextChannelID  string                     `json:"text_channel_id,omitempty"`
 	VoiceChannelID string                     `json:"voice_channel_id"`
 	Members        map[string]directoryMember `json:"members"`
+}
+
+type directoryJoinRequest struct {
+	ID          string `json:"id"`
+	ServerID    string `json:"server_id"`
+	RequesterID string `json:"requester_id"`
+	Message     string `json:"message,omitempty"`
+	Status      string `json:"status"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
+	ExpiresAt   int64  `json:"expires_at"`
 }
 
 type directoryMessage struct {
@@ -79,11 +99,12 @@ type directoryInvite struct {
 }
 
 type directoryState struct {
-	Users               map[string]directoryUser      `json:"users"`
-	Servers             map[string]directoryServer    `json:"servers"`
-	Invites             map[string]directoryInvite    `json:"invites"`
-	Messages            map[string][]directoryMessage `json:"messages,omitempty"`
-	NextMessageSequence uint64                        `json:"next_message_sequence,omitempty"`
+	Users               map[string]directoryUser        `json:"users"`
+	Servers             map[string]directoryServer      `json:"servers"`
+	Invites             map[string]directoryInvite      `json:"invites"`
+	JoinRequests        map[string]directoryJoinRequest `json:"join_requests,omitempty"`
+	Messages            map[string][]directoryMessage   `json:"messages,omitempty"`
+	NextMessageSequence uint64                          `json:"next_message_sequence,omitempty"`
 }
 
 type directory struct {
@@ -104,10 +125,33 @@ type serverDescriptor struct {
 	ID             string `json:"id"`
 	OwnerID        string `json:"owner_id"`
 	Name           string `json:"name"`
+	PublicCode     string `json:"public_code,omitempty"`
 	TextChannelID  string `json:"text_channel_id,omitempty"`
 	VoiceChannelID string `json:"voice_channel_id"`
 	Role           string `json:"role"`
 	MemberCount    int    `json:"member_count"`
+}
+
+type serverLookupDescriptor struct {
+	PublicCode   string `json:"public_code"`
+	Name         string `json:"name"`
+	MemberCount  int    `json:"member_count"`
+	Relationship string `json:"relationship"`
+	RequestID    string `json:"request_id,omitempty"`
+}
+
+type joinRequestDescriptor struct {
+	ID                   string `json:"id"`
+	ServerID             string `json:"server_id,omitempty"`
+	ServerName           string `json:"server_name"`
+	PublicCode           string `json:"public_code"`
+	RequesterID          string `json:"requester_id,omitempty"`
+	RequesterDisplayName string `json:"requester_display_name,omitempty"`
+	Message              string `json:"message,omitempty"`
+	Status               string `json:"status"`
+	CreatedAt            int64  `json:"created_at"`
+	UpdatedAt            int64  `json:"updated_at"`
+	ExpiresAt            int64  `json:"expires_at"`
 }
 
 type memberDescriptor struct {
@@ -205,6 +249,7 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 			Users:               make(map[string]directoryUser),
 			Servers:             make(map[string]directoryServer),
 			Invites:             make(map[string]directoryInvite),
+			JoinRequests:        make(map[string]directoryJoinRequest),
 			Messages:            make(map[string][]directoryMessage),
 			NextMessageSequence: 1,
 		},
@@ -234,6 +279,9 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 	if d.state.Invites == nil {
 		d.state.Invites = make(map[string]directoryInvite)
 	}
+	if d.state.JoinRequests == nil {
+		d.state.JoinRequests = make(map[string]directoryJoinRequest)
+	}
 	if d.state.Messages == nil {
 		d.state.Messages = make(map[string][]directoryMessage)
 	}
@@ -242,10 +290,38 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 	}
 	if len(d.state.Users) > maxDirectoryUsers ||
 		len(d.state.Servers) > maxDirectoryServers ||
-		len(d.state.Invites) > maxDirectoryInvites {
+		len(d.state.Invites) > maxDirectoryInvites ||
+		len(d.state.JoinRequests) > maxDirectoryJoinRequests {
 		return nil, errors.New("directory state exceeds object-count bounds")
 	}
+
+	migrationDirty := false
+	usedCodes := make(map[string]string, len(d.state.Servers))
 	for id, server := range d.state.Servers {
+		if server.PublicCode == "" {
+			code, err := d.newUniqueServerCodeLocked()
+			if err != nil {
+				return nil, err
+			}
+			server.PublicCode = code
+			d.state.Servers[id] = server
+			migrationDirty = true
+		} else {
+			canonical, ok := canonicalServerCode(server.PublicCode)
+			if !ok {
+				return nil, errors.New("directory contains invalid server code")
+			}
+			if canonical != server.PublicCode {
+				server.PublicCode = canonical
+				d.state.Servers[id] = server
+				migrationDirty = true
+			}
+		}
+		if other, exists := usedCodes[server.PublicCode]; exists && other != id {
+			return nil, errors.New("directory contains duplicate server code")
+		}
+		usedCodes[server.PublicCode] = id
+
 		if server.Members == nil {
 			server.Members = make(map[string]directoryMember)
 			d.state.Servers[id] = server
@@ -282,6 +358,60 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 		}
 		if ownerCount != 1 {
 			return nil, errors.New("directory server owner invariant is invalid")
+		}
+	}
+
+	now := time.Now().Unix()
+	if d.pruneJoinRequestsLocked(now) {
+		migrationDirty = true
+	}
+
+	pendingByServer := make(map[string]int)
+	pendingByRequester := make(map[string]int)
+	pendingPairs := make(map[string]struct{})
+	for id, request := range d.state.JoinRequests {
+		if id != request.ID ||
+			!validID(request.ID) ||
+			!validID(request.ServerID) ||
+			!validID(request.RequesterID) ||
+			!validJoinRequestStatus(request.Status) ||
+			request.CreatedAt <= 0 ||
+			request.UpdatedAt < request.CreatedAt ||
+			request.ExpiresAt <= request.UpdatedAt ||
+			(request.Message != "" &&
+				!validBoundedText(request.Message, maxJoinRequestMessageBytes)) {
+			return nil, errors.New("directory contains invalid join request")
+		}
+		server, serverExists := d.state.Servers[request.ServerID]
+		if !serverExists {
+			return nil, errors.New("directory join request references unknown server")
+		}
+		if _, userExists := d.state.Users[request.RequesterID]; !userExists {
+			return nil, errors.New("directory join request references unknown requester")
+		}
+		_, alreadyMember := server.Members[request.RequesterID]
+		if request.Status == "pending" && alreadyMember {
+			request.Status = "approved"
+			request.UpdatedAt = now
+			request.ExpiresAt = now + int64(resolvedJoinRequestTTL/time.Second)
+			d.state.JoinRequests[id] = request
+			migrationDirty = true
+		}
+		if request.Status == "approved" && !alreadyMember {
+			return nil, errors.New("approved join request is missing membership")
+		}
+		if request.Status == "pending" {
+			pair := request.ServerID + "\x00" + request.RequesterID
+			if _, duplicate := pendingPairs[pair]; duplicate {
+				return nil, errors.New("directory contains duplicate pending join request")
+			}
+			pendingPairs[pair] = struct{}{}
+			pendingByServer[request.ServerID]++
+			pendingByRequester[request.RequesterID]++
+			if pendingByServer[request.ServerID] > maxPendingJoinRequestsServer ||
+				pendingByRequester[request.RequesterID] > maxPendingJoinRequestsRequester {
+				return nil, errors.New("directory join request pending bounds exceeded")
+			}
 		}
 	}
 
@@ -326,8 +456,147 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 			return nil, errors.New("directory message sequence exhausted")
 		}
 		d.state.NextMessageSequence = maximumSequence + 1
+		migrationDirty = true
+	}
+	if migrationDirty {
+		if err := d.persistLocked(); err != nil {
+			return nil, fmt.Errorf("persist directory migration: %w", err)
+		}
 	}
 	return d, nil
+}
+
+func canonicalServerCode(value string) (string, bool) {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	parts := strings.Split(value, "-")
+	if len(parts) != 6 || parts[0] != "CAT" {
+		return "", false
+	}
+	joined := strings.Join(parts[1:], "")
+	if len(joined) != serverCodeEntropyBytes*2 {
+		return "", false
+	}
+	raw, err := hex.DecodeString(joined)
+	if err != nil || len(raw) != serverCodeEntropyBytes {
+		return "", false
+	}
+	encoded := strings.ToUpper(hex.EncodeToString(raw))
+	return fmt.Sprintf(
+		"CAT-%s-%s-%s-%s-%s",
+		encoded[0:4],
+		encoded[4:8],
+		encoded[8:12],
+		encoded[12:16],
+		encoded[16:20]), true
+}
+
+func randomServerCode() (string, error) {
+	raw := make([]byte, serverCodeEntropyBytes)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	encoded := strings.ToUpper(hex.EncodeToString(raw))
+	return fmt.Sprintf(
+		"CAT-%s-%s-%s-%s-%s",
+		encoded[0:4],
+		encoded[4:8],
+		encoded[8:12],
+		encoded[12:16],
+		encoded[16:20]), nil
+}
+
+func (d *directory) newUniqueServerCodeLocked() (string, error) {
+	for attempt := 0; attempt < 32; attempt++ {
+		code, err := randomServerCode()
+		if err != nil {
+			return "", err
+		}
+		used := false
+		for _, server := range d.state.Servers {
+			if server.PublicCode == code {
+				used = true
+				break
+			}
+		}
+		if !used {
+			return code, nil
+		}
+	}
+	return "", errors.New("server code collision limit reached")
+}
+
+func validJoinRequestStatus(status string) bool {
+	switch status {
+	case "pending", "approved", "rejected", "cancelled":
+		return true
+	default:
+		return false
+	}
+}
+
+func randomJoinRequestID() (string, error) {
+	raw := make([]byte, 18)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func (d *directory) pruneJoinRequestsLocked(now int64) bool {
+	changed := false
+	for id, request := range d.state.JoinRequests {
+		if request.ExpiresAt <= now {
+			delete(d.state.JoinRequests, id)
+			changed = true
+		}
+	}
+	return changed
+}
+
+func (d *directory) pendingJoinRequestLocked(serverID, requesterID string) (directoryJoinRequest, bool) {
+	for _, request := range d.state.JoinRequests {
+		if request.ServerID == serverID &&
+			request.RequesterID == requesterID &&
+			request.Status == "pending" {
+			return request, true
+		}
+	}
+	return directoryJoinRequest{}, false
+}
+
+func (d *directory) joinRequestDescriptorLocked(request directoryJoinRequest) joinRequestDescriptor {
+	server := d.state.Servers[request.ServerID]
+	user := d.state.Users[request.RequesterID]
+	return joinRequestDescriptor{
+		ID:                   request.ID,
+		ServerID:             request.ServerID,
+		ServerName:           server.Name,
+		PublicCode:           server.PublicCode,
+		RequesterID:          request.RequesterID,
+		RequesterDisplayName: user.DisplayName,
+		Message:              request.Message,
+		Status:               request.Status,
+		CreatedAt:            request.CreatedAt,
+		UpdatedAt:            request.UpdatedAt,
+		ExpiresAt:            request.ExpiresAt,
+	}
+}
+
+func (d *directory) resolvePendingJoinRequestsForMembershipLocked(
+	serverID string,
+	requesterID string,
+	now int64,
+) {
+	for id, request := range d.state.JoinRequests {
+		if request.ServerID == serverID &&
+			request.RequesterID == requesterID &&
+			request.Status == "pending" {
+			request.Status = "approved"
+			request.UpdatedAt = now
+			request.ExpiresAt = now + int64(resolvedJoinRequestTTL/time.Second)
+			d.state.JoinRequests[id] = request
+		}
+	}
 }
 
 func cloneMembers(source map[string]directoryMember) map[string]directoryMember {
@@ -607,10 +876,16 @@ func (d *directory) handleServerSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	publicCode, err := d.newUniqueServerCodeLocked()
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "server code generation failed")
+		return
+	}
 	server := directoryServer{
 		ID:             request.ServerID,
 		OwnerID:        user.ID,
 		Name:           request.Name,
+		PublicCode:     publicCode,
 		TextChannelID:  request.TextChannelID,
 		VoiceChannelID: request.VoiceChannelID,
 		Members: map[string]directoryMember{
@@ -628,13 +903,18 @@ func (d *directory) handleServerSync(w http.ResponseWriter, r *http.Request) {
 
 func descriptorFor(server directoryServer, userID string) serverDescriptor {
 	role := "member"
+	publicCode := ""
 	if member, ok := server.Members[userID]; ok && member.Role != "" {
 		role = member.Role
+	}
+	if server.OwnerID == userID {
+		publicCode = server.PublicCode
 	}
 	return serverDescriptor{
 		ID:             server.ID,
 		OwnerID:        server.OwnerID,
 		Name:           server.Name,
+		PublicCode:     publicCode,
 		TextChannelID:  server.TextChannelID,
 		VoiceChannelID: server.VoiceChannelID,
 		Role:           role,
@@ -870,17 +1150,386 @@ func (d *directory) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 	}
 
 	previousMembers := cloneMembers(server.Members)
+	previousRequests := make(map[string]directoryJoinRequest, len(d.state.JoinRequests))
+	for id, pending := range d.state.JoinRequests {
+		previousRequests[id] = pending
+	}
 	server.Members[user.ID] = directoryMember{UserID: user.ID, Role: "member"}
 	d.state.Servers[server.ID] = server
+	d.resolvePendingJoinRequestsForMembershipLocked(
+		server.ID, user.ID, time.Now().Unix())
 	delete(d.state.Invites, request.Code)
 	if err := d.persistLocked(); err != nil {
 		server.Members = previousMembers
 		d.state.Servers[server.ID] = server
+		d.state.JoinRequests = previousRequests
 		d.state.Invites[request.Code] = invite
 		writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, descriptorFor(server, user.ID))
+}
+
+func (d *directory) handleServerLookup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeAPIError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	user, ok := d.authenticate(r)
+	if !ok {
+		writeAPIError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	code, ok := canonicalServerCode(r.URL.Query().Get("code"))
+	if !ok {
+		writeAPIError(w, http.StatusNotFound, "server not found")
+		return
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.pruneJoinRequestsLocked(time.Now().Unix())
+
+	var server directoryServer
+	found := false
+	for _, candidate := range d.state.Servers {
+		if candidate.PublicCode == code {
+			server = candidate
+			found = true
+			break
+		}
+	}
+	if !found {
+		writeAPIError(w, http.StatusNotFound, "server not found")
+		return
+	}
+
+	relationship := "none"
+	requestID := ""
+	if member, exists := server.Members[user.ID]; exists {
+		if member.Role == "owner" {
+			relationship = "owner"
+		} else {
+			relationship = "member"
+		}
+	} else if pending, exists := d.pendingJoinRequestLocked(server.ID, user.ID); exists {
+		relationship = "pending"
+		requestID = pending.ID
+	}
+
+	writeAPIJSON(w, http.StatusOK, serverLookupDescriptor{
+		PublicCode:   server.PublicCode,
+		Name:         server.Name,
+		MemberCount:  len(server.Members),
+		Relationship: relationship,
+		RequestID:    requestID,
+	})
+}
+
+func (d *directory) handleJoinRequests(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		d.handleJoinRequestCreate(w, r)
+	case http.MethodGet:
+		d.handleJoinRequestList(w, r)
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeAPIError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (d *directory) handleJoinRequestCreate(w http.ResponseWriter, r *http.Request) {
+	user, ok := d.authenticate(r)
+	if !ok {
+		writeAPIError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var request struct {
+		ServerCode string `json:"server_code"`
+		Message    string `json:"message,omitempty"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	code, validCode := canonicalServerCode(request.ServerCode)
+	if !validCode ||
+		(request.Message != "" &&
+			!validBoundedText(request.Message, maxJoinRequestMessageBytes)) {
+		writeAPIError(w, http.StatusBadRequest, "invalid join request")
+		return
+	}
+
+	now := time.Now().Unix()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.pruneJoinRequestsLocked(now)
+
+	var server directoryServer
+	found := false
+	for _, candidate := range d.state.Servers {
+		if candidate.PublicCode == code {
+			server = candidate
+			found = true
+			break
+		}
+	}
+	if !found {
+		writeAPIError(w, http.StatusNotFound, "server not found")
+		return
+	}
+	if _, exists := server.Members[user.ID]; exists {
+		writeAPIError(w, http.StatusConflict, "already a server member")
+		return
+	}
+	if server.OwnerID == user.ID {
+		writeAPIError(w, http.StatusConflict, "server owner is already a member")
+		return
+	}
+	if len(server.Members) >= maxDirectoryMembers {
+		writeAPIError(w, http.StatusConflict, "server member capacity reached")
+		return
+	}
+	if existing, exists := d.pendingJoinRequestLocked(server.ID, user.ID); exists {
+		writeAPIJSON(w, http.StatusOK, d.joinRequestDescriptorLocked(existing))
+		return
+	}
+
+	pendingForServer := 0
+	pendingForRequester := 0
+	for _, existing := range d.state.JoinRequests {
+		if existing.ServerID == server.ID && existing.Status == "pending" {
+			pendingForServer++
+		}
+		if existing.RequesterID == user.ID && existing.Status == "pending" {
+			pendingForRequester++
+		}
+		if existing.ServerID == server.ID &&
+			existing.RequesterID == user.ID &&
+			existing.Status == "rejected" &&
+			existing.UpdatedAt+int64(rejectedJoinRequestCooldown/time.Second) > now {
+			writeAPIError(w, http.StatusConflict, "join request cooldown active")
+			return
+		}
+	}
+	if pendingForServer >= maxPendingJoinRequestsServer {
+		writeAPIError(w, http.StatusTooManyRequests, "server join request queue is full")
+		return
+	}
+	if pendingForRequester >= maxPendingJoinRequestsRequester {
+		writeAPIError(w, http.StatusTooManyRequests, "requester pending join request limit reached")
+		return
+	}
+	if len(d.state.JoinRequests) >= maxDirectoryJoinRequests {
+		writeAPIError(w, http.StatusServiceUnavailable, "directory join request capacity reached")
+		return
+	}
+
+	id, err := randomJoinRequestID()
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, "join request entropy failed")
+		return
+	}
+	entry := directoryJoinRequest{
+		ID:          id,
+		ServerID:    server.ID,
+		RequesterID: user.ID,
+		Message:     request.Message,
+		Status:      "pending",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		ExpiresAt:   now + int64(joinRequestTTL/time.Second),
+	}
+	d.state.JoinRequests[id] = entry
+	if err := d.persistLocked(); err != nil {
+		delete(d.state.JoinRequests, id)
+		writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
+		return
+	}
+	writeAPIJSON(w, http.StatusCreated, d.joinRequestDescriptorLocked(entry))
+}
+
+func (d *directory) handleJoinRequestList(w http.ResponseWriter, r *http.Request) {
+	user, ok := d.authenticate(r)
+	if !ok {
+		writeAPIError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.pruneJoinRequestsLocked(time.Now().Unix())
+
+	result := make([]joinRequestDescriptor, 0)
+	if r.URL.Query().Get("mine") == "1" {
+		for _, request := range d.state.JoinRequests {
+			if request.RequesterID == user.ID {
+				result = append(result, d.joinRequestDescriptorLocked(request))
+			}
+		}
+		sort.Slice(result, func(left, right int) bool {
+			if result[left].UpdatedAt != result[right].UpdatedAt {
+				return result[left].UpdatedAt > result[right].UpdatedAt
+			}
+			return result[left].ID < result[right].ID
+		})
+		writeAPIJSON(w, http.StatusOK, map[string]any{"requests": result})
+		return
+	}
+
+	serverID := r.URL.Query().Get("server_id")
+	if !validID(serverID) {
+		writeAPIError(w, http.StatusBadRequest, "invalid server")
+		return
+	}
+	server, exists := d.state.Servers[serverID]
+	if !exists || server.OwnerID != user.ID {
+		writeAPIError(w, http.StatusForbidden, "server owner required")
+		return
+	}
+	for _, request := range d.state.JoinRequests {
+		if request.ServerID == serverID && request.Status == "pending" {
+			result = append(result, d.joinRequestDescriptorLocked(request))
+		}
+	}
+	sort.Slice(result, func(left, right int) bool {
+		if result[left].CreatedAt != result[right].CreatedAt {
+			return result[left].CreatedAt < result[right].CreatedAt
+		}
+		return result[left].ID < result[right].ID
+	})
+	writeAPIJSON(w, http.StatusOK, map[string]any{"requests": result})
+}
+
+func (d *directory) handleJoinRequestDecision(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeAPIError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	user, ok := d.authenticate(r)
+	if !ok {
+		writeAPIError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var body struct {
+		RequestID string `json:"request_id"`
+		Decision  string `json:"decision"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if !validID(body.RequestID) ||
+		(body.Decision != "approve" && body.Decision != "reject") {
+		writeAPIError(w, http.StatusBadRequest, "invalid join request decision")
+		return
+	}
+
+	now := time.Now().Unix()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.pruneJoinRequestsLocked(now)
+
+	request, exists := d.state.JoinRequests[body.RequestID]
+	if !exists || request.Status != "pending" {
+		writeAPIError(w, http.StatusNotFound, "pending join request not found")
+		return
+	}
+	server, exists := d.state.Servers[request.ServerID]
+	if !exists || server.OwnerID != user.ID {
+		writeAPIError(w, http.StatusForbidden, "server owner required")
+		return
+	}
+	if _, exists := d.state.Users[request.RequesterID]; !exists {
+		writeAPIError(w, http.StatusConflict, "requester no longer exists")
+		return
+	}
+
+	previousRequest := request
+	if body.Decision == "approve" {
+		if _, member := server.Members[request.RequesterID]; !member &&
+			len(server.Members) >= maxDirectoryMembers {
+			writeAPIError(w, http.StatusConflict, "server member capacity reached")
+			return
+		}
+		previousMembers := cloneMembers(server.Members)
+		server.Members[request.RequesterID] = directoryMember{
+			UserID: request.RequesterID,
+			Role:   "member",
+		}
+		d.state.Servers[server.ID] = server
+		request.Status = "approved"
+		request.UpdatedAt = now
+		request.ExpiresAt = now + int64(resolvedJoinRequestTTL/time.Second)
+		d.state.JoinRequests[request.ID] = request
+		if err := d.persistLocked(); err != nil {
+			server.Members = previousMembers
+			d.state.Servers[server.ID] = server
+			d.state.JoinRequests[request.ID] = previousRequest
+			writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, d.joinRequestDescriptorLocked(request))
+		return
+	}
+
+	request.Status = "rejected"
+	request.UpdatedAt = now
+	request.ExpiresAt = now + int64(resolvedJoinRequestTTL/time.Second)
+	d.state.JoinRequests[request.ID] = request
+	if err := d.persistLocked(); err != nil {
+		d.state.JoinRequests[request.ID] = previousRequest
+		writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, d.joinRequestDescriptorLocked(request))
+}
+
+func (d *directory) handleJoinRequestCancel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeAPIError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	user, ok := d.authenticate(r)
+	if !ok {
+		writeAPIError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var body struct {
+		RequestID string `json:"request_id"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if !validID(body.RequestID) {
+		writeAPIError(w, http.StatusBadRequest, "invalid join request")
+		return
+	}
+
+	now := time.Now().Unix()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.pruneJoinRequestsLocked(now)
+	request, exists := d.state.JoinRequests[body.RequestID]
+	if !exists ||
+		request.RequesterID != user.ID ||
+		request.Status != "pending" {
+		writeAPIError(w, http.StatusNotFound, "pending join request not found")
+		return
+	}
+
+	previous := request
+	request.Status = "cancelled"
+	request.UpdatedAt = now
+	request.ExpiresAt = now + int64(resolvedJoinRequestTTL/time.Second)
+	d.state.JoinRequests[request.ID] = request
+	if err := d.persistLocked(); err != nil {
+		d.state.JoinRequests[request.ID] = previous
+		writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, d.joinRequestDescriptorLocked(request))
 }
 
 func messageKey(serverID, channelID string) string {

@@ -88,6 +88,7 @@ type service struct {
 	maxRoomPeers      int
 	allowedOrigin     string
 	apiLimiter        *sourceLimiter
+	discoveryLimiter  *sourceLimiter
 	trustProxyHeaders bool
 
 	roomsMu sync.Mutex
@@ -100,12 +101,18 @@ type service struct {
 	screenClaims           atomic.Uint64
 	screenReleases         atomic.Uint64
 	screenBusyRejections   atomic.Uint64
-	apiRateLimitRejections atomic.Uint64
+	apiRateLimitRejections       atomic.Uint64
+	discoveryRateLimitRejections atomic.Uint64
 }
 
 func main() {
 	apiWritesDefault, err := environmentInt(
 		"CATRO_API_WRITES_PER_MINUTE", defaultAPIWritesPerMinute)
+	if err != nil {
+		log.Fatal(err)
+	}
+	discoveryReadsDefault, err := environmentInt(
+		"CATRO_DISCOVERY_READS_PER_MINUTE", defaultDiscoveryReadsPerMinute)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -129,6 +136,10 @@ func main() {
 		"api-writes-per-minute",
 		apiWritesDefault,
 		"per-source directory mutations allowed per minute")
+	discoveryReadsPerMinute := flag.Int(
+		"discovery-reads-per-minute",
+		discoveryReadsDefault,
+		"per-source exact Server Code lookups allowed per minute")
 	trustProxyHeaders := flag.Bool(
 		"trust-proxy-headers",
 		trustProxyDefault,
@@ -175,6 +186,10 @@ func main() {
 	if *apiWritesPerMinute < 1 ||
 		*apiWritesPerMinute > maximumAPIWritesPerMinute {
 		log.Fatal("api-writes-per-minute must be between 1 and 300")
+	}
+	if *discoveryReadsPerMinute < 1 ||
+		*discoveryReadsPerMinute > maximumDiscoveryReadsPerMinute {
+		log.Fatal("discovery-reads-per-minute must be between 1 and 300")
 	}
 
 	if *mint {
@@ -263,6 +278,7 @@ func main() {
 		maxRoomPeers:      *maxRoom,
 		allowedOrigin:     *origin,
 		apiLimiter:        newSourceLimiter(*apiWritesPerMinute),
+		discoveryLimiter:  newSourceLimiter(*discoveryReadsPerMinute),
 		trustProxyHeaders: *trustProxyHeaders,
 		rooms:             make(map[string]*room),
 	}
@@ -278,6 +294,18 @@ func main() {
 		s.limitDirectoryMutation(directory.handleServerSync))
 	mux.HandleFunc("/v1/servers", directory.handleServers)
 	mux.HandleFunc("/v1/members", directory.handleMembers)
+	mux.HandleFunc(
+		"/v1/server-lookup",
+		s.limitDirectoryLookup(directory.handleServerLookup))
+	mux.HandleFunc(
+		"/v1/join-requests",
+		s.limitDirectoryMutation(directory.handleJoinRequests))
+	mux.HandleFunc(
+		"/v1/join-requests/decision",
+		s.limitDirectoryMutation(directory.handleJoinRequestDecision))
+	mux.HandleFunc(
+		"/v1/join-requests/cancel",
+		s.limitDirectoryMutation(directory.handleJoinRequestCancel))
 	mux.HandleFunc(
 		"/v1/invites",
 		s.limitDirectoryMutation(directory.handleInvites))
@@ -369,7 +397,8 @@ func (s *service) metrics(w http.ResponseWriter, _ *http.Request) {
 			"catro_signaling_screen_claims_total %d\n"+
 			"catro_signaling_screen_releases_total %d\n"+
 			"catro_signaling_screen_busy_rejections_total %d\n"+
-			"catro_signaling_api_rate_limit_rejections_total %d\n",
+			"catro_signaling_api_rate_limit_rejections_total %d\n"+
+			"catro_signaling_discovery_rate_limit_rejections_total %d\n",
 		s.activeConnections.Load(),
 		activeRooms,
 		activeScreenPublishers,
@@ -379,7 +408,8 @@ func (s *service) metrics(w http.ResponseWriter, _ *http.Request) {
 		s.screenClaims.Load(),
 		s.screenReleases.Load(),
 		s.screenBusyRejections.Load(),
-		s.apiRateLimitRejections.Load())
+		s.apiRateLimitRejections.Load(),
+		s.discoveryRateLimitRejections.Load())
 }
 
 func (s *service) roomGauges() (int, int) {

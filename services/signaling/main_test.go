@@ -1252,3 +1252,301 @@ func TestOpenDirectoryRejectsMalformedMembershipGraph(t *testing.T) {
 		}
 	})
 }
+
+
+func TestServerCodeLookupAndJoinRequestLifecycle(t *testing.T) {
+	secret := []byte(strings.Repeat("j", 32))
+	path := filepath.Join(t.TempDir(), "directory.json")
+	d, err := openDirectory(path, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ownerToken := registerTestUserNamed(
+		t, d, "owner-1", "Owner", testCredential(0xc1))
+	applicantToken := registerTestUserNamed(
+		t, d, "applicant-1", "Applicant", testCredential(0xc2))
+	secondToken := registerTestUserNamed(
+		t, d, "applicant-2", "Second", testCredential(0xc3))
+
+	sync := authenticatedRequest(
+		http.MethodPost,
+		"/v1/servers/sync",
+		ownerToken,
+		map[string]any{
+			"server_id":        "server-1",
+			"name":             "Request Server",
+			"text_channel_id":  "text-1",
+			"voice_channel_id": "voice-1",
+		})
+	syncResponse := httptest.NewRecorder()
+	d.handleServerSync(syncResponse, sync)
+	if syncResponse.Code != http.StatusCreated {
+		t.Fatalf("sync: %d %s", syncResponse.Code, syncResponse.Body.String())
+	}
+	var ownerServer serverDescriptor
+	if err := json.Unmarshal(syncResponse.Body.Bytes(), &ownerServer); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := canonicalServerCode(ownerServer.PublicCode); !ok {
+		t.Fatalf("invalid generated Server Code %q", ownerServer.PublicCode)
+	}
+
+	lookup := authenticatedRequest(
+		http.MethodGet,
+		"/v1/server-lookup?code="+strings.ToLower(ownerServer.PublicCode),
+		applicantToken,
+		nil)
+	lookupResponse := httptest.NewRecorder()
+	d.handleServerLookup(lookupResponse, lookup)
+	if lookupResponse.Code != http.StatusOK {
+		t.Fatalf("lookup: %d %s", lookupResponse.Code, lookupResponse.Body.String())
+	}
+	var preview serverLookupDescriptor
+	if err := json.Unmarshal(lookupResponse.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	if preview.PublicCode != ownerServer.PublicCode ||
+		preview.Name != "Request Server" ||
+		preview.MemberCount != 1 ||
+		preview.Relationship != "none" {
+		t.Fatalf("unexpected preview: %#v", preview)
+	}
+	for _, forbidden := range []string{
+		"server-1", "owner-1", "text-1", "voice-1", "token_hash",
+	} {
+		if strings.Contains(lookupResponse.Body.String(), forbidden) {
+			t.Fatalf("lookup leaked %q: %s", forbidden, lookupResponse.Body.String())
+		}
+	}
+
+	create := authenticatedRequest(
+		http.MethodPost,
+		"/v1/join-requests",
+		applicantToken,
+		map[string]any{
+			"server_code": ownerServer.PublicCode,
+			"message":     "I know the owner",
+		})
+	createResponse := httptest.NewRecorder()
+	d.handleJoinRequests(createResponse, create)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("create request: %d %s",
+			createResponse.Code, createResponse.Body.String())
+	}
+	var request joinRequestDescriptor
+	if err := json.Unmarshal(createResponse.Body.Bytes(), &request); err != nil {
+		t.Fatal(err)
+	}
+	if request.Status != "pending" ||
+		request.RequesterDisplayName != "Applicant" ||
+		request.Message != "I know the owner" {
+		t.Fatalf("unexpected request: %#v", request)
+	}
+
+	duplicate := authenticatedRequest(
+		http.MethodPost,
+		"/v1/join-requests",
+		applicantToken,
+		map[string]any{
+			"server_code": ownerServer.PublicCode,
+			"message":     "ignored duplicate",
+		})
+	duplicateResponse := httptest.NewRecorder()
+	d.handleJoinRequests(duplicateResponse, duplicate)
+	if duplicateResponse.Code != http.StatusOK {
+		t.Fatalf("duplicate request: %d %s",
+			duplicateResponse.Code, duplicateResponse.Body.String())
+	}
+	var duplicateRequest joinRequestDescriptor
+	if err := json.Unmarshal(
+		duplicateResponse.Body.Bytes(), &duplicateRequest); err != nil {
+		t.Fatal(err)
+	}
+	if duplicateRequest.ID != request.ID {
+		t.Fatal("duplicate create produced a second pending request")
+	}
+
+	ownerList := authenticatedRequest(
+		http.MethodGet,
+		"/v1/join-requests?server_id=server-1",
+		ownerToken,
+		nil)
+	ownerListResponse := httptest.NewRecorder()
+	d.handleJoinRequests(ownerListResponse, ownerList)
+	if ownerListResponse.Code != http.StatusOK {
+		t.Fatalf("owner list: %d %s",
+			ownerListResponse.Code, ownerListResponse.Body.String())
+	}
+	var pendingPage struct {
+		Requests []joinRequestDescriptor `json:"requests"`
+	}
+	if err := json.Unmarshal(
+		ownerListResponse.Body.Bytes(), &pendingPage); err != nil {
+		t.Fatal(err)
+	}
+	if len(pendingPage.Requests) != 1 ||
+		pendingPage.Requests[0].RequesterDisplayName != "Applicant" {
+		t.Fatalf("unexpected owner queue: %#v", pendingPage.Requests)
+	}
+
+	forbiddenDecision := authenticatedRequest(
+		http.MethodPost,
+		"/v1/join-requests/decision",
+		secondToken,
+		map[string]any{
+			"request_id": request.ID,
+			"decision":   "approve",
+		})
+	forbiddenResponse := httptest.NewRecorder()
+	d.handleJoinRequestDecision(forbiddenResponse, forbiddenDecision)
+	if forbiddenResponse.Code != http.StatusForbidden {
+		t.Fatalf("non-owner decision status = %d",
+			forbiddenResponse.Code)
+	}
+
+	approve := authenticatedRequest(
+		http.MethodPost,
+		"/v1/join-requests/decision",
+		ownerToken,
+		map[string]any{
+			"request_id": request.ID,
+			"decision":   "approve",
+		})
+	approveResponse := httptest.NewRecorder()
+	d.handleJoinRequestDecision(approveResponse, approve)
+	if approveResponse.Code != http.StatusOK {
+		t.Fatalf("approve: %d %s",
+			approveResponse.Code, approveResponse.Body.String())
+	}
+
+	d.mu.Lock()
+	approvedServer := d.state.Servers["server-1"]
+	approvedRequest := d.state.JoinRequests[request.ID]
+	d.mu.Unlock()
+	if approvedRequest.Status != "approved" {
+		t.Fatalf("request status = %q", approvedRequest.Status)
+	}
+	if member, exists := approvedServer.Members["applicant-1"];
+		!exists || member.Role != "member" {
+		t.Fatal("approval did not create member")
+	}
+
+	memberLookup := authenticatedRequest(
+		http.MethodGet,
+		"/v1/server-lookup?code="+ownerServer.PublicCode,
+		applicantToken,
+		nil)
+	memberLookupResponse := httptest.NewRecorder()
+	d.handleServerLookup(memberLookupResponse, memberLookup)
+	var memberPreview serverLookupDescriptor
+	if err := json.Unmarshal(
+		memberLookupResponse.Body.Bytes(), &memberPreview); err != nil {
+		t.Fatal(err)
+	}
+	if memberPreview.Relationship != "member" {
+		t.Fatalf("approved relationship = %q", memberPreview.Relationship)
+	}
+
+	rejectCreate := authenticatedRequest(
+		http.MethodPost,
+		"/v1/join-requests",
+		secondToken,
+		map[string]any{"server_code": ownerServer.PublicCode})
+	rejectCreateResponse := httptest.NewRecorder()
+	d.handleJoinRequests(rejectCreateResponse, rejectCreate)
+	if rejectCreateResponse.Code != http.StatusCreated {
+		t.Fatalf("create second request: %d %s",
+			rejectCreateResponse.Code, rejectCreateResponse.Body.String())
+	}
+	var rejected joinRequestDescriptor
+	if err := json.Unmarshal(
+		rejectCreateResponse.Body.Bytes(), &rejected); err != nil {
+		t.Fatal(err)
+	}
+
+	reject := authenticatedRequest(
+		http.MethodPost,
+		"/v1/join-requests/decision",
+		ownerToken,
+		map[string]any{
+			"request_id": rejected.ID,
+			"decision":   "reject",
+		})
+	rejectResponse := httptest.NewRecorder()
+	d.handleJoinRequestDecision(rejectResponse, reject)
+	if rejectResponse.Code != http.StatusOK {
+		t.Fatalf("reject: %d %s",
+			rejectResponse.Code, rejectResponse.Body.String())
+	}
+
+	reapply := authenticatedRequest(
+		http.MethodPost,
+		"/v1/join-requests",
+		secondToken,
+		map[string]any{"server_code": ownerServer.PublicCode})
+	reapplyResponse := httptest.NewRecorder()
+	d.handleJoinRequests(reapplyResponse, reapply)
+	if reapplyResponse.Code != http.StatusConflict {
+		t.Fatalf("reapply during cooldown status = %d body %s",
+			reapplyResponse.Code, reapplyResponse.Body.String())
+	}
+}
+
+func TestServerCodeMigrationPersistsForExistingServer(t *testing.T) {
+	secret := []byte(strings.Repeat("k", 32))
+	path := filepath.Join(t.TempDir(), "directory.json")
+	d, err := openDirectory(path, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := registerTestUser(t, d, "owner-1", testCredential(0xd1))
+	sync := authenticatedRequest(
+		http.MethodPost,
+		"/v1/servers/sync",
+		token,
+		map[string]any{
+			"server_id":        "server-1",
+			"name":             "Migrated Server",
+			"text_channel_id":  "text-1",
+			"voice_channel_id": "voice-1",
+		})
+	response := httptest.NewRecorder()
+	d.handleServerSync(response, sync)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("sync: %d %s", response.Code, response.Body.String())
+	}
+
+	d.mu.Lock()
+	server := d.state.Servers["server-1"]
+	server.PublicCode = ""
+	d.state.Servers["server-1"] = server
+	if err := d.persistLocked(); err != nil {
+		d.mu.Unlock()
+		t.Fatal(err)
+	}
+	d.mu.Unlock()
+
+	reloaded, err := openDirectory(path, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded.mu.Lock()
+	code := reloaded.state.Servers["server-1"].PublicCode
+	reloaded.mu.Unlock()
+	if _, ok := canonicalServerCode(code); !ok {
+		t.Fatalf("migration generated invalid Server Code %q", code)
+	}
+
+	again, err := openDirectory(path, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again.mu.Lock()
+	persisted := again.state.Servers["server-1"].PublicCode
+	again.mu.Unlock()
+	if persisted != code {
+		t.Fatalf("Server Code migration was not persisted: %q -> %q",
+			code, persisted)
+	}
+}

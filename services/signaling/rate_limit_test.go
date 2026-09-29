@@ -267,3 +267,41 @@ func TestRunHealthCheckAcceptsOnlyHealthyHTTP(t *testing.T) {
 		t.Fatal("non-HTTP health endpoint accepted")
 	}
 }
+
+
+func TestDiscoveryRateLimitRejectsThirtyFirstLookup(t *testing.T) {
+	s := &service{
+		discoveryLimiter: newSourceLimiter(defaultDiscoveryReadsPerMinute),
+		rooms:            make(map[string]*room),
+	}
+	handler := s.limitDirectoryLookup(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	for attempt := 1; attempt <= defaultDiscoveryReadsPerMinute+1; attempt++ {
+		request := httptest.NewRequest(
+			http.MethodGet,
+			"/v1/server-lookup?code=CAT-0000-0000-0000-0000-0000",
+			nil)
+		request.RemoteAddr = "198.51.100.40:50000"
+		response := httptest.NewRecorder()
+		handler(response, request)
+
+		if attempt <= defaultDiscoveryReadsPerMinute {
+			if response.Code != http.StatusOK {
+				t.Fatalf("lookup %d status = %d", attempt, response.Code)
+			}
+			continue
+		}
+		if response.Code != http.StatusTooManyRequests {
+			t.Fatalf("31st lookup status = %d", response.Code)
+		}
+		if response.Header().Get("Retry-After") == "" {
+			t.Fatal("discovery 429 missing Retry-After")
+		}
+	}
+	if s.discoveryRateLimitRejections.Load() != 1 {
+		t.Fatalf("discovery rate metric = %d",
+			s.discoveryRateLimitRejections.Load())
+	}
+}

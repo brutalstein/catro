@@ -14,8 +14,10 @@ import (
 const (
 	sourceLimitWindow         = time.Minute
 	maxSourceLimiterEntries   = 4096
-	defaultAPIWritesPerMinute = 30
-	maximumAPIWritesPerMinute = 300
+	defaultAPIWritesPerMinute      = 30
+	maximumAPIWritesPerMinute      = 300
+	defaultDiscoveryReadsPerMinute = 30
+	maximumDiscoveryReadsPerMinute = 300
 )
 
 type sourceLimitEntry struct {
@@ -150,6 +152,27 @@ func (s *service) limitDirectoryMutation(next http.HandlerFunc) http.HandlerFunc
 				requestSource(r, s.trustProxyHeaders), time.Now())
 			if !allowed {
 				s.apiRateLimitRejections.Add(1)
+				seconds := int64((retryAfter + time.Second - 1) / time.Second)
+				if seconds < 1 {
+					seconds = 1
+				}
+				w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
+				writeAPIError(w, http.StatusTooManyRequests, "rate limit exceeded")
+				return
+			}
+		}
+		next(w, r)
+	}
+}
+
+
+func (s *service) limitDirectoryLookup(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && s.discoveryLimiter != nil {
+			allowed, retryAfter := s.discoveryLimiter.Allow(
+				requestSource(r, s.trustProxyHeaders), time.Now())
+			if !allowed {
+				s.discoveryRateLimitRejections.Add(1)
 				seconds := int64((retryAfter + time.Second - 1) / time.Second)
 				if seconds < 1 {
 					seconds = 1
