@@ -1,7 +1,7 @@
 # Cross-platform releases and one-command installers — design
 
 Date: 2026-09-30
-Status: approved in chat; written review pending
+Status: approved by the user on 2026-09-30
 
 ## 1. Goal
 
@@ -275,10 +275,19 @@ A tagged release is eligible for publication only when:
 6. The Windows package points to `https://51-170-186-61.sslip.io`.
 7. A fresh HTTPS health request and WSS upgrade against the production service pass.
 8. Release asset checksums match after downloading the published assets.
+9. The separately designed native gaming UX milestone has passed its UI, accessibility, and
+   performance acceptance gates, including an in-app screen/window picker that does not expose the
+   stock operating-system picker as the primary product experience.
 
 The first release is not described as real-machine cross-city acceptance evidence until two external
 Windows computers have completed voice and screen-sharing tests. Infrastructure health, TURN relay
 tests, and hosted CI are necessary but do not replace that user-path test.
+
+The release workflow and installers may be completed and rehearsed before the gaming UX milestone,
+but no public production tag or GitHub Release is created until that milestone is accepted. Its
+separate design must preserve native WinUI/SwiftUI implementation, bounded UI work, hardware media
+acceleration, and measured game-impact reporting; visual polish cannot move capture, encode, network,
+or realtime audio work onto the UI thread.
 
 The macOS preview is not promoted to stable until the separate native parity milestone proves:
 
