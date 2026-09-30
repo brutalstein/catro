@@ -311,7 +311,7 @@ TEST_CASE("macOS directory requests honor cancellation before transport") {
         community::DirectoryServiceConfig{"https://catro.example.com", false},
         transport);
     platform::macos::DirectoryCancellationSource stop;
-    stop.request_stop();
+    CHECK(stop.request_stop());
 
     const auto result = off_main<community::DirectoryServersResult>(
         [&] { return client.list_servers("token", stop.get_token()); });
