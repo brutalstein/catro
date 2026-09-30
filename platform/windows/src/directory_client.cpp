@@ -34,11 +34,8 @@ using namespace std::chrono_literals;
 
 constexpr std::size_t kCredentialBytes = 32;
 constexpr std::size_t kMaxConfigBytes = 16U * 1024U;
-constexpr std::size_t kMaxResponseBytes = 256U * 1024U;
-constexpr std::size_t kMaxMessageContentBytes = 2000;
-constexpr std::size_t kMaxJoinRequestMessageBytes = 280;
-constexpr std::size_t kMaxJoinRequestPage = 64;
-constexpr std::size_t kMaxMessagePage = 100;
+constexpr std::size_t kMaxResponseBytes =
+    community::kMaxDirectoryResponseBytes;
 constexpr int kHttpTimeoutMs = 10'000;
 
 struct InternetHandleCloser {
@@ -142,6 +139,11 @@ environment(const char* name) {
     ParsedBaseUrl, DirectoryError>
 parse_base_url(
     const DirectoryServiceConfig& service) {
+    if (const auto failure =
+            community::validate_directory_service_config(
+                service)) {
+        return *failure;
+    }
     const auto url = wide(service.api_base_url);
     if (url.empty()) {
         return error(
@@ -426,30 +428,8 @@ request_json(
 [[nodiscard]] DirectoryError
 error_from_response(
     const HttpResponse& response) {
-    std::string message =
-        "directory request rejected";
-    try {
-        const auto parsed =
-            Json::parse(response.body);
-        if (const auto found =
-                parsed.find("error");
-            found != parsed.end() &&
-            found->is_string()) {
-            message =
-                found->get<std::string>();
-        }
-    } catch (...) {
-    }
-
-    const auto code =
-        response.status == 401
-            ? DirectoryErrorCode::unauthorized
-            : DirectoryErrorCode::rejected;
-    return error(
-        code,
-        std::move(message),
-        0,
-        response.status);
+    return community::map_directory_http_error(
+        response.status, response.body);
 }
 
 [[nodiscard]] std::variant<
@@ -480,246 +460,31 @@ successful_json(
     }
 }
 
+template <class Result>
+[[nodiscard]] Result parse_response(
+    std::variant<Json, DirectoryError> response,
+    Result (*parser)(std::string_view) noexcept) {
+    if (const auto* failure =
+            std::get_if<DirectoryError>(
+                &response)) {
+        return *failure;
+    }
+    try {
+        return parser(
+            std::get<Json>(response).dump());
+    } catch (...) {
+        return error(
+            DirectoryErrorCode::malformed_response,
+            "directory response serialization failed");
+    }
+}
+
 [[nodiscard]] bool valid_remote_id(std::string_view value) noexcept {
-    if (value.empty() || value.size() > 128) {
-        return false;
-    }
-    for (const auto ch : value) {
-        const bool alpha =
-            (ch >= 'a' && ch <= 'z') ||
-            (ch >= 'A' && ch <= 'Z');
-        const bool digit = ch >= '0' && ch <= '9';
-        if (!alpha && !digit &&
-            ch != '-' && ch != '_' && ch != ':') {
-            return false;
-        }
-    }
-    return true;
+    return community::valid_remote_directory_id(value);
 }
 
 [[nodiscard]] bool valid_server_code(std::string_view value) noexcept {
-    if (value.size() != 28 ||
-        value.substr(0, 4) != "CAT-") {
-        return false;
-    }
-    for (std::size_t index = 4; index < value.size(); ++index) {
-        if (index == 8 || index == 13 ||
-            index == 18 || index == 23) {
-            if (value[index] != '-') {
-                return false;
-            }
-            continue;
-        }
-        const auto ch = value[index];
-        const bool digit = ch >= '0' && ch <= '9';
-        const bool hex = ch >= 'A' && ch <= 'F';
-        if (!digit && !hex) {
-            return false;
-        }
-    }
-    return true;
-}
-
-[[nodiscard]] bool valid_join_request_status(
-    std::string_view value) noexcept {
-    return value == "pending" ||
-           value == "approved" ||
-           value == "rejected" ||
-           value == "cancelled";
-}
-
-[[nodiscard]] std::optional<DirectoryServer>
-parse_server(const Json& value) {
-    try {
-        DirectoryServer server;
-        server.id = value.at("id").get<std::string>();
-        server.owner_id =
-            value.at("owner_id").get<std::string>();
-        server.name =
-            value.at("name").get<std::string>();
-        server.public_code =
-            value.value("public_code", std::string{});
-        server.text_channel_id =
-            value.value("text_channel_id", std::string{});
-        server.voice_channel_id =
-            value.at("voice_channel_id")
-                .get<std::string>();
-        server.role =
-            value.at("role").get<std::string>();
-        server.member_count =
-            value.at("member_count")
-                .get<std::size_t>();
-        if (!valid_remote_id(server.id) ||
-            !valid_remote_id(server.owner_id) ||
-            server.name.empty() ||
-            server.name.size() > community::kMaxServerNameBytes ||
-            (server.role == "owner" &&
-             !valid_server_code(server.public_code)) ||
-            (server.role != "owner" &&
-             !server.public_code.empty()) ||
-            (!server.text_channel_id.empty() &&
-             !valid_remote_id(server.text_channel_id)) ||
-            !valid_remote_id(server.voice_channel_id) ||
-            (server.role != "owner" &&
-             server.role != "member") ||
-            server.member_count == 0 ||
-            server.member_count >
-                community::kMaxMembers) {
-            return std::nullopt;
-        }
-        return server;
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-[[nodiscard]] std::optional<DirectoryMember>
-parse_member(const Json& value) {
-    try {
-        DirectoryMember member;
-        member.user_id =
-            value.at("user_id").get<std::string>();
-        member.display_name =
-            value.at("display_name").get<std::string>();
-        member.role =
-            value.at("role").get<std::string>();
-
-        if (!valid_remote_id(member.user_id) ||
-            member.display_name.empty() ||
-            member.display_name.size() >
-                community::kMaxDisplayNameBytes ||
-            (member.role != "owner" &&
-             member.role != "member")) {
-            return std::nullopt;
-        }
-        return member;
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-[[nodiscard]] std::optional<DirectoryServerLookup>
-parse_server_lookup(const Json& value) {
-    try {
-        DirectoryServerLookup preview;
-        preview.public_code =
-            value.at("public_code").get<std::string>();
-        preview.name =
-            value.at("name").get<std::string>();
-        preview.member_count =
-            value.at("member_count").get<std::size_t>();
-        preview.relationship =
-            value.at("relationship").get<std::string>();
-        preview.request_id =
-            value.value("request_id", std::string{});
-
-        const bool relationship_ok =
-            preview.relationship == "none" ||
-            preview.relationship == "pending" ||
-            preview.relationship == "member" ||
-            preview.relationship == "owner";
-        if (!valid_server_code(preview.public_code) ||
-            preview.name.empty() ||
-            preview.name.size() > community::kMaxServerNameBytes ||
-            preview.member_count == 0 ||
-            preview.member_count > community::kMaxMembers ||
-            !relationship_ok ||
-            (preview.relationship == "pending" &&
-             !valid_remote_id(preview.request_id)) ||
-            (preview.relationship != "pending" &&
-             !preview.request_id.empty())) {
-            return std::nullopt;
-        }
-        return preview;
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-[[nodiscard]] std::optional<DirectoryJoinRequest>
-parse_join_request(const Json& value) {
-    try {
-        DirectoryJoinRequest request;
-        request.id =
-            value.at("id").get<std::string>();
-        request.server_name =
-            value.at("server_name").get<std::string>();
-        request.public_code =
-            value.at("public_code").get<std::string>();
-        request.requester_display_name =
-            value.value("requester_display_name", std::string{});
-        request.message =
-            value.value("message", std::string{});
-        request.status =
-            value.at("status").get<std::string>();
-        request.created_at =
-            value.at("created_at").get<std::int64_t>();
-        request.updated_at =
-            value.at("updated_at").get<std::int64_t>();
-        request.expires_at =
-            value.at("expires_at").get<std::int64_t>();
-
-        if (!valid_remote_id(request.id) ||
-            request.server_name.empty() ||
-            request.server_name.size() >
-                community::kMaxServerNameBytes ||
-            !valid_server_code(request.public_code) ||
-            (!request.requester_display_name.empty() &&
-             request.requester_display_name.size() >
-                 community::kMaxDisplayNameBytes) ||
-            request.message.size() >
-                kMaxJoinRequestMessageBytes ||
-            !valid_join_request_status(request.status) ||
-            request.created_at <= 0 ||
-            request.updated_at < request.created_at ||
-            request.expires_at <= request.updated_at) {
-            return std::nullopt;
-        }
-        return request;
-    } catch (...) {
-        return std::nullopt;
-    }
-}
-
-[[nodiscard]] std::optional<DirectoryMessage>
-parse_message(const Json& value) {
-    try {
-        DirectoryMessage message;
-        message.id =
-            value.at("id").get<std::string>();
-        message.sequence =
-            value.at("sequence").get<std::uint64_t>();
-        message.server_id =
-            value.at("server_id").get<std::string>();
-        message.channel_id =
-            value.at("channel_id").get<std::string>();
-        message.author_id =
-            value.at("author_id").get<std::string>();
-        message.author_display_name =
-            value.at("author_display_name").get<std::string>();
-        message.content =
-            value.at("content").get<std::string>();
-        message.created_at =
-            value.at("created_at").get<std::int64_t>();
-
-        if (!valid_remote_id(message.id) ||
-            message.sequence == 0 ||
-            !valid_remote_id(message.server_id) ||
-            !valid_remote_id(message.channel_id) ||
-            !valid_remote_id(message.author_id) ||
-            message.author_display_name.empty() ||
-            message.author_display_name.size() >
-                community::kMaxDisplayNameBytes ||
-            message.content.empty() ||
-            message.content.size() >
-                kMaxMessageContentBytes ||
-            message.created_at <= 0) {
-            return std::nullopt;
-        }
-        return message;
-    } catch (...) {
-        return std::nullopt;
-    }
+    return community::valid_directory_server_code(value);
 }
 
 [[nodiscard]] std::filesystem::path
@@ -1144,36 +909,14 @@ DirectoryStringResult register_directory_identity(
     std::string_view credential) noexcept {
     try {
         const Json body{
-            {"user_id",
-             community::to_hex(identity.id)},
-            {"display_name",
-             identity.display_name},
-            {"credential",
-             std::string{credential}},
+            {"user_id", community::to_hex(identity.id)},
+            {"display_name", identity.display_name},
+            {"credential", std::string{credential}},
         };
-        const auto response =
-            successful_json(
-                request_json(
-                    service,
-                    L"POST",
-                    L"/v1/users/register",
-                    {},
-                    &body));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(
-                    &response)) {
-            return *failure;
-        }
-        const auto token =
-            std::get<Json>(response)
-                .at("access_token")
-                .get<std::string>();
-        if (token.empty()) {
-            return error(
-                DirectoryErrorCode::malformed_response,
-                "directory access token is empty");
-        }
-        return token;
+        return parse_response(
+            successful_json(request_json(
+                service, L"POST", L"/v1/users/register", {}, &body)),
+            community::parse_directory_access_token);
     } catch (...) {
         return error(
             DirectoryErrorCode::malformed_response,
@@ -1186,50 +929,23 @@ DirectoryServerResult sync_personal_server(
     std::string_view access_token,
     const community::PersonalServer& server) noexcept {
     try {
-        const auto text =
-            channel_of_kind(
-                server,
-                community::ChannelKind::text);
-        const auto voice =
-            channel_of_kind(
-                server,
-                community::ChannelKind::voice);
+        const auto text = channel_of_kind(server, community::ChannelKind::text);
+        const auto voice = channel_of_kind(server, community::ChannelKind::voice);
         if (!text || !voice) {
             return error(
                 DirectoryErrorCode::invalid_config,
                 "personal server is missing a required channel");
         }
         const Json body{
-            {"server_id",
-             community::to_hex(server.id)},
+            {"server_id", community::to_hex(server.id)},
             {"name", server.name},
-            {"text_channel_id",
-             community::to_hex(text->id)},
-            {"voice_channel_id",
-             community::to_hex(voice->id)},
+            {"text_channel_id", community::to_hex(text->id)},
+            {"voice_channel_id", community::to_hex(voice->id)},
         };
-        const auto response =
-            successful_json(
-                request_json(
-                    service,
-                    L"POST",
-                    L"/v1/servers/sync",
-                    access_token,
-                    &body));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(
-                    &response)) {
-            return *failure;
-        }
-        const auto parsed =
-            parse_server(
-                std::get<Json>(response));
-        return parsed
-            ? DirectoryServerResult{*parsed}
-            : DirectoryServerResult{
-                  error(
-                      DirectoryErrorCode::malformed_response,
-                      "directory server response is invalid")};
+        return parse_response(
+            successful_json(request_json(
+                service, L"POST", L"/v1/servers/sync", access_token, &body)),
+            community::parse_directory_server);
     } catch (...) {
         return error(
             DirectoryErrorCode::malformed_response,
@@ -1240,52 +956,10 @@ DirectoryServerResult sync_personal_server(
 DirectoryServersResult list_directory_servers(
     const DirectoryServiceConfig& service,
     std::string_view access_token) noexcept {
-    try {
-        const auto response =
-            successful_json(
-                request_json(
-                    service,
-                    L"GET",
-                    L"/v1/servers",
-                    access_token,
-                    nullptr));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(
-                    &response)) {
-            return *failure;
-        }
-
-        const auto& json =
-            std::get<Json>(response);
-        const auto& items =
-            json.at("servers");
-        if (!items.is_array() ||
-            items.size() >
-                community::kMaxMembers) {
-            return error(
-                DirectoryErrorCode::malformed_response,
-                "directory server list is invalid");
-        }
-
-        std::vector<DirectoryServer>
-            servers;
-        servers.reserve(items.size());
-        for (const auto& item : items) {
-            const auto parsed =
-                parse_server(item);
-            if (!parsed) {
-                return error(
-                    DirectoryErrorCode::malformed_response,
-                    "directory server list contains invalid data");
-            }
-            servers.push_back(*parsed);
-        }
-        return servers;
-    } catch (...) {
-        return error(
-            DirectoryErrorCode::malformed_response,
-            "directory server list response is invalid");
-    }
+    return parse_response(
+        successful_json(request_json(
+            service, L"GET", L"/v1/servers", access_token, nullptr)),
+        community::parse_directory_servers);
 }
 
 DirectoryInviteResult create_directory_invite(
@@ -1293,46 +967,14 @@ DirectoryInviteResult create_directory_invite(
     std::string_view access_token,
     std::string_view server_id) noexcept {
     try {
-        const Json body{
-            {"server_id",
-             std::string{server_id}}};
-        const auto response =
-            successful_json(
-                request_json(
-                    service,
-                    L"POST",
-                    L"/v1/invites",
-                    access_token,
-                    &body));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(
-                    &response)) {
-            return *failure;
+        if (!valid_remote_id(server_id)) {
+            return error(DirectoryErrorCode::invalid_config, "invite server is invalid");
         }
-        const auto& json =
-            std::get<Json>(response);
-        const auto server =
-            parse_server(json.at("server"));
-        if (!server) {
-            return error(
-                DirectoryErrorCode::malformed_response,
-                "directory invite server is invalid");
-        }
-
-        DirectoryInvite invite;
-        invite.code =
-            json.at("code")
-                .get<std::string>();
-        invite.expires =
-            json.at("expires")
-                .get<std::int64_t>();
-        invite.server = *server;
-        if (invite.code.empty()) {
-            return error(
-                DirectoryErrorCode::malformed_response,
-                "directory invite code is empty");
-        }
-        return invite;
+        const Json body{{"server_id", std::string{server_id}}};
+        return parse_response(
+            successful_json(request_json(
+                service, L"POST", L"/v1/invites", access_token, &body)),
+            community::parse_directory_invite);
     } catch (...) {
         return error(
             DirectoryErrorCode::malformed_response,
@@ -1345,31 +987,14 @@ DirectoryServerResult accept_directory_invite(
     std::string_view access_token,
     std::string_view invite_code) noexcept {
     try {
-        const Json body{
-            {"code",
-             std::string{invite_code}}};
-        const auto response =
-            successful_json(
-                request_json(
-                    service,
-                    L"POST",
-                    L"/v1/invites/accept",
-                    access_token,
-                    &body));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(
-                    &response)) {
-            return *failure;
+        if (invite_code.empty() || invite_code.size() > 128) {
+            return error(DirectoryErrorCode::invalid_config, "invite code is invalid");
         }
-        const auto parsed =
-            parse_server(
-                std::get<Json>(response));
-        return parsed
-            ? DirectoryServerResult{*parsed}
-            : DirectoryServerResult{
-                  error(
-                      DirectoryErrorCode::malformed_response,
-                      "accepted server response is invalid")};
+        const Json body{{"code", std::string{invite_code}}};
+        return parse_response(
+            successful_json(request_json(
+                service, L"POST", L"/v1/invites/accept", access_token, &body)),
+            community::parse_directory_server);
     } catch (...) {
         return error(
             DirectoryErrorCode::malformed_response,
@@ -1381,138 +1006,44 @@ DirectoryMembersResult list_directory_members(
     const DirectoryServiceConfig& service,
     std::string_view access_token,
     std::string_view server_id) noexcept {
-    try {
-        if (!valid_remote_id(server_id)) {
-            return error(
-                DirectoryErrorCode::invalid_config,
-                "member roster server is invalid");
-        }
-
-        const auto server = wide(server_id);
-        if (server.empty()) {
-            return error(
-                DirectoryErrorCode::invalid_config,
-                "member roster server encoding failed");
-        }
-
-        std::wstring endpoint =
-            L"/v1/members?server_id=";
-        endpoint += server;
-
-        const auto response =
-            successful_json(
-                request_json(
-                    service,
-                    L"GET",
-                    endpoint,
-                    access_token,
-                    nullptr));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(
-                    &response)) {
-            return *failure;
-        }
-
-        const auto& json =
-            std::get<Json>(response);
-        const auto& items =
-            json.at("members");
-        if (!items.is_array() ||
-            items.empty() ||
-            items.size() >
-                community::kMaxMembers) {
-            return error(
-                DirectoryErrorCode::malformed_response,
-                "member roster is invalid");
-        }
-
-        std::vector<DirectoryMember> members;
-        members.reserve(items.size());
-        std::unordered_set<std::string> seen;
-        seen.reserve(items.size());
-        std::size_t owner_count = 0;
-
-        for (std::size_t index = 0;
-             index < items.size();
-             ++index) {
-            const auto parsed =
-                parse_member(items[index]);
-            if (!parsed ||
-                !seen.insert(parsed->user_id).second) {
-                return error(
-                    DirectoryErrorCode::malformed_response,
-                    "member roster contains invalid data");
-            }
-            if (parsed->role == "owner") {
-                ++owner_count;
-                if (index != 0) {
-                    return error(
-                        DirectoryErrorCode::malformed_response,
-                        "member roster owner ordering is invalid");
-                }
-            }
-            members.push_back(*parsed);
-        }
-
-        if (owner_count != 1 ||
-            members.front().role != "owner") {
-            return error(
-                DirectoryErrorCode::malformed_response,
-                "member roster owner is invalid");
-        }
-        return members;
-    } catch (...) {
-        return error(
-            DirectoryErrorCode::malformed_response,
-            "member roster response is invalid");
+    if (!valid_remote_id(server_id)) {
+        return error(DirectoryErrorCode::invalid_config, "member roster server is invalid");
     }
+    const auto server = wide(server_id);
+    if (server.empty()) {
+        return error(
+            DirectoryErrorCode::invalid_config,
+            "member roster server encoding failed");
+    }
+    return parse_response(
+        successful_json(request_json(
+            service,
+            L"GET",
+            std::wstring{L"/v1/members?server_id="} + server,
+            access_token,
+            nullptr)),
+        community::parse_directory_members);
 }
 
 DirectoryServerLookupResult lookup_directory_server(
     const DirectoryServiceConfig& service,
     std::string_view access_token,
     std::string_view server_code) noexcept {
-    try {
-        if (server_code.empty() ||
-            server_code.size() > 64) {
-            return error(
-                DirectoryErrorCode::invalid_config,
-                "Server Code is invalid");
-        }
-        const auto code = wide(server_code);
-        if (code.empty()) {
-            return error(
-                DirectoryErrorCode::invalid_config,
-                "Server Code encoding failed");
-        }
-        std::wstring endpoint =
-            L"/v1/server-lookup?code=";
-        endpoint += code;
-        const auto response =
-            successful_json(
-                request_json(
-                    service,
-                    L"GET",
-                    endpoint,
-                    access_token,
-                    nullptr));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(&response)) {
-            return *failure;
-        }
-        const auto parsed =
-            parse_server_lookup(std::get<Json>(response));
-        return parsed
-            ? DirectoryServerLookupResult{*parsed}
-            : DirectoryServerLookupResult{
-                  error(
-                      DirectoryErrorCode::malformed_response,
-                      "server lookup response is invalid")};
-    } catch (...) {
-        return error(
-            DirectoryErrorCode::malformed_response,
-            "server lookup response is invalid");
+    if (!valid_server_code(server_code)) {
+        return error(DirectoryErrorCode::invalid_config, "Server Code is invalid");
     }
+    const auto code = wide(server_code);
+    if (code.empty()) {
+        return error(DirectoryErrorCode::invalid_config, "Server Code encoding failed");
+    }
+    return parse_response(
+        successful_json(request_json(
+            service,
+            L"GET",
+            std::wstring{L"/v1/server-lookup?code="} + code,
+            access_token,
+            nullptr)),
+        community::parse_directory_server_lookup);
 }
 
 DirectoryJoinRequestResult create_directory_join_request(
@@ -1521,37 +1052,18 @@ DirectoryJoinRequestResult create_directory_join_request(
     std::string_view server_code,
     std::string_view message) noexcept {
     try {
-        if (server_code.empty() ||
-            server_code.size() > 64 ||
-            message.size() > kMaxJoinRequestMessageBytes) {
-            return error(
-                DirectoryErrorCode::invalid_config,
-                "join request is invalid");
+        if (!valid_server_code(server_code) ||
+            message.size() > community::kMaxJoinRequestMessageBytes) {
+            return error(DirectoryErrorCode::invalid_config, "join request is invalid");
         }
         const Json body{
             {"server_code", std::string{server_code}},
             {"message", std::string{message}},
         };
-        const auto response =
-            successful_json(
-                request_json(
-                    service,
-                    L"POST",
-                    L"/v1/join-requests",
-                    access_token,
-                    &body));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(&response)) {
-            return *failure;
-        }
-        const auto parsed =
-            parse_join_request(std::get<Json>(response));
-        return parsed
-            ? DirectoryJoinRequestResult{*parsed}
-            : DirectoryJoinRequestResult{
-                  error(
-                      DirectoryErrorCode::malformed_response,
-                      "join request response is invalid")};
+        return parse_response(
+            successful_json(request_json(
+                service, L"POST", L"/v1/join-requests", access_token, &body)),
+            community::parse_directory_join_request);
     } catch (...) {
         return error(
             DirectoryErrorCode::malformed_response,
@@ -1560,41 +1072,10 @@ DirectoryJoinRequestResult create_directory_join_request(
 }
 
 [[nodiscard]] DirectoryJoinRequestsResult
-parse_join_request_page(
-    std::variant<Json, DirectoryError> response) {
-    if (const auto* failure =
-            std::get_if<DirectoryError>(&response)) {
-        return *failure;
-    }
-    try {
-        const auto& items =
-            std::get<Json>(response).at("requests");
-        if (!items.is_array() ||
-            items.size() > kMaxJoinRequestPage) {
-            return error(
-                DirectoryErrorCode::malformed_response,
-                "join request page is invalid");
-        }
-        std::vector<DirectoryJoinRequest> requests;
-        requests.reserve(items.size());
-        std::unordered_set<std::string> ids;
-        ids.reserve(items.size());
-        for (const auto& item : items) {
-            const auto parsed = parse_join_request(item);
-            if (!parsed ||
-                !ids.insert(parsed->id).second) {
-                return error(
-                    DirectoryErrorCode::malformed_response,
-                    "join request page contains invalid data");
-            }
-            requests.push_back(*parsed);
-        }
-        return requests;
-    } catch (...) {
-        return error(
-            DirectoryErrorCode::malformed_response,
-            "join request page response is invalid");
-    }
+parse_join_request_page(std::variant<Json, DirectoryError> response) {
+    return parse_response(
+        std::move(response),
+        community::parse_directory_join_requests);
 }
 
 DirectoryJoinRequestsResult list_outgoing_directory_join_requests(
@@ -1653,26 +1134,15 @@ DirectoryJoinRequestResult decide_directory_join_request(
             {"request_id", std::string{request_id}},
             {"decision", approve ? "approve" : "reject"},
         };
-        const auto response =
+        return parse_response(
             successful_json(
                 request_json(
                     service,
                     L"POST",
                     L"/v1/join-requests/decision",
                     access_token,
-                    &body));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(&response)) {
-            return *failure;
-        }
-        const auto parsed =
-            parse_join_request(std::get<Json>(response));
-        return parsed
-            ? DirectoryJoinRequestResult{*parsed}
-            : DirectoryJoinRequestResult{
-                  error(
-                      DirectoryErrorCode::malformed_response,
-                      "join request decision response is invalid")};
+                    &body)),
+            community::parse_directory_join_request);
     } catch (...) {
         return error(
             DirectoryErrorCode::malformed_response,
@@ -1693,26 +1163,15 @@ DirectoryJoinRequestResult cancel_directory_join_request(
         const Json body{
             {"request_id", std::string{request_id}},
         };
-        const auto response =
+        return parse_response(
             successful_json(
                 request_json(
                     service,
                     L"POST",
                     L"/v1/join-requests/cancel",
                     access_token,
-                    &body));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(&response)) {
-            return *failure;
-        }
-        const auto parsed =
-            parse_join_request(std::get<Json>(response));
-        return parsed
-            ? DirectoryJoinRequestResult{*parsed}
-            : DirectoryJoinRequestResult{
-                  error(
-                      DirectoryErrorCode::malformed_response,
-                      "join request cancel response is invalid")};
+                    &body)),
+            community::parse_directory_join_request);
     } catch (...) {
         return error(
             DirectoryErrorCode::malformed_response,
@@ -1728,14 +1187,10 @@ DirectoryMessagesResult list_directory_messages(
     std::uint64_t after,
     std::size_t limit) noexcept {
     try {
-        if (!valid_remote_id(server_id) ||
-            !valid_remote_id(channel_id) ||
-            limit == 0 || limit > kMaxMessagePage) {
-            return error(
-                DirectoryErrorCode::invalid_config,
-                "message query is invalid");
+        if (!valid_remote_id(server_id) || !valid_remote_id(channel_id) || limit == 0 ||
+            limit > community::kMaxMessagePage) {
+            return error(DirectoryErrorCode::invalid_config, "message query is invalid");
         }
-
         const auto server = wide(server_id);
         const auto channel = wide(channel_id);
         if (server.empty() || channel.empty()) {
@@ -1743,9 +1198,7 @@ DirectoryMessagesResult list_directory_messages(
                 DirectoryErrorCode::invalid_config,
                 "message query encoding failed");
         }
-
-        std::wstring endpoint =
-            L"/v1/messages?server_id=";
+        std::wstring endpoint = L"/v1/messages?server_id=";
         endpoint += server;
         endpoint += L"&channel_id=";
         endpoint += channel;
@@ -1753,62 +1206,13 @@ DirectoryMessagesResult list_directory_messages(
         endpoint += std::to_wstring(after);
         endpoint += L"&limit=";
         endpoint += std::to_wstring(limit);
-
-        const auto response =
-            successful_json(
-                request_json(
-                    service,
-                    L"GET",
-                    endpoint,
-                    access_token,
-                    nullptr));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(
-                    &response)) {
+        const auto response = successful_json(request_json(
+            service, L"GET", endpoint, access_token, nullptr));
+        if (const auto* failure = std::get_if<DirectoryError>(&response)) {
             return *failure;
         }
-
-        const auto& json = std::get<Json>(response);
-        const auto& items = json.at("messages");
-        if (!items.is_array() ||
-            items.size() > limit) {
-            return error(
-                DirectoryErrorCode::malformed_response,
-                "message page is invalid");
-        }
-
-        DirectoryMessagePage page;
-        page.next_after =
-            json.at("next_after").get<std::uint64_t>();
-        page.messages.reserve(items.size());
-        std::uint64_t previous = after;
-        for (const auto& item : items) {
-            const auto parsed = parse_message(item);
-            if (!parsed ||
-                parsed->server_id != server_id ||
-                parsed->channel_id != channel_id ||
-                parsed->sequence <= previous) {
-                return error(
-                    DirectoryErrorCode::malformed_response,
-                    "message page contains invalid data");
-            }
-            previous = parsed->sequence;
-            page.messages.push_back(*parsed);
-        }
-        if (!page.messages.empty() &&
-            page.next_after !=
-                page.messages.back().sequence) {
-            return error(
-                DirectoryErrorCode::malformed_response,
-                "message cursor is inconsistent");
-        }
-        if (page.messages.empty() &&
-            page.next_after != after) {
-            return error(
-                DirectoryErrorCode::malformed_response,
-                "empty message cursor is inconsistent");
-        }
-        return page;
+        return community::parse_directory_messages(
+            std::get<Json>(response).dump(), server_id, channel_id, after, limit);
     } catch (...) {
         return error(
             DirectoryErrorCode::malformed_response,
@@ -1823,45 +1227,27 @@ DirectoryMessageResult send_directory_message(
     std::string_view channel_id,
     std::string_view content) noexcept {
     try {
-        if (!valid_remote_id(server_id) ||
-            !valid_remote_id(channel_id) ||
-            content.empty() ||
-            content.size() > kMaxMessageContentBytes) {
-            return error(
-                DirectoryErrorCode::invalid_config,
-                "message is invalid");
+        if (!valid_remote_id(server_id) || !valid_remote_id(channel_id) || content.empty() ||
+            content.size() > community::kMaxMessageContentBytes) {
+            return error(DirectoryErrorCode::invalid_config, "message is invalid");
         }
-
         const Json body{
             {"server_id", std::string{server_id}},
             {"channel_id", std::string{channel_id}},
             {"content", std::string{content}},
         };
-        const auto response =
-            successful_json(
-                request_json(
-                    service,
-                    L"POST",
-                    L"/v1/messages",
-                    access_token,
-                    &body));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(
-                    &response)) {
-            return *failure;
-        }
-
-        const auto parsed =
-            parse_message(std::get<Json>(response));
-        if (!parsed ||
-            parsed->server_id != server_id ||
-            parsed->channel_id != channel_id ||
-            parsed->content != content) {
+        auto parsed = parse_response(
+            successful_json(request_json(
+                service, L"POST", L"/v1/messages", access_token, &body)),
+            community::parse_directory_message);
+        const auto* message = std::get_if<DirectoryMessage>(&parsed);
+        if (!message || message->server_id != server_id || message->channel_id != channel_id ||
+            message->content != content) {
             return error(
                 DirectoryErrorCode::malformed_response,
                 "sent message response is invalid");
         }
-        return *parsed;
+        return *message;
     } catch (...) {
         return error(
             DirectoryErrorCode::malformed_response,
@@ -1875,74 +1261,17 @@ RtcProvisioningResult request_rtc_provisioning(
     std::string_view server_id,
     std::string_view channel_id) noexcept {
     try {
+        if (!valid_remote_id(server_id) || !valid_remote_id(channel_id)) {
+            return error(DirectoryErrorCode::invalid_config, "RTC room is invalid");
+        }
         const Json body{
-            {"server_id",
-             std::string{server_id}},
-            {"channel_id",
-             std::string{channel_id}},
+            {"server_id", std::string{server_id}},
+            {"channel_id", std::string{channel_id}},
         };
-        const auto response =
-            successful_json(
-                request_json(
-                    service,
-                    L"POST",
-                    L"/v1/rtc-token",
-                    access_token,
-                    &body));
-        if (const auto* failure =
-                std::get_if<DirectoryError>(
-                    &response)) {
-            return *failure;
-        }
-
-        const auto& json =
-            std::get<Json>(response);
-        RtcProvisioning provisioning;
-        provisioning.token =
-            json.at("token")
-                .get<std::string>();
-        provisioning.expires =
-            json.at("expires")
-                .get<std::int64_t>();
-        provisioning.server_id =
-            json.at("server_id")
-                .get<std::string>();
-        provisioning.channel_id =
-            json.at("channel_id")
-                .get<std::string>();
-        provisioning.peer_id =
-            json.at("peer_id")
-                .get<std::string>();
-        provisioning.signaling_url =
-            json.at("signaling_url")
-                .get<std::string>();
-        provisioning.ice_servers =
-            json.at("ice_servers")
-                .get<std::vector<std::string>>();
-        provisioning.max_room_peers =
-            json.at("max_room_peers")
-                .get<std::size_t>();
-        provisioning.allow_insecure_signaling =
-            json.value(
-                "allow_insecure_signaling",
-                false);
-        provisioning.allow_no_turn =
-            json.value(
-                "allow_no_turn", false);
-
-        if (provisioning.token.empty() ||
-            provisioning.server_id.empty() ||
-            provisioning.channel_id.empty() ||
-            provisioning.peer_id.empty() ||
-            provisioning.signaling_url.empty() ||
-            provisioning.ice_servers.empty() ||
-            provisioning.max_room_peers < 2 ||
-            provisioning.max_room_peers > 5) {
-            return error(
-                DirectoryErrorCode::malformed_response,
-                "RTC provisioning response is incomplete");
-        }
-        return provisioning;
+        return parse_response(
+            successful_json(request_json(
+                service, L"POST", L"/v1/rtc-token", access_token, &body)),
+            community::parse_rtc_provisioning);
     } catch (...) {
         return error(
             DirectoryErrorCode::malformed_response,

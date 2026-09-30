@@ -1,134 +1,37 @@
 #pragma once
 
-#include <catro/community/model.hpp>
+#include <catro/community/directory.hpp>
 
-#include <cstddef>
-#include <cstdint>
-#include <string>
 #include <string_view>
-#include <variant>
-#include <vector>
 
 namespace catro::platform::windows {
 
-enum class DirectoryErrorCode : std::uint8_t {
-    not_configured,
-    invalid_config,
-    credential_failure,
-    network_failure,
-    unauthorized,
-    rejected,
-    malformed_response,
-};
-
-struct DirectoryError {
-    DirectoryErrorCode code = DirectoryErrorCode::network_failure;
-    std::string message;
-    std::int64_t native_code = 0;
-    int http_status = 0;
-};
-
-struct DirectoryServiceConfig {
-    std::string api_base_url;
-    bool allow_insecure_http = false;
-};
-
-struct DirectoryServer {
-    std::string id;
-    std::string owner_id;
-    std::string name;
-    std::string public_code;
-    std::string text_channel_id;
-    std::string voice_channel_id;
-    std::string role;
-    std::size_t member_count = 0;
-};
-
-struct DirectoryInvite {
-    std::string code;
-    std::int64_t expires = 0;
-    DirectoryServer server;
-};
-
-struct DirectoryMember {
-    std::string user_id;
-    std::string display_name;
-    std::string role;
-};
-
-struct DirectoryServerLookup {
-    std::string public_code;
-    std::string name;
-    std::size_t member_count = 0;
-    std::string relationship;
-    std::string request_id;
-};
-
-struct DirectoryJoinRequest {
-    std::string id;
-    std::string server_name;
-    std::string public_code;
-    std::string requester_display_name;
-    std::string message;
-    std::string status;
-    std::int64_t created_at = 0;
-    std::int64_t updated_at = 0;
-    std::int64_t expires_at = 0;
-};
-
-struct DirectoryMessage {
-    std::string id;
-    std::uint64_t sequence = 0;
-    std::string server_id;
-    std::string channel_id;
-    std::string author_id;
-    std::string author_display_name;
-    std::string content;
-    std::int64_t created_at = 0;
-};
-
-struct DirectoryMessagePage {
-    std::vector<DirectoryMessage> messages;
-    std::uint64_t next_after = 0;
-};
-
-struct RtcProvisioning {
-    std::string token;
-    std::int64_t expires = 0;
-    std::string server_id;
-    std::string channel_id;
-    std::string peer_id;
-    std::string signaling_url;
-    std::vector<std::string> ice_servers;
-    std::size_t max_room_peers = 0;
-    bool allow_insecure_signaling = false;
-    bool allow_no_turn = false;
-};
-
-using DirectoryConfigResult =
-    std::variant<DirectoryServiceConfig, DirectoryError>;
-using DirectoryStringResult =
-    std::variant<std::string, DirectoryError>;
-using DirectoryServerResult =
-    std::variant<DirectoryServer, DirectoryError>;
-using DirectoryServersResult =
-    std::variant<std::vector<DirectoryServer>, DirectoryError>;
-using DirectoryInviteResult =
-    std::variant<DirectoryInvite, DirectoryError>;
-using DirectoryMembersResult =
-    std::variant<std::vector<DirectoryMember>, DirectoryError>;
-using DirectoryServerLookupResult =
-    std::variant<DirectoryServerLookup, DirectoryError>;
-using DirectoryJoinRequestResult =
-    std::variant<DirectoryJoinRequest, DirectoryError>;
-using DirectoryJoinRequestsResult =
-    std::variant<std::vector<DirectoryJoinRequest>, DirectoryError>;
-using DirectoryMessageResult =
-    std::variant<DirectoryMessage, DirectoryError>;
-using DirectoryMessagesResult =
-    std::variant<DirectoryMessagePage, DirectoryError>;
-using RtcProvisioningResult =
-    std::variant<RtcProvisioning, DirectoryError>;
+using community::DirectoryConfigResult;
+using community::DirectoryError;
+using community::DirectoryErrorCode;
+using community::DirectoryInvite;
+using community::DirectoryInviteResult;
+using community::DirectoryJoinRequest;
+using community::DirectoryJoinRequestResult;
+using community::DirectoryJoinRequests;
+using community::DirectoryJoinRequestsResult;
+using community::DirectoryMember;
+using community::DirectoryMembers;
+using community::DirectoryMembersResult;
+using community::DirectoryMessage;
+using community::DirectoryMessagePage;
+using community::DirectoryMessageResult;
+using community::DirectoryMessagesResult;
+using community::DirectoryServer;
+using community::DirectoryServerLookup;
+using community::DirectoryServerLookupResult;
+using community::DirectoryServerResult;
+using community::DirectoryServers;
+using community::DirectoryServersResult;
+using community::DirectoryServiceConfig;
+using community::DirectoryStringResult;
+using community::RtcProvisioning;
+using community::RtcProvisioningResult;
 
 // Reads deployment configuration from catro-network.json next to Catro.exe. CATRO_SERVICE_URL is an
 // engineering override only. Production config rejects plaintext HTTP by default.

@@ -1,4 +1,5 @@
 add_library(catro_community STATIC
+    src/directory.cpp
     src/model.cpp
     src/state_codec.cpp
 )

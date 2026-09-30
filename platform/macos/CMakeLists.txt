@@ -11,6 +11,7 @@ endif()
 
 add_library(catro_platform_macos STATIC
     src/audio_platform.mm
+    src/directory_client.mm
     src/local_state.mm
     src/capability_service.mm
     src/process_probe_executor.mm
@@ -28,6 +29,7 @@ target_include_directories(catro_platform_macos PUBLIC ${CMAKE_CURRENT_SOURCE_DI
 target_link_libraries(catro_platform_macos
     PUBLIC Catro::Capabilities Catro::Audio Catro::Community
     PRIVATE catro_macos_translation Catro::Reporting
+            nlohmann_json::nlohmann_json
             "-framework Foundation" "-framework AppKit" "-framework CoreGraphics" "-framework CoreAudio"
             "-framework IOKit" "-framework Metal" "-framework VideoToolbox" "-framework CoreMedia"
             "-framework AudioToolbox" "-framework AVFoundation" "-framework Security"
