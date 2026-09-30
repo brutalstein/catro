@@ -1,6 +1,8 @@
 #include "udp_socket.hpp"
 #include "voice_peer.hpp"
 
+#include "helpers/fake_audio_platform.hpp"
+
 #include <catro/audio/engine.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -27,139 +29,7 @@ using namespace std::chrono_literals;
 
 namespace {
 
-capabilities::AudioEndpointId endpoint(std::string value) {
-    return {std::move(value), capabilities::IdentityScope::persistent};
-}
-
-class CaptureStream final : public audio::AudioStream {
-public:
-    CaptureStream(audio::CaptureSink& sink, float sample)
-        : sink_(sink), sample_(sample),
-          info_{endpoint("fake-in"), 48000, 1, 480, 0} {}
-
-    ~CaptureStream() override {
-        request_stop();
-        if (thread_.joinable()) {
-            thread_.join();
-        }
-    }
-
-    const audio::StreamInfo& info() const noexcept override {
-        return info_;
-    }
-
-    std::optional<audio::AudioError> start() override {
-        thread_ = std::thread([this] {
-            std::array<float, 480> frames{};
-            double phase = 0.0;
-            constexpr double step = 2.0 * std::numbers::pi * 300.0 / 48000.0;
-            auto next = std::chrono::steady_clock::now();
-            while (!stop_.load(std::memory_order_acquire)) {
-                for (auto& frame : frames) {
-                    frame = sample_ * static_cast<float>(std::sin(phase));
-                    phase += step;
-                    if (phase >= 2.0 * std::numbers::pi) {
-                        phase -= 2.0 * std::numbers::pi;
-                    }
-                }
-                sink_.on_captured(frames);
-                next += 10ms;
-                std::this_thread::sleep_until(next);
-            }
-        });
-        return std::nullopt;
-    }
-
-    void request_stop() noexcept override {
-        stop_.store(true, std::memory_order_release);
-    }
-
-    std::uint64_t glitches() const noexcept override {
-        return 0;
-    }
-
-private:
-    audio::CaptureSink& sink_;
-    float sample_;
-    audio::StreamInfo info_;
-    std::atomic_bool stop_{false};
-    std::thread thread_;
-};
-
-class RenderStream final : public audio::AudioStream {
-public:
-    RenderStream(audio::RenderSource& source, std::atomic<std::uint64_t>& nonzero_samples)
-        : source_(source), nonzero_samples_(nonzero_samples),
-          info_{endpoint("fake-out"), 48000, 2, 480, 0} {}
-
-    ~RenderStream() override {
-        request_stop();
-        if (thread_.joinable()) {
-            thread_.join();
-        }
-    }
-
-    const audio::StreamInfo& info() const noexcept override {
-        return info_;
-    }
-
-    std::optional<audio::AudioError> start() override {
-        thread_ = std::thread([this] {
-            std::array<float, 480> frames{};
-            auto next = std::chrono::steady_clock::now();
-            while (!stop_.load(std::memory_order_acquire)) {
-                source_.on_render(frames);
-                std::uint64_t audible = 0;
-                for (const auto sample : frames) {
-                    audible += std::abs(sample) > 1e-5F ? 1U : 0U;
-                }
-                nonzero_samples_.fetch_add(audible, std::memory_order_relaxed);
-                next += 10ms;
-                std::this_thread::sleep_until(next);
-            }
-        });
-        return std::nullopt;
-    }
-
-    void request_stop() noexcept override {
-        stop_.store(true, std::memory_order_release);
-    }
-
-    std::uint64_t glitches() const noexcept override {
-        return 0;
-    }
-
-private:
-    audio::RenderSource& source_;
-    std::atomic<std::uint64_t>& nonzero_samples_;
-    audio::StreamInfo info_;
-    std::atomic_bool stop_{false};
-    std::thread thread_;
-};
-
-class FakeAudioPlatform final : public audio::AudioPlatform {
-public:
-    explicit FakeAudioPlatform(float capture_sample) : capture_sample_(capture_sample) {}
-
-    audio::OpenResult open_capture(const std::optional<capabilities::AudioEndpointId>&,
-                                   audio::CaptureSink& sink,
-                                   audio::StreamFailure) override {
-        return std::unique_ptr<audio::AudioStream>(
-            std::make_unique<CaptureStream>(sink, capture_sample_));
-    }
-
-    audio::OpenResult open_render(const std::optional<capabilities::AudioEndpointId>&,
-                                  audio::RenderSource& source,
-                                  audio::StreamFailure) override {
-        return std::unique_ptr<audio::AudioStream>(
-            std::make_unique<RenderStream>(source, rendered_nonzero_samples));
-    }
-
-    std::atomic<std::uint64_t> rendered_nonzero_samples{0};
-
-private:
-    float capture_sample_;
-};
+using test::FakeAudioPlatform;
 
 std::pair<std::uint16_t, std::uint16_t> reserve_ports() {
     auto first_result = UdpPeerSocket::bind({"127.0.0.1", 0});

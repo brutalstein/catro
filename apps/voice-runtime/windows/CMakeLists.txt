@@ -1,12 +1,8 @@
 if(WIN32 AND MSVC)
     add_library(catro_voice_runtime SHARED src/voice_runtime.cpp)
-    target_include_directories(catro_voice_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(catro_voice_runtime PRIVATE
-        catro_voice_peer_cli
-        catro_room_runtime
-        Catro::Voice
-        Catro::Audio
-        Catro::Windows
+    target_link_libraries(catro_voice_runtime
+        PUBLIC catro_room_voice
+        PRIVATE catro_room_runtime Catro::Windows
     )
     target_compile_definitions(catro_voice_runtime PRIVATE
         CATRO_VOICE_RUNTIME_EXPORTS

@@ -2,47 +2,22 @@
 #include <catro/room_runtime.h>
 #include <catro/room_voice_runtime.hpp>
 
-#include "voice_peer.hpp"
-
-#include <catro/platform/windows/audio_platform.hpp>
+#include <catro/platform/macos/audio_platform.hpp>
 
 #include <cstdio>
 #include <new>
-#include <ostream>
-#include <streambuf>
 
 namespace {
 
-class NullBuffer final : public std::streambuf {
-protected:
-    int_type overflow(int_type value) override {
-        return traits_type::not_eof(value);
-    }
-};
-
-class NullStream final : public std::ostream {
-public:
-    NullStream() : std::ostream(&buffer_) {}
-
-private:
-    NullBuffer buffer_;
-};
-
-// WASAPI audio for the shared room voice loop, plus the engineering direct-UDP peer that only
-// Windows keeps.
+// CoreAudio for the shared room voice loop. macOS ships only the production RTC room path; the
+// engineering direct-UDP peer stays Windows-only, so a config without a room is rejected.
 class VoiceRuntime final {
 public:
     VoiceRuntime()
         : host(platform,
-               {&catro_room_runtime_snapshot, &catro_room_runtime_send_voice, &catro_room_runtime_receive_voice},
-               [this](const catro::tools::VoicePeerOptions& options,
-                      catro::tools::VoicePeerControl& control,
-                      std::ostream& error) {
-                   NullStream output;
-                   return catro::tools::run_voice_peer(options, platform, output, error, &control);
-               }) {}
+               {&catro_room_runtime_snapshot, &catro_room_runtime_send_voice, &catro_room_runtime_receive_voice}) {}
 
-    catro::platform::windows::WasapiAudioPlatform platform;
+    catro::platform::macos::CoreAudioPlatform platform;
     catro::voice_runtime::VoiceRuntimeHost host;
 };
 

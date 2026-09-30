@@ -78,7 +78,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/bigobj /permissive- /utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>NOMINMAX;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(IntDir);$(IntDir)Diagnostics;$(IntDir)Audio;$(IntDir)Server;$(IntDir)Settings;$(CatroRepoRoot)core\capabilities\include;$(CatroRepoRoot)core\audio\include;$(CatroRepoRoot)core\community\include;$(CatroRepoRoot)core\reporting\include;$(CatroRepoRoot)core\video\include;$(CatroRepoRoot)core\transport\include;$(CatroRepoRoot)apps\screen-runtime\windows\include;$(CatroRepoRoot)apps\room-runtime\windows\include;$(CatroRepoRoot)apps\diagnostics;$(CatroRepoRoot)apps\shell;$(CatroRepoRoot)apps\voice-runtime\windows\include;$(CatroRepoRoot)platform\windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory);$(IntDir);$(IntDir)Diagnostics;$(IntDir)Audio;$(IntDir)Server;$(IntDir)Settings;$(CatroRepoRoot)core\capabilities\include;$(CatroRepoRoot)core\audio\include;$(CatroRepoRoot)core\community\include;$(CatroRepoRoot)core\reporting\include;$(CatroRepoRoot)core\video\include;$(CatroRepoRoot)core\transport\include;$(CatroRepoRoot)apps\screen-runtime\windows\include;$(CatroRepoRoot)apps\room-runtime\windows\include;$(CatroRepoRoot)apps\diagnostics;$(CatroRepoRoot)apps\shell;$(CatroRepoRoot)apps\voice-runtime\common\include;$(CatroRepoRoot)platform\windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

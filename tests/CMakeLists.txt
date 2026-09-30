@@ -53,6 +53,9 @@ target_link_libraries(catro_voice_realtime_test PRIVATE Catro::Voice)
 catro_add_test(voice_pipeline voice/pipeline_test.cpp)
 target_link_libraries(catro_voice_pipeline_test PRIVATE Catro::Voice)
 
+catro_add_test(room_voice_runtime voice/room_voice_runtime_test.cpp)
+target_link_libraries(catro_room_voice_runtime_test PRIVATE catro_room_voice)
+
 catro_add_test(voice_transport voice/udp_transport_test.cpp)
 target_link_libraries(catro_voice_transport_test PRIVATE Catro::Voice catro_voice_peer_transport)
 
@@ -120,6 +123,9 @@ if(APPLE)
 
     catro_add_test(macos_directory_client macos/directory_client_test.mm)
     target_link_libraries(catro_macos_directory_client_test PRIVATE Catro::Macos "-framework Security")
+
+    catro_add_test(macos_voice_runtime macos/voice_runtime_test.cpp)
+    target_link_libraries(catro_macos_voice_runtime_test PRIVATE catro_voice_runtime)
 endif()
 
 # Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.
