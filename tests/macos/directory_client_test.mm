@@ -1,0 +1,236 @@
+#include <catro/platform/macos/directory_client.hpp>
+
+#include <catch2/catch_test_macros.hpp>
+
+#import <Foundation/Foundation.h>
+#import <Security/Security.h>
+
+#include <atomic>
+#include <filesystem>
+#include <stop_token>
+#include <string>
+#include <thread>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include <unistd.h>
+
+using namespace catro;
+
+namespace {
+
+class FakeTransport final : public platform::macos::DirectoryHttpTransport {
+public:
+    platform::macos::DirectoryHttpResult request(
+        const platform::macos::DirectoryHttpRequest& request,
+        std::stop_token stop) noexcept override {
+        requests.push_back(request);
+        if (stop.stop_requested()) {
+            return community::DirectoryError{
+                community::DirectoryErrorCode::cancelled,
+                "directory request cancelled"};
+        }
+        if (responses.empty()) {
+            return community::DirectoryError{
+                community::DirectoryErrorCode::network_failure,
+                "missing fake response"};
+        }
+        auto response = std::move(responses.front());
+        responses.erase(responses.begin());
+        return response;
+    }
+
+    std::vector<platform::macos::DirectoryHttpRequest> requests;
+    std::vector<platform::macos::DirectoryHttpResult> responses;
+};
+
+struct KeychainItem {
+    std::string service =
+        "catro-test-" + std::to_string(getpid()) + "-" +
+        std::to_string(sequence.fetch_add(1, std::memory_order_relaxed));
+    std::string account = "install";
+
+    ~KeychainItem() {
+        NSDictionary* query = @{
+            (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
+            (__bridge id)kSecAttrService :
+                [NSString stringWithUTF8String:service.c_str()],
+            (__bridge id)kSecAttrAccount :
+                [NSString stringWithUTF8String:account.c_str()],
+        };
+        SecItemDelete((__bridge CFDictionaryRef)query);
+    }
+
+    inline static std::atomic_uint64_t sequence{0};
+};
+
+template <class Result, class Function>
+Result off_main(Function&& function) {
+    Result result;
+    std::jthread worker([&] { result = function(); });
+    worker.join();
+    return result;
+}
+
+community::Identity identity() {
+    community::Identity value;
+    value.id.bytes[0] = std::byte{1};
+    value.display_name = "Owner";
+    return value;
+}
+
+community::PersonalServer personal_server() {
+    community::PersonalServer value;
+    value.id.bytes[0] = std::byte{2};
+    value.owner_id.bytes[0] = std::byte{1};
+    value.name = "Catro";
+    community::Channel text;
+    text.id.bytes[0] = std::byte{3};
+    text.name = "general";
+    text.kind = community::ChannelKind::text;
+    community::Channel voice;
+    voice.id.bytes[0] = std::byte{4};
+    voice.name = "Voice";
+    voice.kind = community::ChannelKind::voice;
+    value.channels = {text, voice};
+    value.members = {{value.owner_id, community::ServerRole::owner}};
+    return value;
+}
+
+} // namespace
+
+TEST_CASE("macOS directory credential is stable and never creates a plaintext file") {
+    KeychainItem keychain;
+    const auto directory =
+        std::filesystem::temp_directory_path() /
+        ("catro-keychain-test-" + std::to_string(getpid()));
+    std::error_code ignored;
+    std::filesystem::remove_all(directory, ignored);
+    std::filesystem::create_directories(directory);
+    const auto previous = std::filesystem::current_path();
+    std::filesystem::current_path(directory);
+
+    const auto first = platform::macos::load_or_create_directory_credential(
+        keychain.service, keychain.account);
+    const auto second = platform::macos::load_or_create_directory_credential(
+        keychain.service, keychain.account);
+
+    std::filesystem::current_path(previous);
+    REQUIRE(std::holds_alternative<std::string>(first));
+    REQUIRE(std::holds_alternative<std::string>(second));
+    CHECK(std::get<std::string>(first) == std::get<std::string>(second));
+    CHECK(std::get<std::string>(first).size() == 43);
+    CHECK(std::filesystem::is_empty(directory));
+    std::filesystem::remove_all(directory, ignored);
+}
+
+TEST_CASE("macOS directory client rejects production HTTP before transport") {
+    FakeTransport transport;
+    platform::macos::DirectoryClient client(
+        community::DirectoryServiceConfig{"http://catro.example.com", false},
+        transport);
+
+    const auto result = off_main<community::DirectoryServersResult>(
+        [&] { return client.list_servers("token"); });
+
+    CHECK(std::get<community::DirectoryError>(result).code ==
+          community::DirectoryErrorCode::invalid_config);
+    CHECK(transport.requests.empty());
+}
+
+TEST_CASE("macOS directory client keeps network and parsing off the main thread") {
+    FakeTransport transport;
+    platform::macos::DirectoryClient client(
+        community::DirectoryServiceConfig{"https://catro.example.com", false},
+        transport);
+
+    const auto result = client.list_servers("token");
+
+    REQUIRE(std::holds_alternative<community::DirectoryError>(result));
+    CHECK(std::get<community::DirectoryError>(result).code ==
+          community::DirectoryErrorCode::wrong_thread);
+    CHECK(transport.requests.empty());
+}
+
+TEST_CASE("macOS directory client maps status and malformed responses actionably") {
+    FakeTransport transport;
+    transport.responses = {
+        platform::macos::DirectoryHttpResponse{
+            401, R"({"error":"credential expired"})"},
+        platform::macos::DirectoryHttpResponse{200, "{"},
+    };
+    platform::macos::DirectoryClient client(
+        community::DirectoryServiceConfig{"https://catro.example.com", false},
+        transport);
+
+    const auto unauthorized = off_main<community::DirectoryServersResult>(
+        [&] { return client.list_servers("token"); });
+    const auto malformed = off_main<community::DirectoryServersResult>(
+        [&] { return client.list_servers("token"); });
+
+    CHECK(std::get<community::DirectoryError>(unauthorized).code ==
+          community::DirectoryErrorCode::unauthorized);
+    CHECK(std::get<community::DirectoryError>(unauthorized).message ==
+          "credential expired");
+    CHECK(std::get<community::DirectoryError>(malformed).code ==
+          community::DirectoryErrorCode::malformed_response);
+}
+
+TEST_CASE("macOS directory operations use the production endpoint contract") {
+    FakeTransport transport;
+    transport.responses = {
+        platform::macos::DirectoryHttpResponse{200, R"({"access_token":"token"})"},
+        platform::macos::DirectoryHttpResponse{
+            200,
+            R"({"id":"server-1","owner_id":"user-1","name":"Catro","public_code":"CAT-1234-5678-9ABC-DEF0-1234","text_channel_id":"text-1","voice_channel_id":"voice-1","role":"owner","member_count":1})"},
+        platform::macos::DirectoryHttpResponse{200, R"({"servers":[]})"},
+        platform::macos::DirectoryHttpResponse{
+            200,
+            R"({"token":"rtc","expires":200,"server_id":"server-1","channel_id":"voice-1","peer_id":"user-1","signaling_url":"wss://catro.example.com/v1/rtc","ice_servers":["stun:turn.example.com:3478"],"max_room_peers":4})"},
+    };
+    platform::macos::DirectoryClient client(
+        community::DirectoryServiceConfig{"https://catro.example.com/api", false},
+        transport);
+
+    const auto registered = off_main<community::DirectoryStringResult>(
+        [&] { return client.register_identity(identity(), "credential"); });
+    const auto synced = off_main<community::DirectoryServerResult>(
+        [&] { return client.sync_personal_server("token", personal_server()); });
+    const auto listed = off_main<community::DirectoryServersResult>(
+        [&] { return client.list_servers("token"); });
+    const auto rtc = off_main<community::RtcProvisioningResult>(
+        [&] {
+            return client.request_rtc_provisioning(
+                "token", "server-1", "voice-1");
+        });
+
+    REQUIRE(std::holds_alternative<std::string>(registered));
+    REQUIRE(std::holds_alternative<community::DirectoryServer>(synced));
+    REQUIRE(std::holds_alternative<community::DirectoryServers>(listed));
+    REQUIRE(std::holds_alternative<community::RtcProvisioning>(rtc));
+    REQUIRE(transport.requests.size() == 4);
+    CHECK(transport.requests[0].method == "POST");
+    CHECK(transport.requests[0].endpoint == "/v1/users/register");
+    CHECK(transport.requests[1].endpoint == "/v1/servers/sync");
+    CHECK(transport.requests[2].method == "GET");
+    CHECK(transport.requests[2].endpoint == "/v1/servers");
+    CHECK(transport.requests[3].endpoint == "/v1/rtc-token");
+}
+
+TEST_CASE("macOS directory requests honor cancellation before transport") {
+    FakeTransport transport;
+    platform::macos::DirectoryClient client(
+        community::DirectoryServiceConfig{"https://catro.example.com", false},
+        transport);
+    std::stop_source stop;
+    stop.request_stop();
+
+    const auto result = off_main<community::DirectoryServersResult>(
+        [&] { return client.list_servers("token", stop.get_token()); });
+
+    REQUIRE(std::holds_alternative<community::DirectoryError>(result));
+    CHECK(std::get<community::DirectoryError>(result).code ==
+          community::DirectoryErrorCode::cancelled);
+    CHECK(transport.requests.empty());
+}

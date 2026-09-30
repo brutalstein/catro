@@ -32,6 +32,9 @@ target_compile_definitions(catro_canonical_determinism_test PRIVATE CATRO_FIXTUR
 catro_add_test(community community/community_test.cpp)
 target_link_libraries(catro_community_test PRIVATE Catro::Community)
 
+catro_add_test(directory community/directory_test.cpp)
+target_link_libraries(catro_directory_test PRIVATE Catro::Community)
+
 catro_add_test(audio audio/audio_test.cpp)
 target_link_libraries(catro_audio_test PRIVATE Catro::Audio)
 
@@ -107,6 +110,9 @@ target_link_libraries(catro_windows_translation_test PRIVATE catro_windows_trans
 if(APPLE)
     catro_add_test(macos_local_state macos/local_state_test.cpp)
     target_link_libraries(catro_macos_local_state_test PRIVATE Catro::Macos)
+
+    catro_add_test(macos_directory_client macos/directory_client_test.mm)
+    target_link_libraries(catro_macos_directory_client_test PRIVATE Catro::Macos "-framework Security")
 endif()
 
 # Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.
