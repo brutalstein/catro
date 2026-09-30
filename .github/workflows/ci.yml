@@ -28,6 +28,9 @@ jobs:
         run: ./scripts/build.ps1 -Configuration Debug
       - name: Test
         run: ./scripts/test.ps1 -Configuration Debug
+      - name: Test Windows installer
+        shell: powershell
+        run: ./tests/installers/windows-installer-test.ps1
       - name: Capability report
         run: ./scripts/run.ps1 -Report --format json --output out/capability-report.json
       - uses: actions/upload-artifact@v4
