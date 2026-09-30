@@ -51,11 +51,11 @@ function(catro_enable_voice_dependency)
 endfunction()
 
 
-# Production Windows RTC transport.
+# Production RTC transport.
 #
 # libdatachannel provides ICE/STUN/TURN, DTLS-SRTP media transport, and WebSocket signaling.
 # Pin every third-party revision; do not follow a moving branch in reproducible Release builds.
-if(WIN32 AND MSVC)
+if((WIN32 AND MSVC) OR APPLE)
     FetchContent_Declare(
         mbedtls
         GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
@@ -75,7 +75,7 @@ if(WIN32 AND MSVC)
     )
 
     function(catro_enable_rtc_dependency)
-        # Mbed TLS is built into Catro so target PCs do not need a separately installed TLS stack.
+        # Mbed TLS is built into Catro so target machines do not need a separately installed TLS stack.
         set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
         set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
         set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)

@@ -1,4 +1,4 @@
-if(NOT (WIN32 AND MSVC))
+if(NOT ((WIN32 AND MSVC) OR APPLE))
     return()
 endif()
 
@@ -19,9 +19,11 @@ target_link_libraries(catro_rtc
         nlohmann_json::nlohmann_json
 )
 
-target_compile_definitions(catro_rtc PRIVATE
-    NOMINMAX
-    _WIN32_WINNT=0x0A00
-)
+if(WIN32 AND MSVC)
+    target_compile_definitions(catro_rtc PRIVATE
+        NOMINMAX
+        _WIN32_WINNT=0x0A00
+    )
+endif()
 
 catro_enable_warnings(catro_rtc)
