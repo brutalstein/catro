@@ -3,11 +3,14 @@ target_include_directories(catro_test_fixtures PUBLIC ${CMAKE_CURRENT_SOURCE_DIR
 target_link_libraries(catro_test_fixtures PUBLIC Catro::Capabilities)
 catro_enable_warnings(catro_test_fixtures)
 
+add_custom_target(catro_tests)
+
 # One executable per suite so `ctest -R catro_<suite>` runs a focused set.
 function(catro_add_test name source)
     add_executable(catro_${name}_test ${source})
     target_link_libraries(catro_${name}_test PRIVATE catro_test_fixtures Catch2::Catch2WithMain)
     catro_enable_warnings(catro_${name}_test)
+    add_dependencies(catro_tests catro_${name}_test)
     add_test(NAME catro_${name} COMMAND catro_${name}_test)
 endfunction()
 

@@ -78,7 +78,7 @@ jobs:
           -DCMAKE_OBJCXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined"
           -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
       - name: Build
-        run: cmake --build out/build/sanitizers --parallel
+        run: cmake --build out/build/sanitizers --target catro_tests --parallel 2
       - name: Test
         run: ctest --test-dir out/build/sanitizers --output-on-failure
 
