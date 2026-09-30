@@ -52,6 +52,12 @@ jobs:
         run: scripts/build.sh Debug
       - name: Test
         run: scripts/test.sh Debug
+      - name: Build release package
+        run: scripts/package-macos.sh Release
+      - name: Test macOS installer and package
+        env:
+          CATRO_TEST_BUILT_APP: out/build/macos-clang/Release/Catro.app
+        run: tests/installers/macos-installer-test.sh
       - name: Capability report
         run: scripts/run.sh --report --format json --output out/capability-report.json
       - uses: actions/upload-artifact@v4
