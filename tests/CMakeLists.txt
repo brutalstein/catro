@@ -104,6 +104,13 @@ target_link_libraries(catro_report_cli_test PRIVATE catro_report_cli)
 # The platform translations are plain C++, so their rules are tested on every platform.
 catro_add_test(macos_translation macos/translation_test.cpp)
 target_link_libraries(catro_macos_translation_test PRIVATE catro_macos_translation)
+
+catro_add_test(macos_directory_cancellation macos/directory_cancellation_test.cpp)
+target_include_directories(catro_macos_directory_cancellation_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/platform/macos/include
+)
+target_link_libraries(catro_macos_directory_cancellation_test PRIVATE Catro::Community)
+
 catro_add_test(windows_translation windows/translation_test.cpp)
 target_link_libraries(catro_windows_translation_test PRIVATE catro_windows_translation)
 

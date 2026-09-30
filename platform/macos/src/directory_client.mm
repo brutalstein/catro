@@ -16,7 +16,6 @@
 #include <limits>
 #include <memory>
 #include <span>
-#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -50,6 +49,8 @@ using namespace std::chrono_literals;
 constexpr std::size_t kCredentialBytes = 32;
 constexpr std::size_t kMaxConfigBytes = 16U * 1024U;
 constexpr NSTimeInterval kRequestTimeoutSeconds = 10.0;
+constexpr std::int64_t kCancellationPollNanoseconds =
+    25'000'000;
 
 [[nodiscard]] community::DirectoryError error(
     community::DirectoryErrorCode code,
@@ -122,7 +123,7 @@ constexpr NSTimeInterval kRequestTimeoutSeconds = 10.0;
     const community::DirectoryServiceConfig& service,
     DirectoryHttpTransport* transport,
     DirectoryHttpRequest request,
-    std::stop_token stop) {
+    DirectoryCancellationToken stop) {
     if ([NSThread isMainThread]) {
         return error(
             community::DirectoryErrorCode::wrong_thread,
@@ -213,7 +214,7 @@ public:
 
     DirectoryHttpResult request(
         const DirectoryHttpRequest& request,
-        std::stop_token stop) noexcept override {
+        DirectoryCancellationToken stop) noexcept override {
         @autoreleasepool {
             if ([NSThread isMainThread]) {
                 return error(
@@ -304,25 +305,33 @@ public:
                         dispatch_semaphore_signal(
                             completed);
                     }];
-            std::stop_callback cancel{
-                stop, [task] { [task cancel]; }};
             [task resume];
 
-            const auto wait =
-                dispatch_semaphore_wait(
+            const auto deadline =
+                std::chrono::steady_clock::now() +
+                std::chrono::milliseconds{
+                    static_cast<std::int64_t>(
+                        (kRequestTimeoutSeconds + 1.0) *
+                        1000.0)};
+            while (dispatch_semaphore_wait(
                     completed,
                     dispatch_time(
                         DISPATCH_TIME_NOW,
-                        static_cast<std::int64_t>(
-                            (kRequestTimeoutSeconds +
-                             1.0) *
-                            NSEC_PER_SEC)));
-            if (wait != 0) {
-                [task cancel];
-                [session invalidateAndCancel];
-                return error(
-                    community::DirectoryErrorCode::network_failure,
-                    "directory request timed out");
+                        kCancellationPollNanoseconds)) != 0) {
+                if (stop.stop_requested()) {
+                    [task cancel];
+                    [session invalidateAndCancel];
+                    return error(
+                        community::DirectoryErrorCode::cancelled,
+                        "directory request cancelled");
+                }
+                if (std::chrono::steady_clock::now() >= deadline) {
+                    [task cancel];
+                    [session invalidateAndCancel];
+                    return error(
+                        community::DirectoryErrorCode::network_failure,
+                        "directory request timed out");
+                }
             }
             [session finishTasksAndInvalidate];
 
@@ -397,7 +406,7 @@ community::DirectoryStringResult
 DirectoryClient::register_identity(
     const community::Identity& identity,
     std::string_view credential,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     try {
         if (identity.id.empty() ||
             identity.display_name.empty() ||
@@ -437,7 +446,7 @@ community::DirectoryServerResult
 DirectoryClient::sync_personal_server(
     std::string_view access_token,
     const community::PersonalServer& server,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     try {
         const auto text =
             channel_of_kind(
@@ -481,7 +490,7 @@ DirectoryClient::sync_personal_server(
 community::DirectoryServersResult
 DirectoryClient::list_servers(
     std::string_view access_token,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     return decode(
         perform(
             service_,
@@ -498,7 +507,7 @@ community::DirectoryInviteResult
 DirectoryClient::create_invite(
     std::string_view access_token,
     std::string_view server_id,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     try {
         if (!community::valid_remote_directory_id(
                 server_id)) {
@@ -530,7 +539,7 @@ community::DirectoryServerResult
 DirectoryClient::accept_invite(
     std::string_view access_token,
     std::string_view invite_code,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     try {
         if (invite_code.empty() ||
             invite_code.size() > 128) {
@@ -562,7 +571,7 @@ community::DirectoryMembersResult
 DirectoryClient::list_members(
     std::string_view access_token,
     std::string_view server_id,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     if (!community::valid_remote_directory_id(
             server_id)) {
         return error(
@@ -586,7 +595,7 @@ community::DirectoryServerLookupResult
 DirectoryClient::lookup_server(
     std::string_view access_token,
     std::string_view server_code,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     if (!community::valid_directory_server_code(
             server_code)) {
         return error(
@@ -611,7 +620,7 @@ DirectoryClient::create_join_request(
     std::string_view access_token,
     std::string_view server_code,
     std::string_view message,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     try {
         if (!community::valid_directory_server_code(
                 server_code) ||
@@ -650,7 +659,7 @@ DirectoryClient::create_join_request(
 community::DirectoryJoinRequestsResult
 DirectoryClient::list_outgoing_join_requests(
     std::string_view access_token,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     return decode(
         perform(
             service_,
@@ -667,7 +676,7 @@ community::DirectoryJoinRequestsResult
 DirectoryClient::list_pending_join_requests(
     std::string_view access_token,
     std::string_view server_id,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     if (!community::valid_remote_directory_id(
             server_id)) {
         return error(
@@ -692,7 +701,7 @@ DirectoryClient::decide_join_request(
     std::string_view access_token,
     std::string_view request_id,
     bool approve,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     try {
         if (!community::valid_remote_directory_id(
                 request_id)) {
@@ -730,7 +739,7 @@ community::DirectoryJoinRequestResult
 DirectoryClient::cancel_join_request(
     std::string_view access_token,
     std::string_view request_id,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     try {
         if (!community::valid_remote_directory_id(
                 request_id)) {
@@ -767,7 +776,7 @@ DirectoryClient::list_messages(
     std::string_view channel_id,
     std::uint64_t after,
     std::size_t limit,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     try {
         if (!community::valid_remote_directory_id(
                 server_id) ||
@@ -827,7 +836,7 @@ DirectoryClient::send_message(
     std::string_view server_id,
     std::string_view channel_id,
     std::string_view content,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     try {
         if (!community::valid_remote_directory_id(
                 server_id) ||
@@ -889,7 +898,7 @@ DirectoryClient::request_rtc_provisioning(
     std::string_view access_token,
     std::string_view server_id,
     std::string_view channel_id,
-    std::stop_token stop) noexcept {
+    DirectoryCancellationToken stop) noexcept {
     try {
         if (!community::valid_remote_directory_id(
                 server_id) ||

@@ -7,7 +7,6 @@
 
 #include <atomic>
 #include <filesystem>
-#include <stop_token>
 #include <string>
 #include <thread>
 #include <utility>
@@ -24,7 +23,7 @@ class FakeTransport final : public platform::macos::DirectoryHttpTransport {
 public:
     platform::macos::DirectoryHttpResult request(
         const platform::macos::DirectoryHttpRequest& request,
-        std::stop_token stop) noexcept override {
+        platform::macos::DirectoryCancellationToken stop) noexcept override {
         requests.push_back(request);
         if (stop.stop_requested()) {
             return community::DirectoryError{
@@ -68,7 +67,7 @@ struct KeychainItem {
 template <class Result, class Function>
 Result off_main(Function&& function) {
     Result result;
-    std::jthread worker([&] { result = function(); });
+    std::thread worker([&] { result = function(); });
     worker.join();
     return result;
 }
@@ -311,7 +310,7 @@ TEST_CASE("macOS directory requests honor cancellation before transport") {
     platform::macos::DirectoryClient client(
         community::DirectoryServiceConfig{"https://catro.example.com", false},
         transport);
-    std::stop_source stop;
+    platform::macos::DirectoryCancellationSource stop;
     stop.request_stop();
 
     const auto result = off_main<community::DirectoryServersResult>(
