@@ -62,6 +62,11 @@ target_link_libraries(catro_voice_peer_cli_test PRIVATE catro_voice_peer_cli)
 catro_add_test(voice_peer_runtime tools/voice_peer_runtime_test.cpp)
 target_link_libraries(catro_voice_peer_runtime_test PRIVATE catro_voice_peer_cli)
 
+if((WIN32 AND MSVC) OR APPLE)
+    catro_add_test(room_runtime rtc/room_runtime_test.cpp)
+    target_link_libraries(catro_room_runtime_test PRIVATE catro_room_runtime)
+endif()
+
 if(WIN32 AND MSVC)
     catro_add_test(capture_check tools/capture_check_test.cpp)
     target_link_libraries(catro_capture_check_test PRIVATE catro_capture_check_cli)
