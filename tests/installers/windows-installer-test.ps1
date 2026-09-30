@@ -195,3 +195,5 @@ public static class CatroLaunchProbe
         Remove-Item -LiteralPath $testRoot -Recurse -Force
     }
 }
+
+exit 0
