@@ -55,6 +55,8 @@ target_link_libraries(catro_voice_pipeline_test PRIVATE Catro::Voice)
 
 catro_add_test(room_voice_runtime voice/room_voice_runtime_test.cpp)
 target_link_libraries(catro_room_voice_runtime_test PRIVATE catro_room_voice)
+catro_add_test(screen_transport_runtime video/screen_transport_runtime_test.cpp)
+target_link_libraries(catro_screen_transport_runtime_test PRIVATE catro_screen_transport)
 
 catro_add_test(voice_transport voice/udp_transport_test.cpp)
 target_link_libraries(catro_voice_transport_test PRIVATE Catro::Voice catro_voice_peer_transport)
@@ -140,6 +142,10 @@ if(APPLE)
 
     catro_add_test(macos_video_presenter macos/video_presenter_test.mm)
     target_link_libraries(catro_macos_video_presenter_test PRIVATE Catro::Macos)
+
+    catro_add_test(macos_screen_runtime macos/screen_runtime_test.mm)
+    target_link_libraries(catro_macos_screen_runtime_test PRIVATE catro_screen_runtime_macos
+        "-framework QuartzCore")
 endif()
 
 # Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.

@@ -39,7 +39,6 @@ namespace catro::screen {
 namespace {
 
 using Microsoft::WRL::ComPtr;
-using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 using platform::windows::D3D11CompositionVideoPresenter;
 using platform::windows::DecodedGpuFrame;
@@ -57,178 +56,16 @@ using transport::UdpPeerSocket;
 
 constexpr auto kFirstFrameTimeout = 3s;
 constexpr auto kGameFirstFrameTimeout = 30s;
-constexpr auto kRemoteInactiveTimeout = 2s;
-constexpr auto kReceiveWait = 20ms;
 constexpr std::uint32_t kPreviewMaxFps = 10;
-constexpr std::size_t kReceiveDatagramBytes = 1500;
-constexpr std::size_t kReceiveDrainLimit = 512;
 
-constexpr auto kStreamAudioFramePeriod = 20ms;
-constexpr std::size_t kStreamAudioChannels = 2;
-constexpr std::size_t kStreamAudioFrameSamples =
-    static_cast<std::size_t>(voice::kFrameSamples) *
-    kStreamAudioChannels;
-constexpr std::size_t kStreamAudioQueueFrames = 8;
-constexpr std::size_t kStreamAudioJitterPackets = 3;
-constexpr std::size_t kStreamAudioReceiveDrainLimit = 64;
-using StreamAudioPcmFrame =
-    std::array<float, kStreamAudioFrameSamples>;
-
-class StreamAudioCaptureBridge final {
-public:
-    StreamAudioCaptureBridge()
-        : ring_(kStreamAudioFrameSamples *
-                kStreamAudioQueueFrames) {}
-
-    void on_captured(
-        std::span<const float> samples) noexcept {
-        if (samples.empty()) {
-            return;
-        }
-        if (!ring_.write_exact(samples)) {
-            dropped_callbacks_.fetch_add(
-                1, std::memory_order_relaxed);
-            resync_requested_.store(
-                true, std::memory_order_release);
-        }
-    }
-
-    [[nodiscard]] bool try_pop(
-        StreamAudioPcmFrame& frame) noexcept {
-        if (resync_requested_.exchange(
-                false, std::memory_order_acq_rel)) {
-            ring_.discard(ring_.size());
-            resync_events_.fetch_add(
-                1, std::memory_order_relaxed);
-            return false;
-        }
-
-        const auto buffered = ring_.size();
-        const auto keep =
-            kStreamAudioFrameSamples * 3U;
-        if (buffered > keep) {
-            const auto stale =
-                ((buffered - keep) /
-                 kStreamAudioFrameSamples) *
-                kStreamAudioFrameSamples;
-            if (stale != 0) {
-                ring_.discard(stale);
-                stale_samples_.fetch_add(
-                    stale,
-                    std::memory_order_relaxed);
-            }
-        }
-
-        return ring_.read_exact(
-            std::span<float>(frame));
-    }
-
-    [[nodiscard]] std::uint64_t dropped_callbacks()
-        const noexcept {
-        return dropped_callbacks_.load(
-            std::memory_order_relaxed);
-    }
-
-private:
-    audio::SpscRing<float> ring_;
-    std::atomic_bool resync_requested_{false};
-    std::atomic<std::uint64_t> dropped_callbacks_{0};
-    std::atomic<std::uint64_t> resync_events_{0};
-    std::atomic<std::uint64_t> stale_samples_{0};
-};
-
-class StreamAudioRenderBridge final {
-public:
-    StreamAudioRenderBridge()
-        : ring_(kStreamAudioFrameSamples *
-                kStreamAudioQueueFrames) {}
-
-    [[nodiscard]] bool try_push(
-        const StreamAudioPcmFrame& frame) noexcept {
-        if (!ring_.write_exact(
-                std::span<const float>(frame))) {
-            push_rejections_.fetch_add(
-                1, std::memory_order_relaxed);
-            request_resync_.store(
-                true, std::memory_order_release);
-            return false;
-        }
-        primed_.store(
-            true, std::memory_order_relaxed);
-        return true;
-    }
-
-    void on_render(
-        std::span<float> samples) noexcept {
-        if (request_resync_.exchange(
-                false, std::memory_order_acq_rel)) {
-            ring_.discard(ring_.size());
-        }
-
-        const auto read = ring_.read(samples);
-        if (read < samples.size()) {
-            std::fill(
-                samples.begin() +
-                    static_cast<std::ptrdiff_t>(read),
-                samples.end(),
-                0.0F);
-            if (primed_.load(
-                    std::memory_order_relaxed)) {
-                underruns_.fetch_add(
-                    1, std::memory_order_relaxed);
-            }
-        }
-    }
-
-    void request_resync() noexcept {
-        request_resync_.store(
-            true, std::memory_order_release);
-    }
-
-    [[nodiscard]] std::uint64_t push_rejections()
-        const noexcept {
-        return push_rejections_.load(
-            std::memory_order_relaxed);
-    }
-
-private:
-    audio::SpscRing<float> ring_;
-    std::atomic_bool primed_{false};
-    std::atomic_bool request_resync_{false};
-    std::atomic<std::uint64_t> push_rejections_{0};
-    std::atomic<std::uint64_t> underruns_{0};
-};
-
-[[nodiscard]] bool valid_media_bounds(
-    std::uint8_t payload_type,
-    std::uint16_t mtu_bytes,
-    std::size_t max_access_unit_bytes) noexcept {
-    return payload_type >= 96 &&
-           payload_type <= 127 &&
-           mtu_bytes >= 576 &&
-           mtu_bytes <= 1400 &&
-           max_access_unit_bytes >= 262'144 &&
-           max_access_unit_bytes <= 16U * 1024U * 1024U;
-}
-
-[[nodiscard]] bool valid_direct_endpoints(
-    const transport::UdpEndpoint& bind,
-    const transport::UdpEndpoint& peer) noexcept {
-    return !bind.address.empty() &&
-           !peer.address.empty() &&
-           bind.port != 0 &&
-           peer.port != 0;
-}
-
-[[nodiscard]] bool valid_transport(
-    const ScreenTransportConfig& config) noexcept {
-    return valid_media_bounds(
-               config.payload_type,
-               config.mtu_bytes,
-               config.max_access_unit_bytes) &&
-           (config.room_runtime != nullptr ||
-            valid_direct_endpoints(
-                config.bind, config.peer));
+[[nodiscard]] RoomScreenApi room_api() noexcept {
+    return RoomScreenApi{
+        .snapshot = &catro_room_runtime_snapshot,
+        .send_video = &catro_room_runtime_send_video,
+        .receive_video = &catro_room_runtime_receive_video,
+        .send_stream_audio = &catro_room_runtime_send_stream_audio,
+        .receive_stream_audio = &catro_room_runtime_receive_stream_audio,
+    };
 }
 
 [[nodiscard]] ScreenTransportConfig transport_from_share(
@@ -264,40 +101,6 @@ private:
            config.stream_audio_bitrate >= 32'000 &&
            config.stream_audio_bitrate <= 512'000 &&
            config.ssrc != 0;
-}
-
-[[nodiscard]] std::chrono::nanoseconds frame_period(
-    std::uint32_t fps) noexcept {
-    constexpr std::uint64_t kNanosecondsPerSecond =
-        1'000'000'000ULL;
-    return std::chrono::nanoseconds(
-        static_cast<std::int64_t>(
-            (kNanosecondsPerSecond + fps / 2U) / fps));
-}
-
-[[nodiscard]] std::uint32_t monotonic_rtp_timestamp(
-    Clock::time_point started,
-    Clock::time_point now) noexcept {
-    const auto elapsed_100ns =
-        std::chrono::duration_cast<
-            std::chrono::duration<std::uint64_t, std::ratio<1, 10'000'000>>>(
-            now - started)
-            .count();
-    return video::rtp_timestamp_90khz(elapsed_100ns);
-}
-
-[[nodiscard]] std::int64_t extended_rtp_to_100ns(
-    std::uint64_t timestamp_90khz) noexcept {
-    // 10,000,000 / 90,000 = 1000 / 9. The receiver extends the 32-bit RTP clock before this
-    // conversion, so a long-lived room can cross the ~13-hour RTP wrap without PTS moving back.
-    return static_cast<std::int64_t>(
-        (timestamp_90khz * 1000ULL + 4ULL) / 9ULL);
-}
-
-[[nodiscard]] std::int64_t steady_now_ns() noexcept {
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(
-               Clock::now().time_since_epoch())
-        .count();
 }
 
 // Lifecycle-only diagnostic breadcrumbs. This never runs on every media frame: it is intentionally
@@ -352,226 +155,128 @@ void trace_event(std::string_view event) noexcept {
     CloseHandle(file);
 }
 
-[[nodiscard]] std::string udp_error_text(const UdpError& error) {
-    std::string text{transport::name(error.code)};
-    if (error.native_code != 0) {
-        text += " (native ";
-        text += std::to_string(error.native_code);
-        text += ")";
-    }
-    return text;
-}
-
-class VideoReceiveSource final {
+class WasapiStreamOutput final : public StreamAudioOutput {
 public:
-    VideoReceiveSource(
-        UdpPeerSocket* socket,
-        CatroRoomRuntimeHandle room_runtime) noexcept
-        : socket_(socket),
-          room_runtime_(room_runtime) {}
-
-    [[nodiscard]] bool valid() const noexcept {
-        return socket_ != nullptr ||
-               room_runtime_ != nullptr;
+    [[nodiscard]] bool start(StreamAudioRenderBridge& bridge) override {
+        return !renderer_.start(
+            [&bridge](std::span<float> samples) noexcept {
+                bridge.on_render(samples);
+            });
     }
 
-    [[nodiscard]] bool room_mode() const noexcept {
-        return room_runtime_ != nullptr;
-    }
-
-    [[nodiscard]] UdpPeerSocket::WaitResult wait_readable(
-        std::chrono::microseconds timeout) noexcept {
-        if (socket_ != nullptr) {
-            return socket_->wait_readable(timeout);
-        }
-        if (room_runtime_ == nullptr) {
-            return UdpError{UdpErrorCode::wait_failed};
-        }
-        if (pending_size_ != 0) {
-            return true;
-        }
-
-        const auto rounded_ms =
-            timeout <= std::chrono::microseconds::zero()
-                ? 0ULL
-                : static_cast<unsigned long long>(
-                      (timeout.count() + 999) / 1000);
-        const auto timeout_ms =
-            static_cast<std::uint32_t>(
-                std::min<unsigned long long>(
-                    rounded_ms,
-                    static_cast<unsigned long long>(
-                        UINT32_MAX)));
-
-        const auto received =
-            catro_room_runtime_receive_video(
-                room_runtime_,
-                pending_.data(),
-                pending_.size(),
-                timeout_ms);
-        if (received < 0) {
-            return UdpError{
-                UdpErrorCode::receive_failed};
-        }
-        pending_size_ =
-            static_cast<std::size_t>(received);
-        return pending_size_ != 0;
-    }
-
-    [[nodiscard]] UdpPeerSocket::SizeResult receive(
-        std::span<std::byte> destination) noexcept {
-        if (socket_ != nullptr) {
-            return socket_->receive(destination);
-        }
-        if (room_runtime_ == nullptr) {
-            return UdpError{
-                UdpErrorCode::receive_failed};
-        }
-
-        if (pending_size_ != 0) {
-            if (pending_size_ > destination.size()) {
-                pending_size_ = 0;
-                return UdpError{
-                    UdpErrorCode::datagram_too_large};
-            }
-            std::memcpy(
-                destination.data(),
-                pending_.data(),
-                pending_size_);
-            const auto copied = pending_size_;
-            pending_size_ = 0;
-            return copied;
-        }
-
-        const auto received =
-            catro_room_runtime_receive_video(
-                room_runtime_,
-                destination.data(),
-                destination.size(),
-                0);
-        if (received < 0) {
-            return UdpError{
-                UdpErrorCode::receive_failed};
-        }
-        return static_cast<std::size_t>(received);
+    void stop() noexcept override {
+        renderer_.stop();
     }
 
 private:
-    UdpPeerSocket* socket_ = nullptr;
-    CatroRoomRuntimeHandle room_runtime_ = nullptr;
-    std::array<std::byte, kReceiveDatagramBytes>
-        pending_{};
-    std::size_t pending_size_ = 0;
+    platform::windows::WasapiStreamAudioRenderer renderer_;
 };
 
 } // namespace
 
 struct WindowsScreenShareRuntime::Impl {
-    struct PacketContext {
-        UdpPeerSocket* socket = nullptr;
-        CatroRoomRuntimeHandle room_runtime = nullptr;
-        Impl* owner = nullptr;
-        bool soft_drop = false;
-        bool room_failed = false;
-        std::optional<UdpError> fatal_error;
-
-        static bool send(
-            void* opaque,
-            const video::RtpPacketSlice& packet) noexcept {
-            auto& context =
-                *static_cast<PacketContext*>(opaque);
-
-            if (context.room_runtime != nullptr) {
-                const auto prefix =
-                    std::span<const std::byte>(
-                        packet.prefix.data(),
-                        static_cast<std::size_t>(
-                            packet.prefix_size));
-                if (prefix.size() + packet.payload.size() >
-                    kReceiveDatagramBytes) {
-                    context.soft_drop = true;
-                    return false;
-                }
-
-                std::array<std::byte, kReceiveDatagramBytes>
-                    datagram{};
-                std::memcpy(
-                    datagram.data(),
-                    prefix.data(),
-                    prefix.size());
-                std::memcpy(
-                    datagram.data() + prefix.size(),
-                    packet.payload.data(),
-                    packet.payload.size());
-                const auto size =
-                    prefix.size() + packet.payload.size();
-
-                const auto peers =
-                    catro_room_runtime_send_video(
-                        context.room_runtime,
-                        datagram.data(),
-                        size);
-                const auto room =
-                    catro_room_runtime_snapshot(
-                        context.room_runtime);
-                if (room.state == CATRO_ROOM_FAILED) {
-                    context.room_failed = true;
-                    return false;
-                }
-
-                // Zero viewers is not a media failure. The stream stays live and starts fanning
-                // out immediately when a room peer arrives.
-                if (peers != 0) {
-                    context.owner->packets_sent_.fetch_add(
-                        1, std::memory_order_relaxed);
-                    context.owner->wire_bytes_.fetch_add(
-                        size * peers,
-                        std::memory_order_relaxed);
-                }
-                return true;
-            }
-
-            if (context.socket == nullptr) {
-                context.room_failed = true;
-                return false;
-            }
-
-            const std::array<std::span<const std::byte>, 2>
-                segments{
-                    std::span<const std::byte>(
-                        packet.prefix.data(),
-                        static_cast<std::size_t>(
-                            packet.prefix_size)),
-                    packet.payload,
-                };
-            const auto result =
-                context.socket->send_segments(segments);
-            if (const auto* bytes =
-                    std::get_if<std::size_t>(&result)) {
-                context.owner->packets_sent_.fetch_add(
-                    1, std::memory_order_relaxed);
-                context.owner->wire_bytes_.fetch_add(
-                    *bytes, std::memory_order_relaxed);
-                return true;
-            }
-
-            const auto failure = std::get<UdpError>(result);
-            if (failure.code == UdpErrorCode::would_block) {
-                context.owner->backpressure_events_.fetch_add(
-                    1, std::memory_order_relaxed);
-                context.soft_drop = true;
-                return false;
-            }
-            if (failure.code == UdpErrorCode::peer_unreachable) {
-                context.owner->peer_unreachable_events_.fetch_add(
-                    1, std::memory_order_relaxed);
-                context.soft_drop = true;
-                return false;
-            }
-
-            context.fatal_error = failure;
-            return false;
+    // D3D11 decode/presentation edge of the shared receive loop.
+    class RemoteViewer final : public RemoteVideoViewer {
+    public:
+        RemoteViewer(Impl& owner, std::size_t max_access_unit_bytes)
+            : owner_(owner),
+              presenter_(VideoPresenterConfig{
+                  .max_width = 1920,
+                  .max_height = 1080,
+                  .frame_rate = 60,
+              }) {
+            decoder_config_.max_access_unit_bytes =
+                max_access_unit_bytes;
         }
+
+        void release() noexcept override {
+            decoder_.stop();
+            presenter_.reset();
+            {
+                std::scoped_lock lock(owner_.preview_mutex_);
+                owner_.remote_swap_chain_.Reset();
+            }
+            first_present_traced_ = false;
+        }
+
+        [[nodiscard]] std::optional<ScreenShareError>
+        start_decoder() override {
+            if (const auto failure =
+                    decoder_.start(decoder_config_)) {
+                return ScreenShareError{
+                    ScreenShareErrorCode::decoder_failed,
+                    std::string{platform::windows::name(failure->code)},
+                    failure->native_code};
+            }
+            return std::nullopt;
+        }
+
+        [[nodiscard]] std::optional<ScreenShareError>
+        decode_and_present(
+            std::span<const std::byte> annex_b,
+            std::int64_t pts_100ns) override {
+            DecodedGpuFrame decoded;
+            if (const auto failure =
+                    decoder_.decode(annex_b, pts_100ns, decoded)) {
+                return ScreenShareError{
+                    ScreenShareErrorCode::decoder_failed,
+                    std::string{platform::windows::name(failure->code)},
+                    failure->native_code};
+            }
+            if (!decoded.texture) {
+                return std::nullopt;
+            }
+            auto& counters = owner_.counters_;
+            if (counters.remote_decoded.fetch_add(
+                    1, std::memory_order_relaxed) == 0) {
+                trace_event("receiver-first-frame-decoded");
+            }
+            counters.remote_width.store(
+                decoded.width, std::memory_order_relaxed);
+            counters.remote_height.store(
+                decoded.height, std::memory_order_relaxed);
+            if (!first_present_traced_) {
+                trace_event("receiver-first-frame-present-begin");
+            }
+            if (const auto failure =
+                    presenter_.present(
+                        *decoded.texture.Get(),
+                        decoded.subresource_index)) {
+                trace_event("receiver-present-error");
+                return ScreenShareError{
+                    ScreenShareErrorCode::remote_present_failed,
+                    std::string{platform::windows::name(failure->code)},
+                    failure->native_code};
+            }
+            if (!first_present_traced_) {
+                trace_event("receiver-first-frame-presented");
+                first_present_traced_ = true;
+            }
+            const auto presentation = presenter_.statistics();
+            counters.remote_presented.store(
+                presentation.frames_presented,
+                std::memory_order_relaxed);
+            counters.remote_present_drops.store(
+                presentation.frames_dropped,
+                std::memory_order_relaxed);
+            counters.remote_last_frame_ns.store(
+                steady_now_ns(), std::memory_order_release);
+            if (const auto swap_chain = presenter_.swap_chain()) {
+                std::scoped_lock lock(owner_.preview_mutex_);
+                if (owner_.remote_swap_chain_.Get() !=
+                    swap_chain.Get()) {
+                    owner_.remote_swap_chain_ = swap_chain;
+                }
+            }
+            return std::nullopt;
+        }
+
+    private:
+        Impl& owner_;
+        WindowsH264D3D11Decoder decoder_;
+        H264DecoderConfig decoder_config_;
+        D3D11CompositionVideoPresenter presenter_;
+        bool first_present_traced_ = false;
     };
 
     [[nodiscard]] std::optional<ScreenShareError> start_listening(
@@ -816,13 +521,13 @@ struct WindowsScreenShareRuntime::Impl {
     }
 
     void set_remote_viewing_enabled(bool enabled) noexcept {
-        remote_viewing_enabled_.store(enabled, std::memory_order_release);
+        counters_.remote_viewing_enabled.store(enabled, std::memory_order_release);
         if (!enabled) {
             // UI should detach immediately; the receive worker releases decoder/presenter GPU
             // resources on its next <=20 ms receive-loop iteration.
-            remote_last_frame_ns_.store(0, std::memory_order_release);
-            remote_width_.store(0, std::memory_order_relaxed);
-            remote_height_.store(0, std::memory_order_relaxed);
+            counters_.remote_last_frame_ns.store(0, std::memory_order_release);
+            counters_.remote_width.store(0, std::memory_order_relaxed);
+            counters_.remote_height.store(0, std::memory_order_relaxed);
             std::scoped_lock lock(preview_mutex_);
             remote_swap_chain_.Reset();
         }
@@ -891,7 +596,7 @@ struct WindowsScreenShareRuntime::Impl {
             false, std::memory_order_release);
         stream_audio_active_.store(
             false, std::memory_order_release);
-        remote_stream_audio_active_.store(
+        counters_.remote_stream_audio_active.store(
             false, std::memory_order_release);
 
         socket_.reset();
@@ -960,37 +665,15 @@ struct WindowsScreenShareRuntime::Impl {
             return;
         }
 
-        voice::EncoderConfig encoder_config;
-        encoder_config.bitrate =
-            config.stream_audio_bitrate;
-        encoder_config.channels =
-            static_cast<std::uint32_t>(
-                kStreamAudioChannels);
-        encoder_config.application =
-            voice::CodecApplication::audio;
-        encoder_config.complexity = 8;
-        encoder_config.expected_packet_loss_percent = 5;
-        encoder_config.inband_fec = true;
-        encoder_config.vbr = true;
-
-        auto encoder_result =
-            voice::Encoder::create(encoder_config);
-        if (const auto* failure =
-                std::get_if<voice::CodecError>(
-                    &encoder_result)) {
-            stream_audio_encode_failures_.fetch_add(
-                1, std::memory_order_relaxed);
+        StreamAudioSender sender(
+            room_api(), config.room_runtime, counters_);
+        if (const auto failure = sender.start(
+                config.stream_audio_bitrate, config.ssrc)) {
             set_stream_audio_error(
                 voice::name(failure->code),
                 failure->native_code);
             return;
         }
-        auto encoder =
-            std::move(
-                std::get<
-                    std::unique_ptr<voice::Encoder>>(
-                    encoder_result));
-
         StreamAudioCaptureBridge bridge;
         platform::windows::ProcessLoopbackAudioCapture
             capture;
@@ -1008,7 +691,6 @@ struct WindowsScreenShareRuntime::Impl {
                 capture_failure->native_code);
             return;
         }
-
         {
             std::scoped_lock lock(metadata_mutex_);
             stream_audio_error_.clear();
@@ -1016,24 +698,7 @@ struct WindowsScreenShareRuntime::Impl {
         stream_audio_active_.store(
             true, std::memory_order_release);
         trace_event("stream-audio-capture-started");
-
         StreamAudioPcmFrame pcm{};
-        std::array<std::byte, voice::kMaxOpusPacketBytes>
-            payload{};
-        std::array<
-            std::byte,
-            voice::kVoiceHeaderBytes +
-                voice::kVoiceMaxPayloadBytes>
-            datagram{};
-
-        std::uint16_t sequence = 1;
-        std::uint32_t timestamp = 0;
-        auto stream_id =
-            config.ssrc ^ 0x41554430U; // "AUD0"
-        if (stream_id == 0) {
-            stream_id = 1;
-        }
-
         while (!should_stop_sender()) {
             if (!bridge.try_pop(pcm)) {
                 std::unique_lock stop_lock(stop_mutex_);
@@ -1045,57 +710,10 @@ struct WindowsScreenShareRuntime::Impl {
                     });
                 continue;
             }
-
-            const auto encoded =
-                encoder->encode(
-                    std::span<const float>(pcm),
-                    payload);
-            const auto* bytes =
-                std::get_if<std::size_t>(&encoded);
-            if (bytes == nullptr) {
-                stream_audio_encode_failures_.fetch_add(
-                    1, std::memory_order_relaxed);
-                continue;
-            }
-
-            const voice::VoicePacketView packet{
-                .stream_id = stream_id,
-                .sequence = sequence,
-                .timestamp = timestamp,
-                .payload =
-                    std::span<const std::byte>(
-                        payload.data(), *bytes),
-            };
-            const auto serialized =
-                voice::serialize_packet(
-                    packet, datagram);
-            const auto* datagram_size =
-                std::get_if<std::size_t>(
-                    &serialized);
-            if (datagram_size == nullptr) {
-                stream_audio_encode_failures_.fetch_add(
-                    1, std::memory_order_relaxed);
-                continue;
-            }
-
-            const auto peers =
-                catro_room_runtime_send_stream_audio(
-                    config.room_runtime,
-                    datagram.data(),
-                    *datagram_size);
-            if (peers != 0) {
-                stream_audio_packets_sent_.fetch_add(
-                    1, std::memory_order_relaxed);
-            }
-            stream_audio_frames_encoded_.fetch_add(
-                1, std::memory_order_relaxed);
-
-            ++sequence;
-            timestamp += voice::kFrameSamples;
+            sender.send(pcm);
         }
-
         capture.stop();
-        stream_audio_capture_drops_.store(
+        counters_.stream_audio_capture_drops.store(
             bridge.dropped_callbacks(),
             std::memory_order_relaxed);
     }
@@ -1104,274 +722,20 @@ struct WindowsScreenShareRuntime::Impl {
         ScreenTransportConfig config) noexcept {
         trace_event("stream-audio-receiver-enter");
         try {
-            run_stream_audio_receiver(config);
+            WasapiStreamOutput output;
+            run_stream_audio_receive_loop(
+                room_api(),
+                config.room_runtime,
+                counters_,
+                stop_requested_,
+                output);
             trace_event("stream-audio-receiver-exit");
         } catch (...) {
-            remote_stream_audio_decode_failures_.fetch_add(
+            counters_.remote_stream_audio_decode_failures.fetch_add(
                 1, std::memory_order_relaxed);
         }
-        remote_stream_audio_active_.store(
+        counters_.remote_stream_audio_active.store(
             false, std::memory_order_release);
-    }
-
-    void run_stream_audio_receiver(
-        const ScreenTransportConfig& config) {
-        if (config.room_runtime == nullptr) {
-            return;
-        }
-
-        auto decoder_result =
-            voice::Decoder::create(
-                static_cast<std::uint32_t>(
-                    kStreamAudioChannels));
-        if (const auto* failure =
-                std::get_if<voice::CodecError>(
-                    &decoder_result)) {
-            (void)failure;
-            remote_stream_audio_decode_failures_.fetch_add(
-                1, std::memory_order_relaxed);
-            return;
-        }
-        auto decoder =
-            std::move(
-                std::get<
-                    std::unique_ptr<voice::Decoder>>(
-                    decoder_result));
-
-        voice::JitterBuffer jitter{
-            static_cast<std::uint16_t>(
-                kStreamAudioJitterPackets)};
-        StreamAudioRenderBridge render_bridge;
-        platform::windows::WasapiStreamAudioRenderer
-            renderer;
-
-        std::array<
-            std::byte,
-            voice::kVoiceHeaderBytes +
-                voice::kVoiceMaxPayloadBytes + 1>
-            datagram{};
-        StreamAudioPcmFrame pcm{};
-        voice::PlayoutFrame playout;
-
-        bool playout_started = false;
-        bool renderer_started = false;
-        bool viewing_last = false;
-        auto next_playout = Clock::now();
-
-        const auto reset_playout = [&] {
-            jitter.resynchronize();
-            render_bridge.request_resync();
-            playout_started = false;
-            next_playout = Clock::now();
-            remote_stream_audio_active_.store(
-                false, std::memory_order_release);
-            remote_stream_audio_last_ns_.store(
-                0, std::memory_order_release);
-        };
-
-        const auto stop_renderer = [&] {
-            if (renderer_started) {
-                renderer.stop();
-                renderer_started = false;
-            }
-            reset_playout();
-        };
-
-        const auto decode_one = [&]() -> bool {
-            const auto kind = jitter.pull(playout);
-            if (kind == voice::PlayoutKind::waiting) {
-                return true;
-            }
-
-            std::variant<std::size_t, voice::CodecError>
-                decoded;
-            if (kind == voice::PlayoutKind::plc) {
-                decoded = decoder->conceal(pcm);
-            } else {
-                decoded = decoder->decode(
-                    playout.payload_view(),
-                    pcm,
-                    kind == voice::PlayoutKind::fec);
-            }
-            if (std::holds_alternative<
-                    voice::CodecError>(decoded)) {
-                remote_stream_audio_decode_failures_.fetch_add(
-                    1, std::memory_order_relaxed);
-                return false;
-            }
-
-            if (!render_bridge.try_push(pcm)) {
-                remote_stream_audio_render_drops_.fetch_add(
-                    1, std::memory_order_relaxed);
-            }
-            remote_stream_audio_frames_.fetch_add(
-                1, std::memory_order_relaxed);
-            return true;
-        };
-
-        while (!stop_requested_.load(
-                   std::memory_order_acquire)) {
-            const bool viewing =
-                remote_viewing_enabled_.load(
-                    std::memory_order_acquire);
-
-            if (viewing != viewing_last) {
-                if (!viewing) {
-                    stop_renderer();
-                } else {
-                    jitter.resynchronize();
-                    render_bridge.request_resync();
-                    playout_started = false;
-                    next_playout = Clock::now();
-                }
-                viewing_last = viewing;
-            }
-
-            const auto received =
-                catro_room_runtime_receive_stream_audio(
-                    config.room_runtime,
-                    datagram.data(),
-                    datagram.size(),
-                    20);
-            if (received < 0) {
-                const auto room =
-                    catro_room_runtime_snapshot(
-                        config.room_runtime);
-                if (room.state == CATRO_ROOM_FAILED) {
-                    break;
-                }
-                continue;
-            }
-
-            auto consume =
-                [&](std::size_t size) {
-                    remote_stream_audio_packets_.fetch_add(
-                        1, std::memory_order_relaxed);
-                    if (!viewing) {
-                        return;
-                    }
-
-                    const auto parsed =
-                        voice::parse_packet(
-                            std::span<const std::byte>(
-                                datagram.data(), size));
-                    const auto* packet =
-                        std::get_if<
-                            voice::VoicePacketView>(
-                            &parsed);
-                    if (packet == nullptr) {
-                        remote_stream_audio_decode_failures_.fetch_add(
-                            1, std::memory_order_relaxed);
-                        return;
-                    }
-
-                    (void)jitter.push(*packet);
-                    remote_stream_audio_last_ns_.store(
-                        steady_now_ns(),
-                        std::memory_order_release);
-                };
-
-            if (received > 0) {
-                consume(
-                    static_cast<std::size_t>(
-                        received));
-                for (std::size_t drained = 1;
-                     drained <
-                         kStreamAudioReceiveDrainLimit;
-                     ++drained) {
-                    const auto more =
-                        catro_room_runtime_receive_stream_audio(
-                            config.room_runtime,
-                            datagram.data(),
-                            datagram.size(),
-                            0);
-                    if (more <= 0) {
-                        break;
-                    }
-                    consume(
-                        static_cast<std::size_t>(
-                            more));
-                }
-            }
-
-            if (!viewing) {
-                continue;
-            }
-
-            auto now = Clock::now();
-            if (!playout_started) {
-                if (jitter.peek() ==
-                    voice::PlayoutKind::waiting) {
-                    continue;
-                }
-                if (!decode_one()) {
-                    reset_playout();
-                    continue;
-                }
-                if (!renderer_started) {
-                    if (const auto failure =
-                            renderer.start(
-                                [&render_bridge](
-                                    std::span<float>
-                                        samples) noexcept {
-                                    render_bridge.on_render(
-                                        samples);
-                                })) {
-                        (void)failure;
-                        remote_stream_audio_render_drops_.fetch_add(
-                            1, std::memory_order_relaxed);
-                        reset_playout();
-                        continue;
-                    }
-                    renderer_started = true;
-                }
-                playout_started = true;
-                next_playout =
-                    Clock::now() +
-                    kStreamAudioFramePeriod;
-                remote_stream_audio_active_.store(
-                    true, std::memory_order_release);
-                continue;
-            }
-
-            if (now - next_playout >=
-                kStreamAudioFramePeriod * 3) {
-                reset_playout();
-                continue;
-            }
-
-            int caught_up = 0;
-            while (now >= next_playout &&
-                   caught_up < 3) {
-                if (!decode_one()) {
-                    reset_playout();
-                    break;
-                }
-                next_playout +=
-                    kStreamAudioFramePeriod;
-                ++caught_up;
-                now = Clock::now();
-            }
-
-            const auto last =
-                remote_stream_audio_last_ns_.load(
-                    std::memory_order_acquire);
-            if (last != 0) {
-                const auto age =
-                    steady_now_ns() - last;
-                if (age >=
-                    std::chrono::duration_cast<
-                        std::chrono::nanoseconds>(
-                        kRemoteInactiveTimeout)
-                        .count()) {
-                    stop_renderer();
-                }
-            }
-        }
-
-        if (renderer_started) {
-            renderer.stop();
-        }
     }
 
     void run_sender_guarded(ScreenShareConfig config) noexcept {
@@ -1494,12 +858,16 @@ struct WindowsScreenShareRuntime::Impl {
             return;
         }
 
-        std::uint16_t next_sequence = 1;
-        const video::H264RtpConfig rtp{
-            config.ssrc,
-            config.payload_type,
-            config.mtu_bytes,
-        };
+        VideoSender video_sender(
+            room_api(),
+            config.room_runtime,
+            socket,
+            video::H264RtpConfig{
+                config.ssrc,
+                config.payload_type,
+                config.mtu_bytes,
+            },
+            counters_);
         const auto started = Clock::now();
         std::uint32_t current_source_width = 0;
         std::uint32_t current_source_height = 0;
@@ -1663,58 +1031,35 @@ struct WindowsScreenShareRuntime::Impl {
                 trace_event("sender-first-frame-encoded");
             }
 
-            PacketContext context{
-                .socket = socket,
-                .room_runtime = config.room_runtime,
-                .owner = this,
-            };
-            const auto packetized =
-                video::packetize_h264_annex_b(
-                    access_unit.bytes,
-                    monotonic_rtp_timestamp(
-                        started, Clock::now()),
-                    next_sequence,
-                    rtp,
-                    &context,
-                    &PacketContext::send);
-            next_sequence = packetized.next_sequence;
-
-            if (!packetized) {
-                if (context.room_failed) {
-                    const auto room =
-                        config.room_runtime != nullptr
-                            ? catro_room_runtime_snapshot(
-                                  config.room_runtime)
-                            : CatroRoomRuntimeSnapshot{};
-                    fail_session(
-                        ScreenShareErrorCode::network_failed,
-                        room.error[0] != '\0'
-                            ? room.error
-                            : "RTC room video transport failed");
-                    return false;
-                }
-                if (context.fatal_error) {
-                    fail_session(
-                        ScreenShareErrorCode::network_failed,
-                        udp_error_text(
-                            *context.fatal_error));
-                    return false;
-                }
-                if (context.soft_drop) {
-                    frames_dropped_.fetch_add(
-                        1, std::memory_order_relaxed);
-                    return true;
-                }
+            const auto sent = video_sender.send(
+                access_unit.bytes,
+                monotonic_rtp_timestamp(started, Clock::now()));
+            switch (sent.status) {
+            case VideoSendStatus::sent:
+                break;
+            case VideoSendStatus::dropped:
+                return true;
+            case VideoSendStatus::room_failed:
+                fail_session(
+                    ScreenShareErrorCode::network_failed,
+                    room_error_text(
+                        room_api(),
+                        config.room_runtime,
+                        "RTC room video transport failed"));
+                return false;
+            case VideoSendStatus::network_failed:
+                fail_session(
+                    ScreenShareErrorCode::network_failed,
+                    udp_error_text(*sent.network_error));
+                return false;
+            case VideoSendStatus::not_packetizable:
                 fail_share(
                     ScreenShareErrorCode::packetization_failed,
                     "H.264 access unit is not RFC 6184 packetizable");
                 return false;
             }
-
-            const auto sent_before =
-                frames_sent_.fetch_add(
-                    1, std::memory_order_relaxed);
-            if (sent_before == 0) {
+            if (counters_.frames_sent.load(
+                    std::memory_order_relaxed) == 1) {
                 trace_event("sender-first-frame-sent");
             }
             return true;
@@ -1841,384 +1186,22 @@ struct WindowsScreenShareRuntime::Impl {
     }
 
     void run_receiver(ScreenTransportConfig config) {
-        VideoReceiveSource source{
-            socket_.get(),
-            config.room_runtime};
-        if (!source.valid()) {
+        RemoteViewer viewer(*this, config.max_access_unit_bytes);
+        const VideoReceiveContext context{
+            .api = room_api(),
+            .config = config,
+            .socket = socket_.get(),
+            .counters = &counters_,
+            .stop_requested = &stop_requested_,
+            .trace = &trace_event,
+        };
+        if (const auto failure =
+                run_video_receive_loop(context, viewer)) {
             fail_session(
-                ScreenShareErrorCode::network_failed,
-                "video transport is not running");
-            return;
+                failure->code,
+                failure->message,
+                failure->native_code);
         }
-
-        std::unique_ptr<std::byte[]> frame_memory(
-            new (std::nothrow)
-                std::byte[config.max_access_unit_bytes]);
-        if (!frame_memory) {
-            fail_session(
-                ScreenShareErrorCode::memory_failed,
-                "remote H.264 frame buffer allocation failed");
-            return;
-        }
-
-        const video::H264RtpConfig receive_rtp{
-            0,
-            config.payload_type,
-            config.mtu_bytes,
-        };
-        video::H264RtpReassembler reassembler(
-            std::span<std::byte>(
-                frame_memory.get(),
-                config.max_access_unit_bytes),
-            receive_rtp);
-
-        WindowsH264D3D11Decoder decoder;
-        H264DecoderConfig decoder_config;
-        decoder_config.max_access_unit_bytes =
-            config.max_access_unit_bytes;
-
-        D3D11CompositionVideoPresenter presenter(
-            VideoPresenterConfig{
-                .max_width = 1920,
-                .max_height = 1080,
-                .frame_rate = 60,
-            });
-
-        std::array<std::byte, kReceiveDatagramBytes>
-            datagram{};
-        bool have_timestamp = false;
-        bool first_remote_frame_traced = false;
-        bool first_remote_present_traced = false;
-        bool viewing_last = false;
-        bool awaiting_keyframe = true;
-        std::uint32_t last_timestamp = 0;
-        std::uint64_t extended_timestamp = 0;
-
-        const auto release_viewer_resources = [&] {
-            decoder.stop();
-            presenter.reset();
-            {
-                std::scoped_lock lock(preview_mutex_);
-                remote_swap_chain_.Reset();
-            }
-            remote_width_.store(0, std::memory_order_relaxed);
-            remote_height_.store(0, std::memory_order_relaxed);
-            remote_last_frame_ns_.store(0, std::memory_order_release);
-            have_timestamp = false;
-            last_timestamp = 0;
-            extended_timestamp = 0;
-            awaiting_keyframe = true;
-            first_remote_present_traced = false;
-        };
-
-        const auto synchronize_viewing_state = [&] {
-            auto requested =
-                remote_viewing_enabled_.load(std::memory_order_acquire);
-
-            const auto last_stream =
-                remote_last_stream_ns_.load(std::memory_order_acquire);
-            if (requested && last_stream != 0) {
-                const auto now = steady_now_ns();
-                const auto timeout =
-                    std::chrono::duration_cast<std::chrono::nanoseconds>(
-                        kRemoteInactiveTimeout)
-                        .count();
-                if (now >= last_stream &&
-                    now - last_stream >= timeout) {
-                    remote_viewing_enabled_.store(
-                        false, std::memory_order_release);
-                    requested = false;
-                }
-            }
-
-            if (requested != viewing_last) {
-                if (!requested) {
-                    trace_event("receiver-viewing-stopped");
-                    release_viewer_resources();
-                } else {
-                    trace_event("receiver-viewing-requested");
-                    awaiting_keyframe = true;
-                    have_timestamp = false;
-                    last_timestamp = 0;
-                    extended_timestamp = 0;
-                }
-                viewing_last = requested;
-            }
-            return requested;
-        };
-
-        while (!stop_requested_.load(
-                   std::memory_order_acquire)) {
-            (void)synchronize_viewing_state();
-
-            const auto ready =
-                source.wait_readable(
-                    std::chrono::duration_cast<
-                        std::chrono::microseconds>(
-                        kReceiveWait));
-            if (const auto* failure =
-                    std::get_if<UdpError>(&ready)) {
-                if (failure->code ==
-                    UdpErrorCode::peer_unreachable) {
-                    peer_unreachable_events_.fetch_add(
-                        1, std::memory_order_relaxed);
-                    continue;
-                }
-                if (source.room_mode()) {
-                    const auto room =
-                        catro_room_runtime_snapshot(
-                            config.room_runtime);
-                    fail_session(
-                        ScreenShareErrorCode::network_failed,
-                        room.error[0] != '\0'
-                            ? room.error
-                            : "RTC room video receive failed");
-                } else {
-                    fail_session(
-                        ScreenShareErrorCode::network_failed,
-                        udp_error_text(*failure));
-                }
-                break;
-            }
-
-            if (!std::get<bool>(ready)) {
-                continue;
-            }
-
-            bool fatal = false;
-            for (std::size_t drained = 0;
-                 drained < kReceiveDrainLimit;
-                 ++drained) {
-                const auto received =
-                    source.receive(datagram);
-                if (const auto* failure =
-                        std::get_if<UdpError>(&received)) {
-                    if (failure->code ==
-                        UdpErrorCode::peer_unreachable) {
-                        peer_unreachable_events_.fetch_add(
-                            1, std::memory_order_relaxed);
-                        break;
-                    }
-                    if (failure->code ==
-                        UdpErrorCode::datagram_too_large) {
-                        remote_packet_rejects_.fetch_add(
-                            1, std::memory_order_relaxed);
-                        continue;
-                    }
-                    if (source.room_mode()) {
-                        const auto room =
-                            catro_room_runtime_snapshot(
-                                config.room_runtime);
-                        fail_session(
-                            ScreenShareErrorCode::network_failed,
-                            room.error[0] != '\0'
-                                ? room.error
-                                : "RTC room video receive failed");
-                    } else {
-                        fail_session(
-                            ScreenShareErrorCode::network_failed,
-                            udp_error_text(*failure));
-                    }
-                    fatal = true;
-                    break;
-                }
-
-                const auto size =
-                    std::get<std::size_t>(received);
-                if (size == 0) {
-                    break;
-                }
-
-                remote_packets_.fetch_add(
-                    1, std::memory_order_relaxed);
-                remote_wire_bytes_.fetch_add(
-                    size, std::memory_order_relaxed);
-
-                auto reassembled =
-                    reassembler.push(
-                        std::span<const std::byte>(
-                            datagram.data(), size));
-
-                if (reassembled.status ==
-                        video::H264ReassemblyStatus::packet_rejected &&
-                    reassembled.error ==
-                        video::H264ReassemblyError::ssrc_mismatch) {
-                    const auto last =
-                        remote_last_stream_ns_.load(
-                            std::memory_order_acquire);
-                    const auto now = steady_now_ns();
-                    const auto timeout =
-                        std::chrono::duration_cast<std::chrono::nanoseconds>(
-                            kRemoteInactiveTimeout)
-                            .count();
-                    if (last != 0 &&
-                        now >= last &&
-                        now - last >= timeout) {
-                        // A quiet peer may have restarted and chosen a new SSRC. Reset stream and
-                        // viewer history only after the old sender is inactive; an alien packet
-                        // cannot steal an active session.
-                        reassembler.reset();
-                        release_viewer_resources();
-                        remote_last_stream_ns_.store(
-                            0, std::memory_order_release);
-                        remote_stream_resets_.fetch_add(
-                            1, std::memory_order_relaxed);
-                        reassembled =
-                            reassembler.push(
-                                std::span<const std::byte>(
-                                    datagram.data(), size));
-                    }
-                }
-
-                if (reassembled.status ==
-                    video::H264ReassemblyStatus::packet_rejected) {
-                    remote_packet_rejects_.fetch_add(
-                        1, std::memory_order_relaxed);
-                    continue;
-                }
-                if (reassembled.status ==
-                    video::H264ReassemblyStatus::frame_dropped) {
-                    remote_frame_drops_.fetch_add(
-                        1, std::memory_order_relaxed);
-                    continue;
-                }
-                if (reassembled.status !=
-                    video::H264ReassemblyStatus::frame_ready) {
-                    continue;
-                }
-
-                remote_frames_.fetch_add(
-                    1, std::memory_order_relaxed);
-                remote_last_stream_ns_.store(
-                    steady_now_ns(), std::memory_order_release);
-                if (!first_remote_frame_traced) {
-                    trace_event("receiver-first-frame-reassembled");
-                    first_remote_frame_traced = true;
-                }
-
-                const bool viewing = synchronize_viewing_state();
-                if (!viewing) {
-                    continue;
-                }
-
-                if (awaiting_keyframe) {
-                    if (!reassembled.frame.keyframe) {
-                        continue;
-                    }
-                    if (const auto failure =
-                            decoder.start(decoder_config)) {
-                        remote_decode_failures_.fetch_add(
-                            1, std::memory_order_relaxed);
-                        fail_session(
-                            ScreenShareErrorCode::decoder_failed,
-                            platform::windows::name(failure->code),
-                            failure->native_code);
-                        fatal = true;
-                        break;
-                    }
-                    trace_event("receiver-decoder-started");
-                    awaiting_keyframe = false;
-                    have_timestamp = false;
-                    last_timestamp = 0;
-                    extended_timestamp = 0;
-                }
-
-                const auto timestamp =
-                    reassembled.frame.timestamp_90khz;
-                if (!have_timestamp) {
-                    extended_timestamp = timestamp;
-                    last_timestamp = timestamp;
-                    have_timestamp = true;
-                } else {
-                    extended_timestamp +=
-                        static_cast<std::uint32_t>(
-                            timestamp - last_timestamp);
-                    last_timestamp = timestamp;
-                }
-
-                DecodedGpuFrame decoded;
-                if (const auto failure =
-                        decoder.decode(
-                            reassembled.frame.annex_b,
-                            extended_rtp_to_100ns(
-                                extended_timestamp),
-                            decoded)) {
-                    remote_decode_failures_.fetch_add(
-                        1, std::memory_order_relaxed);
-                    fail_session(
-                        ScreenShareErrorCode::decoder_failed,
-                        platform::windows::name(
-                            failure->code),
-                        failure->native_code);
-                    fatal = true;
-                    break;
-                }
-
-                if (!decoded.texture) {
-                    continue;
-                }
-
-                const auto decoded_before =
-                    remote_decoded_.fetch_add(
-                        1, std::memory_order_relaxed);
-                if (decoded_before == 0) {
-                    trace_event("receiver-first-frame-decoded");
-                }
-                remote_width_.store(
-                    decoded.width, std::memory_order_relaxed);
-                remote_height_.store(
-                    decoded.height, std::memory_order_relaxed);
-
-                if (!first_remote_present_traced) {
-                    trace_event("receiver-first-frame-present-begin");
-                }
-                if (const auto failure =
-                        presenter.present(
-                            *decoded.texture.Get(),
-                            decoded.subresource_index)) {
-                    trace_event("receiver-present-error");
-                    fail_session(
-                        ScreenShareErrorCode::remote_present_failed,
-                        platform::windows::name(
-                            failure->code),
-                        failure->native_code);
-                    fatal = true;
-                    break;
-                }
-                if (!first_remote_present_traced) {
-                    trace_event("receiver-first-frame-presented");
-                    first_remote_present_traced = true;
-                }
-
-                const auto presentation =
-                    presenter.statistics();
-                remote_presented_.store(
-                    presentation.frames_presented,
-                    std::memory_order_relaxed);
-                remote_present_drops_.store(
-                    presentation.frames_dropped,
-                    std::memory_order_relaxed);
-                remote_last_frame_ns_.store(
-                    steady_now_ns(),
-                    std::memory_order_release);
-
-                const auto swap_chain =
-                    presenter.swap_chain();
-                if (swap_chain) {
-                    std::scoped_lock lock(preview_mutex_);
-                    if (remote_swap_chain_.Get() !=
-                        swap_chain.Get()) {
-                        remote_swap_chain_ = swap_chain;
-                    }
-                }
-            }
-
-            if (fatal) {
-                break;
-            }
-        }
-
-        release_viewer_resources();
     }
 
     void fail_share(
@@ -2271,11 +1254,6 @@ struct WindowsScreenShareRuntime::Impl {
         encoded_width_.store(0, std::memory_order_relaxed);
         encoded_height_.store(0, std::memory_order_relaxed);
         frames_encoded_.store(0, std::memory_order_relaxed);
-        frames_sent_.store(0, std::memory_order_relaxed);
-        frames_dropped_.store(0, std::memory_order_relaxed);
-        packets_sent_.store(0, std::memory_order_relaxed);
-        wire_bytes_.store(0, std::memory_order_relaxed);
-        backpressure_events_.store(0, std::memory_order_relaxed);
         preview_frames_.store(0, std::memory_order_relaxed);
         preview_drops_.store(0, std::memory_order_relaxed);
         encoder_input_failures_.store(0, std::memory_order_relaxed);
@@ -2283,46 +1261,17 @@ struct WindowsScreenShareRuntime::Impl {
         encoder_timeouts_.store(0, std::memory_order_relaxed);
         capture_contention_drops_.store(0, std::memory_order_relaxed);
         stream_audio_active_.store(false, std::memory_order_relaxed);
-        stream_audio_frames_encoded_.store(0, std::memory_order_relaxed);
-        stream_audio_packets_sent_.store(0, std::memory_order_relaxed);
-        stream_audio_capture_drops_.store(0, std::memory_order_relaxed);
-        stream_audio_encode_failures_.store(0, std::memory_order_relaxed);
+        counters_.reset_local();
         {
             std::scoped_lock lock(metadata_mutex_);
             stream_audio_error_.clear();
         }
     }
 
-    void reset_remote_statistics() noexcept {
-        remote_viewing_enabled_.store(
-            false, std::memory_order_relaxed);
-        remote_last_stream_ns_.store(
-            0, std::memory_order_relaxed);
-        remote_width_.store(0, std::memory_order_relaxed);
-        remote_height_.store(0, std::memory_order_relaxed);
-        remote_packets_.store(0, std::memory_order_relaxed);
-        remote_wire_bytes_.store(0, std::memory_order_relaxed);
-        remote_frames_.store(0, std::memory_order_relaxed);
-        remote_decoded_.store(0, std::memory_order_relaxed);
-        remote_presented_.store(0, std::memory_order_relaxed);
-        remote_frame_drops_.store(0, std::memory_order_relaxed);
-        remote_packet_rejects_.store(0, std::memory_order_relaxed);
-        remote_decode_failures_.store(0, std::memory_order_relaxed);
-        remote_present_drops_.store(0, std::memory_order_relaxed);
-        remote_stream_resets_.store(0, std::memory_order_relaxed);
-        remote_stream_audio_active_.store(false, std::memory_order_relaxed);
-        remote_stream_audio_packets_.store(0, std::memory_order_relaxed);
-        remote_stream_audio_frames_.store(0, std::memory_order_relaxed);
-        remote_stream_audio_decode_failures_.store(0, std::memory_order_relaxed);
-        remote_stream_audio_render_drops_.store(0, std::memory_order_relaxed);
-        remote_stream_audio_last_ns_.store(0, std::memory_order_relaxed);
-        remote_last_frame_ns_.store(0, std::memory_order_relaxed);
-    }
-
     void reset_all_statistics() noexcept {
         reset_local_statistics();
-        reset_remote_statistics();
-        peer_unreachable_events_.store(
+        counters_.reset_remote();
+        counters_.peer_unreachable_events.store(
             0, std::memory_order_relaxed);
     }
 
@@ -2337,134 +1286,26 @@ struct WindowsScreenShareRuntime::Impl {
             result.stream_audio_error =
                 stream_audio_error_;
         }
-
-        result.source_width =
-            source_width_.load(std::memory_order_relaxed);
-        result.source_height =
-            source_height_.load(std::memory_order_relaxed);
-        result.encoded_width =
-            encoded_width_.load(std::memory_order_relaxed);
-        result.encoded_height =
-            encoded_height_.load(std::memory_order_relaxed);
-        result.frames_encoded =
-            frames_encoded_.load(std::memory_order_relaxed);
-        result.frames_sent =
-            frames_sent_.load(std::memory_order_relaxed);
-        result.frames_dropped =
-            frames_dropped_.load(std::memory_order_relaxed);
-        result.packets_sent =
-            packets_sent_.load(std::memory_order_relaxed);
-        result.wire_bytes =
-            wire_bytes_.load(std::memory_order_relaxed);
-        result.backpressure_events =
-            backpressure_events_.load(std::memory_order_relaxed);
-        result.peer_unreachable_events =
-            peer_unreachable_events_.load(
-                std::memory_order_relaxed);
-        result.preview_frames =
-            preview_frames_.load(std::memory_order_relaxed);
-        result.preview_drops =
-            preview_drops_.load(std::memory_order_relaxed);
+        counters_.fill(result);
+        constexpr auto relaxed = std::memory_order_relaxed;
+        result.source_width = source_width_.load(relaxed);
+        result.source_height = source_height_.load(relaxed);
+        result.encoded_width = encoded_width_.load(relaxed);
+        result.encoded_height = encoded_height_.load(relaxed);
+        result.frames_encoded = frames_encoded_.load(relaxed);
+        result.preview_frames = preview_frames_.load(relaxed);
+        result.preview_drops = preview_drops_.load(relaxed);
         result.encoder_input_failures =
-            encoder_input_failures_.load(
-                std::memory_order_relaxed);
+            encoder_input_failures_.load(relaxed);
         result.encoder_output_failures =
-            encoder_output_failures_.load(
-                std::memory_order_relaxed);
-        result.encoder_timeouts =
-            encoder_timeouts_.load(std::memory_order_relaxed);
+            encoder_output_failures_.load(relaxed);
+        result.encoder_timeouts = encoder_timeouts_.load(relaxed);
         result.capture_contention_drops =
-            capture_contention_drops_.load(
-                std::memory_order_relaxed);
+            capture_contention_drops_.load(relaxed);
         result.stream_audio_enabled =
-            stream_audio_enabled_.load(
-                std::memory_order_relaxed);
+            stream_audio_enabled_.load(relaxed);
         result.stream_audio_active =
-            stream_audio_active_.load(
-                std::memory_order_relaxed);
-        result.stream_audio_frames_encoded =
-            stream_audio_frames_encoded_.load(
-                std::memory_order_relaxed);
-        result.stream_audio_packets_sent =
-            stream_audio_packets_sent_.load(
-                std::memory_order_relaxed);
-        result.stream_audio_capture_drops =
-            stream_audio_capture_drops_.load(
-                std::memory_order_relaxed);
-        result.stream_audio_encode_failures =
-            stream_audio_encode_failures_.load(
-                std::memory_order_relaxed);
-
-        result.remote_viewing =
-            remote_viewing_enabled_.load(
-                std::memory_order_acquire);
-        const auto stream_last =
-            remote_last_stream_ns_.load(
-                std::memory_order_acquire);
-        if (stream_last != 0) {
-            const auto age =
-                steady_now_ns() - stream_last;
-            result.remote_available =
-                age >= 0 &&
-                age < std::chrono::duration_cast<
-                          std::chrono::nanoseconds>(
-                          kRemoteInactiveTimeout)
-                          .count();
-        }
-
-        result.remote_width =
-            remote_width_.load(std::memory_order_relaxed);
-        result.remote_height =
-            remote_height_.load(std::memory_order_relaxed);
-        result.remote_packets =
-            remote_packets_.load(std::memory_order_relaxed);
-        result.remote_wire_bytes =
-            remote_wire_bytes_.load(std::memory_order_relaxed);
-        result.remote_frames =
-            remote_frames_.load(std::memory_order_relaxed);
-        result.remote_decoded =
-            remote_decoded_.load(std::memory_order_relaxed);
-        result.remote_presented =
-            remote_presented_.load(std::memory_order_relaxed);
-        result.remote_frame_drops =
-            remote_frame_drops_.load(std::memory_order_relaxed);
-        result.remote_packet_rejects =
-            remote_packet_rejects_.load(std::memory_order_relaxed);
-        result.remote_decode_failures =
-            remote_decode_failures_.load(std::memory_order_relaxed);
-        result.remote_present_drops =
-            remote_present_drops_.load(std::memory_order_relaxed);
-        result.remote_stream_resets =
-            remote_stream_resets_.load(std::memory_order_relaxed);
-        result.remote_stream_audio_active =
-            remote_stream_audio_active_.load(
-                std::memory_order_relaxed);
-        result.remote_stream_audio_packets =
-            remote_stream_audio_packets_.load(
-                std::memory_order_relaxed);
-        result.remote_stream_audio_frames =
-            remote_stream_audio_frames_.load(
-                std::memory_order_relaxed);
-        result.remote_stream_audio_decode_failures =
-            remote_stream_audio_decode_failures_.load(
-                std::memory_order_relaxed);
-        result.remote_stream_audio_render_drops =
-            remote_stream_audio_render_drops_.load(
-                std::memory_order_relaxed);
-
-        const auto last =
-            remote_last_frame_ns_.load(
-                std::memory_order_acquire);
-        if (result.remote_viewing && last != 0) {
-            const auto age =
-                steady_now_ns() - last;
-            result.remote_active =
-                age >= 0 &&
-                age < std::chrono::duration_cast<
-                          std::chrono::nanoseconds>(
-                          kRemoteInactiveTimeout)
-                          .count();
-        }
+            stream_audio_active_.load(relaxed);
         return result;
     }
 
@@ -2502,7 +1343,6 @@ struct WindowsScreenShareRuntime::Impl {
     std::atomic_bool stop_requested_{false};
     std::atomic_bool share_stop_requested_{true};
     std::atomic_bool local_preview_enabled_{true};
-    std::atomic_bool remote_viewing_enabled_{false};
     std::atomic<ScreenShareState> state_{
         ScreenShareState::idle};
 
@@ -2511,12 +1351,6 @@ struct WindowsScreenShareRuntime::Impl {
     std::atomic<std::uint32_t> encoded_width_{0};
     std::atomic<std::uint32_t> encoded_height_{0};
     std::atomic<std::uint64_t> frames_encoded_{0};
-    std::atomic<std::uint64_t> frames_sent_{0};
-    std::atomic<std::uint64_t> frames_dropped_{0};
-    std::atomic<std::uint64_t> packets_sent_{0};
-    std::atomic<std::uint64_t> wire_bytes_{0};
-    std::atomic<std::uint64_t> backpressure_events_{0};
-    std::atomic<std::uint64_t> peer_unreachable_events_{0};
     std::atomic<std::uint64_t> preview_frames_{0};
     std::atomic<std::uint64_t> preview_drops_{0};
     std::atomic<std::uint64_t> encoder_input_failures_{0};
@@ -2526,33 +1360,8 @@ struct WindowsScreenShareRuntime::Impl {
 
     std::atomic_bool stream_audio_enabled_{false};
     std::atomic_bool stream_audio_active_{false};
-    std::atomic<std::uint64_t> stream_audio_frames_encoded_{0};
-    std::atomic<std::uint64_t> stream_audio_packets_sent_{0};
-    std::atomic<std::uint64_t> stream_audio_capture_drops_{0};
-    std::atomic<std::uint64_t> stream_audio_encode_failures_{0};
 
-    std::atomic<std::uint32_t> remote_width_{0};
-    std::atomic<std::uint32_t> remote_height_{0};
-    std::atomic<std::uint64_t> remote_packets_{0};
-    std::atomic<std::uint64_t> remote_wire_bytes_{0};
-    std::atomic<std::uint64_t> remote_frames_{0};
-    std::atomic<std::uint64_t> remote_decoded_{0};
-    std::atomic<std::uint64_t> remote_presented_{0};
-    std::atomic<std::uint64_t> remote_frame_drops_{0};
-    std::atomic<std::uint64_t> remote_packet_rejects_{0};
-    std::atomic<std::uint64_t> remote_decode_failures_{0};
-    std::atomic<std::uint64_t> remote_present_drops_{0};
-    std::atomic<std::uint64_t> remote_stream_resets_{0};
-
-    std::atomic_bool remote_stream_audio_active_{false};
-    std::atomic<std::uint64_t> remote_stream_audio_packets_{0};
-    std::atomic<std::uint64_t> remote_stream_audio_frames_{0};
-    std::atomic<std::uint64_t> remote_stream_audio_decode_failures_{0};
-    std::atomic<std::uint64_t> remote_stream_audio_render_drops_{0};
-    std::atomic<std::int64_t> remote_stream_audio_last_ns_{0};
-
-    std::atomic<std::int64_t> remote_last_stream_ns_{0};
-    std::atomic<std::int64_t> remote_last_frame_ns_{0};
+    ScreenTransportCounters counters_;
 };
 
 WindowsScreenShareRuntime::WindowsScreenShareRuntime()

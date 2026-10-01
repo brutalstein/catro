@@ -20,6 +20,7 @@ target_link_libraries(catro_screen_runtime
         Catro::Video
         Catro::Transport
         catro_room_runtime
+        catro_screen_transport
 )
 
 target_compile_definitions(catro_screen_runtime PRIVATE

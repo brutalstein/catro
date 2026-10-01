@@ -49,14 +49,14 @@ public:
         if (head < tail) {
             return 0;
         }
-        return std::min(head - tail, capacity());
+        return (std::min)(head - tail, capacity());
     }
 
     // Producer only. Writes what fits and returns the count written.
     std::size_t write(std::span<const T> items) noexcept {
         const auto head = head_.value.load(std::memory_order_relaxed);
         const auto tail = tail_.value.load(std::memory_order_acquire);
-        const auto count = std::min(items.size(), capacity() - (head - tail));
+        const auto count = (std::min)(items.size(), capacity() - (head - tail));
         copy_into(head, items.first(count));
         head_.value.store(head + count, std::memory_order_release);
         return count;
@@ -79,7 +79,7 @@ public:
     std::size_t read(std::span<T> out) noexcept {
         const auto tail = tail_.value.load(std::memory_order_relaxed);
         const auto head = head_.value.load(std::memory_order_acquire);
-        const auto count = std::min(out.size(), head - tail);
+        const auto count = (std::min)(out.size(), head - tail);
         copy_out(tail, out.first(count));
         tail_.value.store(tail + count, std::memory_order_release);
         return count;
@@ -101,7 +101,7 @@ public:
     std::size_t discard(std::size_t count) noexcept {
         const auto tail = tail_.value.load(std::memory_order_relaxed);
         const auto head = head_.value.load(std::memory_order_acquire);
-        const auto dropped = std::min(count, head - tail);
+        const auto dropped = (std::min)(count, head - tail);
         tail_.value.store(tail + dropped, std::memory_order_release);
         return dropped;
     }
@@ -112,7 +112,7 @@ private:
             return;
         }
         const auto offset = position & mask_;
-        const auto first = std::min(items.size(), capacity() - offset);
+        const auto first = (std::min)(items.size(), capacity() - offset);
         std::memcpy(buffer_.data() + offset, items.data(), first * sizeof(T));
         const auto remaining = items.size() - first;
         if (remaining > 0) {
@@ -125,7 +125,7 @@ private:
             return;
         }
         const auto offset = position & mask_;
-        const auto first = std::min(out.size(), capacity() - offset);
+        const auto first = (std::min)(out.size(), capacity() - offset);
         std::memcpy(out.data(), buffer_.data() + offset, first * sizeof(T));
         const auto remaining = out.size() - first;
         if (remaining > 0) {
@@ -161,7 +161,7 @@ public:
         float peak = 0.0F;
         double energy = 0.0;
         for (const auto sample : block) {
-            peak = std::max(peak, std::abs(sample));
+            peak = (std::max)(peak, std::abs(sample));
             energy += static_cast<double>(sample) * sample;
         }
         const auto rms = block.empty() ? 0.0F : static_cast<float>(std::sqrt(energy / static_cast<double>(block.size())));
@@ -180,7 +180,7 @@ public:
     // Full scale is 0 dBFS; silence is clamped to the floor.
     [[nodiscard]] static float to_dbfs(float linear) noexcept {
         constexpr float kFloor = -120.0F;
-        return linear <= 0.0F ? kFloor : std::max(kFloor, 20.0F * std::log10(linear));
+        return linear <= 0.0F ? kFloor : (std::max)(kFloor, 20.0F * std::log10(linear));
     }
 
 private:
