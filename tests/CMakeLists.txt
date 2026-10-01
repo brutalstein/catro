@@ -126,6 +126,18 @@ if(APPLE)
 
     catro_add_test(macos_voice_runtime macos/voice_runtime_test.cpp)
     target_link_libraries(catro_macos_voice_runtime_test PRIVATE catro_voice_runtime)
+
+    catro_add_test(macos_screen_capture macos/screen_capture_test.mm)
+    target_link_libraries(catro_macos_screen_capture_test PRIVATE Catro::Macos)
+
+    catro_add_test(macos_video_encoder macos/video_encoder_test.mm)
+    target_link_libraries(catro_macos_video_encoder_test PRIVATE Catro::Macos)
+
+    catro_add_test(macos_video_decoder macos/video_decoder_test.mm)
+    target_link_libraries(catro_macos_video_decoder_test PRIVATE Catro::Macos)
+
+    catro_add_test(macos_video_presenter macos/video_presenter_test.mm)
+    target_link_libraries(catro_macos_video_presenter_test PRIVATE Catro::Macos)
 endif()
 
 # Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.
