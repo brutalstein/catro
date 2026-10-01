@@ -254,6 +254,8 @@ MainWindow::BeginJoinServer() {
 
     controls::ContentDialog dialog;
     dialog.XamlRoot(AppTitleBar().XamlRoot());
+    // Dialogs open in a popup outside the themed shell tree, so they copy its theme.
+    dialog.RequestedTheme(AppTitleBar().ActualTheme());
     dialog.Title(box_value(hstring{L"Add a Catro server"}));
     dialog.PrimaryButtonText(L"Find by Server Code");
     dialog.SecondaryButtonText(L"Use Invite Code");
@@ -365,6 +367,7 @@ MainWindow::BeginServerCodeLookup(
     if (preview.relationship != "none") {
         controls::ContentDialog status;
         status.XamlRoot(lifetime->AppTitleBar().XamlRoot());
+        status.RequestedTheme(lifetime->AppTitleBar().ActualTheme());
         status.Title(
             box_value(to_hstring(preview.name)));
         status.CloseButtonText(L"Close");
@@ -443,6 +446,7 @@ MainWindow::BeginServerCodeLookup(
     controls::ContentDialog request_dialog;
     request_dialog.XamlRoot(
         lifetime->AppTitleBar().XamlRoot());
+    request_dialog.RequestedTheme(lifetime->AppTitleBar().ActualTheme());
     request_dialog.Title(
         box_value(to_hstring(preview.name)));
     request_dialog.PrimaryButtonText(L"Request access");

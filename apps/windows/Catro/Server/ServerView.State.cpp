@@ -11,8 +11,19 @@ namespace xaml = Microsoft::UI::Xaml;
 namespace controls = Microsoft::UI::Xaml::Controls;
 
 void ServerView::UpdateOnlineStatus() {
-    OnlineStatusText().Text(
-        to_hstring(workspace_state_.connection_message));
+    // The shell status bar carries the full connection message; the channel header stays short.
+    switch (workspace_state_.connection) {
+    case catro::app::ConnectionState::synchronized:
+        OnlineStatusText().Text(L"Connected");
+        break;
+    case catro::app::ConnectionState::local_only:
+        OnlineStatusText().Text(L"Local mode");
+        break;
+    default:
+        OnlineStatusText().Text(
+            to_hstring(workspace_state_.connection_message));
+        break;
+    }
 }
 
 void ServerView::UpdateAccessUi() {
@@ -81,13 +92,17 @@ void ServerView::UpdateMessageUi() {
         }
     }
 
-    if (text_active && !configured) {
+    // The shell status bar already shows the connection message; repeat only other reasons.
+    const bool own_reason =
+        workspace_state_.send_message.reason !=
+        workspace_state_.connection_message;
+    if (text_active && !configured && own_reason) {
         TextStatusText().Text(
             to_hstring(workspace_state_.send_message.reason));
         TextStatusText().Visibility(
             xaml::Visibility::Visible);
     } else if (
-        text_active &&
+        text_active && own_reason &&
         workspace_state_.send_message.availability !=
             catro::app::Availability::ready &&
         !workspace_state_.send_message.reason.empty()) {

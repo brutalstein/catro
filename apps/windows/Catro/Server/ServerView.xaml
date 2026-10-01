@@ -64,14 +64,14 @@
                                       FontSize="13" />
                             <Border HorizontalAlignment="Right"
                                     VerticalAlignment="Top"
-                                    MinWidth="13"
-                                    Height="13"
-                                    CornerRadius="7"
-                                    Padding="2,0"
+                                    MinWidth="16"
+                                    Height="16"
+                                    CornerRadius="8"
+                                    Padding="3,0"
                                     Background="{ThemeResource CatroAccentSoftBrush}">
                                 <TextBlock x:Name="AccessRequestCount"
                                            Text="0"
-                                           FontSize="8"
+                                           FontSize="11"
                                            FontWeight="SemiBold"
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"
@@ -100,7 +100,7 @@
                     <StackPanel Spacing="5">
                         <TextBlock Text="TEXT CHANNELS"
                                    Margin="8,0,0,2"
-                                   FontSize="10"
+                                   FontSize="11"
                                    FontWeight="SemiBold"
                                    CharacterSpacing="80"
                                    Foreground="{ThemeResource CatroTextTertiaryBrush}" />
@@ -109,6 +109,7 @@
                                     CornerRadius="9"
                                     Background="{ThemeResource CatroSurfaceAltBrush}" />
                             <Button Click="OnTextChannel"
+                                    AutomationProperties.Name="Text channel"
                                     Padding="10,0"
                                     HorizontalContentAlignment="Left"
                                     Background="Transparent"
@@ -129,7 +130,7 @@
                     <StackPanel Spacing="5">
                         <TextBlock Text="VOICE CHANNELS"
                                    Margin="8,0,0,2"
-                                   FontSize="10"
+                                   FontSize="11"
                                    FontWeight="SemiBold"
                                    CharacterSpacing="80"
                                    Foreground="{ThemeResource CatroTextTertiaryBrush}" />
@@ -139,6 +140,7 @@
                                     Background="{ThemeResource CatroSurfaceAltBrush}"
                                     Visibility="Collapsed" />
                             <Button Click="OnVoiceChannel"
+                                    AutomationProperties.Name="Voice channel"
                                     Padding="10,0"
                                     HorizontalContentAlignment="Left"
                                     Background="Transparent"
@@ -186,7 +188,7 @@
                                        Foreground="{ThemeResource CatroTextBrush}" />
                             <TextBlock x:Name="ProfileRoleText"
                                        Text="Owner"
-                                       FontSize="10"
+                                       FontSize="11"
                                        Foreground="{ThemeResource CatroTextTertiaryBrush}" />
                         </StackPanel>
                     </StackPanel>
@@ -258,7 +260,7 @@
                                Foreground="{ThemeResource CatroTextBrush}" />
                     <TextBlock x:Name="OnlineStatusText"
                                Text="Online services are not configured. Local mode remains available."
-                               FontSize="10"
+                               FontSize="11"
                                TextTrimming="CharacterEllipsis"
                                Foreground="{ThemeResource CatroTextTertiaryBrush}"
                                AutomationProperties.LiveSetting="Polite" />
@@ -299,14 +301,25 @@
                               ScrollViewer.HorizontalScrollMode="Disabled"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               ScrollViewer.VerticalScrollMode="Auto"
-                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                              ContainerContentChanging="OnMessageContainerChanging">
+                        <!-- Rows are filled in code from the recycled container, so scrolling
+                             costs no binding evaluation. -->
                         <ListView.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding}"
-                                           Margin="8,6"
-                                           TextWrapping="Wrap"
-                                           IsTextSelectionEnabled="True"
-                                           Foreground="{ThemeResource CatroTextSecondaryBrush}" />
+                                <StackPanel Margin="8,7" Spacing="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock FontWeight="SemiBold"
+                                                   Foreground="{ThemeResource CatroTextBrush}" />
+                                        <TextBlock FontSize="11"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                                    </StackPanel>
+                                    <TextBlock FontSize="14"
+                                               TextWrapping="Wrap"
+                                               IsTextSelectionEnabled="True"
+                                               Foreground="{ThemeResource CatroTextBrush}" />
+                                </StackPanel>
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
@@ -366,7 +379,8 @@
                                     Content="Send"
                                     MinWidth="72"
                                     IsEnabled="False"
-                                    Click="OnSendMessage" />
+                                    Click="OnSendMessage"
+                                    Style="{StaticResource CatroPrimaryButtonStyle}" />
                         </Grid>
                     </StackPanel>
                 </Grid>
@@ -415,7 +429,7 @@
                                 HorizontalAlignment="Center">
                             <TextBlock x:Name="VoiceRoleText"
                                        Text="OWNER"
-                                       FontSize="9"
+                                       FontSize="11"
                                        FontWeight="SemiBold"
                                        CharacterSpacing="70"
                                        Foreground="{ThemeResource CatroAccentBrush}" />
@@ -444,7 +458,7 @@
                                         CornerRadius="8"
                                         Background="{ThemeResource CatroSageBrush}">
                                     <TextBlock Text="LIVE"
-                                               FontSize="9"
+                                               FontSize="11"
                                                FontWeight="SemiBold"
                                                CharacterSpacing="70"
                                                Foreground="{ThemeResource CatroBackgroundBrush}" />
@@ -498,7 +512,7 @@
                                             CornerRadius="8"
                                             Background="{ThemeResource CatroSurfaceBrush}">
                                         <TextBlock Text="LIVE"
-                                                   FontSize="9"
+                                                   FontSize="11"
                                                    FontWeight="SemiBold"
                                                    CharacterSpacing="70"
                                                    Foreground="{ThemeResource CatroSageBrush}" />
@@ -560,7 +574,7 @@
                                         HorizontalAlignment="Left"
                                         VerticalAlignment="Top">
                                     <TextBlock Text="YOUR STREAM"
-                                               FontSize="9"
+                                               FontSize="11"
                                                FontWeight="SemiBold"
                                                CharacterSpacing="70"
                                                Foreground="{ThemeResource CatroAccentBrush}" />
@@ -640,7 +654,7 @@
 
                 <TextBlock x:Name="MemberCountLabel"
                            Text="MEMBERS — 1"
-                           FontSize="10"
+                           FontSize="11"
                            FontWeight="SemiBold"
                            CharacterSpacing="80"
                            Foreground="{ThemeResource CatroTextTertiaryBrush}" />
@@ -654,14 +668,29 @@
                           ScrollViewer.HorizontalScrollMode="Disabled"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           ScrollViewer.VerticalScrollMode="Auto"
-                          ScrollViewer.VerticalScrollBarVisibility="Auto">
+                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                          ContainerContentChanging="OnMemberContainerChanging">
                     <ListView.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding}"
-                                       Margin="4,7"
-                                       FontSize="12"
-                                       TextWrapping="Wrap"
-                                       Foreground="{ThemeResource CatroTextBrush}" />
+                            <StackPanel Margin="0,5" Orientation="Horizontal" Spacing="10">
+                                <Border Width="32"
+                                        Height="32"
+                                        CornerRadius="16"
+                                        Background="{ThemeResource CatroAccentSoftBrush}">
+                                    <TextBlock FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Foreground="{ThemeResource CatroAccentBrush}" />
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock FontSize="13"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{ThemeResource CatroTextBrush}" />
+                                    <TextBlock FontSize="11"
+                                               Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                                </StackPanel>
+                            </StackPanel>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>

@@ -4,7 +4,30 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Catro">
-    <Grid Background="{ThemeResource CatroBackgroundBrush}">
+    <Grid x:Name="ShellRoot"
+          Background="{ThemeResource CatroBackgroundBrush}">
+        <!-- Control-state overrides must live inside the shell tree: WinUI resolves template
+             state brushes from the element up, before it reaches application resources. -->
+        <Grid.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.ThemeDictionaries>
+                    <ResourceDictionary x:Key="Light">
+                        <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
+                        <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent" />
+                        <SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="#EBDDD0" />
+                        <SolidColorBrush x:Key="AccentButtonForegroundDisabled" Color="#8A7A6B" />
+                        <SolidColorBrush x:Key="AccentButtonBorderBrushDisabled" Color="Transparent" />
+                    </ResourceDictionary>
+                    <ResourceDictionary x:Key="Dark">
+                        <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
+                        <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent" />
+                        <SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="#3A2E26" />
+                        <SolidColorBrush x:Key="AccentButtonForegroundDisabled" Color="#8F8276" />
+                        <SolidColorBrush x:Key="AccentButtonBorderBrushDisabled" Color="Transparent" />
+                    </ResourceDictionary>
+                </ResourceDictionary.ThemeDictionaries>
+            </ResourceDictionary>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="38" />
             <RowDefinition Height="Auto" />
@@ -28,19 +51,21 @@
                        Grid.Column="1"
                        Text="My Server"
                        Margin="16,0,0,0"
-                       FontSize="11"
+                       FontSize="12"
                        Foreground="{ThemeResource CatroTextTertiaryBrush}"
                        VerticalAlignment="Center" />
         </Grid>
 
-        <Border Grid.Row="1"
-                Padding="12,6"
-                Background="{ThemeResource CatroSurfaceAltBrush}"
+        <!-- Shown only while online services need attention; collapsed once synchronized. -->
+        <Border x:Name="ShellStatusBar"
+                Grid.Row="1"
+                Padding="16,7"
+                Background="{ThemeResource CatroWarmSoftBrush}"
                 BorderBrush="{ThemeResource CatroStrokeBrush}"
                 BorderThickness="0,0,0,1">
             <TextBlock x:Name="ShellStatusText"
                        Text="Connecting to online services…"
-                       FontSize="11"
+                       FontSize="12"
                        TextWrapping="Wrap"
                        Foreground="{ThemeResource CatroTextSecondaryBrush}"
                        AutomationProperties.LiveSetting="Polite" />
@@ -99,7 +124,7 @@
                                 Click="OnJoinServer"
                                 ToolTipService.ToolTip="Add server"
                                 AutomationProperties.Name="Add server">
-                            <FontIcon Glyph="&#xE710;" FontSize="15" />
+                            <FontIcon Glyph="&#xE710;" FontSize="16" />
                         </Button>
                     </StackPanel>
 
@@ -120,7 +145,7 @@
                                     BorderThickness="0"
                                     ToolTipService.ToolTip="System"
                                     AutomationProperties.Name="System">
-                                <FontIcon Glyph="&#xE9D9;" FontSize="15" />
+                                <FontIcon Glyph="&#xE9D9;" FontSize="16" />
                             </Button>
                         </Grid>
 
@@ -138,7 +163,7 @@
                                     BorderThickness="0"
                                     ToolTipService.ToolTip="Settings"
                                     AutomationProperties.Name="Settings">
-                                <FontIcon Glyph="&#xE713;" FontSize="15" />
+                                <FontIcon Glyph="&#xE713;" FontSize="16" />
                             </Button>
                         </Grid>
 
@@ -206,12 +231,6 @@
                                           StrokeEndLineCap="Round" />
                                 </Canvas>
                             </Grid>
-                            <TextBlock Text="CATRO"
-                                       FontSize="7"
-                                       FontWeight="SemiBold"
-                                       CharacterSpacing="130"
-                                       Foreground="{ThemeResource CatroTextTertiaryBrush}"
-                                       HorizontalAlignment="Center" />
                         </StackPanel>
                     </StackPanel>
                 </Grid>

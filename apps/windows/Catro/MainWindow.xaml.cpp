@@ -8,6 +8,7 @@
 
 #include "Diagnostics/DiagnosticsView.xaml.h"
 #include "Server/ServerView.xaml.h"
+#include "Settings/Appearance.hpp"
 #include "Settings/SettingsView.xaml.h"
 
 #include <catro/platform/windows/local_state.hpp>
@@ -42,6 +43,12 @@ void MainWindow::InitializeComponent() {
     auto title_bar = AppWindow().TitleBar();
     title_bar.ButtonBackgroundColor(transparent);
     title_bar.ButtonInactiveBackgroundColor(transparent);
+
+    ShellRoot().RequestedTheme(
+        catro::shell::element_theme(catro::shell::load_appearance()));
+    ShellRoot().ActualThemeChanged(
+        [this](auto&&, auto&&) { UpdateCaptionButtons(); });
+    UpdateCaptionButtons();
 
     const auto hwnd =
         Microsoft::UI::GetWindowFromWindowId(AppWindow().Id());
@@ -219,6 +226,35 @@ void MainWindow::UpdateConnectionUi() {
                 : workspace_state_.connection_message));
     JoinServerButton().IsEnabled(
         join.availability != catro::app::Availability::busy);
+    ShellStatusBar().Visibility(
+        workspace_state_.connection ==
+                    catro::app::ConnectionState::synchronized &&
+                !show_action
+            ? xaml::Visibility::Collapsed
+            : xaml::Visibility::Visible);
+}
+
+// The caption buttons are drawn by the system, so they follow the ivory or espresso palette
+// explicitly whenever the effective theme changes.
+void MainWindow::UpdateCaptionButtons() {
+    const bool dark =
+        ShellRoot().ActualTheme() == xaml::ElementTheme::Dark;
+    const auto foreground = dark
+        ? Windows::UI::Color{255, 0xF4, 0xEE, 0xE6}
+        : Windows::UI::Color{255, 0x2A, 0x24, 0x1D};
+    const auto hover = dark
+        ? Windows::UI::Color{255, 0x2A, 0x25, 0x1F}
+        : Windows::UI::Color{255, 0xED, 0xE5, 0xD6};
+    const auto inactive = dark
+        ? Windows::UI::Color{255, 0x9A, 0x8F, 0x83}
+        : Windows::UI::Color{255, 0x6F, 0x65, 0x59};
+    auto title_bar = AppWindow().TitleBar();
+    title_bar.ButtonForegroundColor(foreground);
+    title_bar.ButtonHoverForegroundColor(foreground);
+    title_bar.ButtonHoverBackgroundColor(hover);
+    title_bar.ButtonPressedForegroundColor(foreground);
+    title_bar.ButtonPressedBackgroundColor(hover);
+    title_bar.ButtonInactiveForegroundColor(inactive);
 }
 
 void MainWindow::UpdateRail() {

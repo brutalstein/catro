@@ -8,6 +8,7 @@
 #include <ctime>
 #include <cwchar>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -35,7 +36,56 @@ std::wstring message_time(std::int64_t unix_milliseconds) {
     return buffer;
 }
 
+// List rows are stored as line-separated fields so a recycled container can be refilled
+// without bindings.
+std::pair<std::wstring_view, std::wstring_view> split_line(std::wstring_view text) {
+    const auto at = text.find(L'\n');
+    if (at == std::wstring_view::npos) {
+        return {text, {}};
+    }
+    return {text.substr(0, at), text.substr(at + 1)};
+}
+
+controls::TextBlock text_at(controls::Panel const& panel, uint32_t index) {
+    return panel.Children().GetAt(index).as<controls::TextBlock>();
+}
+
 } // namespace
+
+void ServerView::OnMessageContainerChanging(
+    controls::ListViewBase const&,
+    controls::ContainerContentChangingEventArgs const& args) {
+    const auto root = args.ItemContainer().ContentTemplateRoot().try_as<controls::StackPanel>();
+    if (args.InRecycleQueue() || !root) {
+        return;
+    }
+    const auto row = unbox_value<hstring>(args.Item());
+    const auto [author, rest] = split_line(row);
+    const auto [time, body] = split_line(rest);
+    const auto header = root.Children().GetAt(0).as<controls::StackPanel>();
+    text_at(header, 0).Text(hstring{author});
+    text_at(header, 1).Text(hstring{time});
+    text_at(root, 1).Text(hstring{body});
+    args.Handled(true);
+}
+
+void ServerView::OnMemberContainerChanging(
+    controls::ListViewBase const&,
+    controls::ContainerContentChangingEventArgs const& args) {
+    const auto root = args.ItemContainer().ContentTemplateRoot().try_as<controls::StackPanel>();
+    if (args.InRecycleQueue() || !root) {
+        return;
+    }
+    const auto row = unbox_value<hstring>(args.Item());
+    const auto [name, role] = split_line(row);
+    const auto avatar = root.Children().GetAt(0).as<controls::Border>();
+    avatar.Child().as<controls::TextBlock>().Text(
+        name.empty() ? hstring{} : hstring{name.substr(0, 1)});
+    const auto labels = root.Children().GetAt(1).as<controls::StackPanel>();
+    text_at(labels, 0).Text(hstring{name});
+    text_at(labels, 1).Text(hstring{role});
+    args.Handled(true);
+}
 
 void ServerView::ResetMembers() {
     if (++member_generation_ == 0) {
@@ -51,10 +101,9 @@ void ServerView::ShowLocalMemberFallback() {
         return;
     }
 
-    std::wstring row = L"★ ";
-    row += to_hstring(
+    std::wstring row = to_hstring(
         local_state_->identity.display_name).c_str();
-    row += L"  ·  YOU\nOwner";
+    row += L"\nOwner · You";
     MemberList().Items().Append(
         box_value(hstring{row}));
     MemberCountLabel().Text(L"MEMBERS — 1");
@@ -73,19 +122,15 @@ void ServerView::ApplyMemberRoster(
     }
 
     for (const auto& member : members) {
-        std::wstring row;
-        if (member.role == "owner") {
-            row += L"★ ";
-        }
-        row += to_hstring(member.display_name).c_str();
-        if (!local_id.empty() &&
-            member.user_id == local_id) {
-            row += L"  ·  YOU";
-        }
+        std::wstring row = to_hstring(member.display_name).c_str();
         row += L"\n";
         row += member.role == "owner"
             ? L"Owner"
             : L"Member";
+        if (!local_id.empty() &&
+            member.user_id == local_id) {
+            row += L" · You";
+        }
         MemberList().Items().Append(
             box_value(hstring{row}));
     }
@@ -247,6 +292,8 @@ ServerView::ShowAccessDialog() {
     controls::ContentDialog dialog;
     dialog.XamlRoot(
         ServerLayout().XamlRoot());
+    // Dialogs open in a popup outside the themed shell tree, so they copy its theme.
+    dialog.RequestedTheme(ActualTheme());
     dialog.Title(
         box_value(hstring{L"Server access"}));
     dialog.PrimaryButtonText(L"Approve");
@@ -468,10 +515,8 @@ void ServerView::AppendMessage(
         to_hstring(message.author_display_name).c_str();
     const auto timestamp =
         message_time(message.created_at);
-    if (!timestamp.empty()) {
-        display += L"  ·  ";
-        display += timestamp;
-    }
+    display += L"\n";
+    display += timestamp;
     display += L"\n";
     display += to_hstring(message.content).c_str();
 
@@ -758,6 +803,7 @@ ServerView::ShowInviteCode(
 
     controls::ContentDialog dialog;
     dialog.XamlRoot(XamlRoot());
+    dialog.RequestedTheme(ActualTheme());
     dialog.Title(
         box_value(
             hstring{L"Invite to server"}));

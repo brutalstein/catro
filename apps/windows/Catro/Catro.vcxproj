@@ -121,6 +121,7 @@
       <DependentUpon>Server\ServerView.xaml</DependentUpon>
     </ClInclude>
     <ClInclude Include="Server\ServerView.RuntimeConfig.hpp" />
+    <ClInclude Include="Settings\Appearance.hpp" />
     <ClInclude Include="Settings\SettingsView.xaml.h">
       <DependentUpon>Settings\SettingsView.xaml</DependentUpon>
     </ClInclude>

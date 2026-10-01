@@ -406,3 +406,46 @@ TEST_CASE("Windows shell coroutines return to the UI thread through its Dispatch
     CHECK(read(root / "App.xaml.cpp").find("init_apartment(winrt::apartment_type::single_threaded)") !=
           std::string::npos);
 }
+
+TEST_CASE("Windows shell defaults to the accessible ivory theme with a persisted appearance choice") {
+    const auto root = std::filesystem::path(CATRO_WINDOWS_XAML_DIR);
+    const auto app = read(root / "App.xaml");
+    // Ivory canvas, and WinUI's own accent consumers (NavigationView, accent buttons) follow Catro.
+    CHECK(app.find("Color=\"#FBF8F1\"") != std::string::npos);
+    CHECK(app.find("x:Key=\"SystemAccentColor\"") != std::string::npos);
+    CHECK(app.find("BasedOn=\"{StaticResource AccentButtonStyle}\"") != std::string::npos);
+    CHECK(app.find("x:Key=\"TextOnAccentFillColorPrimaryBrush\"") != std::string::npos);
+
+    const auto settings = read(root / "Settings/SettingsView.xaml");
+    CHECK(settings.find("x:Name=\"AppearanceBox\"") != std::string::npos);
+    for (const auto* choice : {"Ivory", "Dark", "System"}) {
+        INFO(choice);
+        CHECK(settings.find(std::string{"Content=\""} + choice + "\"") != std::string::npos);
+    }
+    const auto main = read_main_sources(root);
+    CHECK(main.find("load_appearance") != std::string::npos);
+    CHECK(main.find("ActualThemeChanged") != std::string::npos);
+}
+
+TEST_CASE("Windows product text stays readable") {
+    const auto root = std::filesystem::path(CATRO_WINDOWS_XAML_DIR);
+    for (const auto* relative : {"MainWindow.xaml", "Server/ServerView.xaml", "Settings/SettingsView.xaml"}) {
+        INFO(relative);
+        const auto xaml = read(root / relative);
+        for (std::size_t at = xaml.find("FontSize=\""); at != std::string::npos;
+             at = xaml.find("FontSize=\"", at + 1)) {
+            const auto size = std::stoi(xaml.substr(at + 10, 3));
+            INFO(xaml.substr(at, 16));
+            CHECK(size >= 11);
+        }
+    }
+}
+
+TEST_CASE("Windows message and member rows render through recycled containers") {
+    const auto root = std::filesystem::path(CATRO_WINDOWS_XAML_DIR);
+    const auto xaml = read(root / "Server/ServerView.xaml");
+    CHECK(xaml.find("ContainerContentChanging=\"OnMessageContainerChanging\"") != std::string::npos);
+    CHECK(xaml.find("ContainerContentChanging=\"OnMemberContainerChanging\"") != std::string::npos);
+    // Rows must not fall back to one flat string with a single style.
+    CHECK(xaml.find("<TextBlock Text=\"{Binding}\"") == std::string::npos);
+}

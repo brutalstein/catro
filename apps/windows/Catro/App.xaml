@@ -9,58 +9,90 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
 
+            <!-- Every text/background pair below meets WCAG AA (4.5:1) at the sizes Catro uses. -->
             <ResourceDictionary.ThemeDictionaries>
+                <!-- Ivory: Catro's default appearance. -->
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="CatroBackgroundBrush" Color="#F6F1EA" />
-                    <SolidColorBrush x:Key="CatroRailBrush" Color="#F0E9E0" />
-                    <SolidColorBrush x:Key="CatroSurfaceBrush" Color="#FCFAF7" />
-                    <SolidColorBrush x:Key="CatroSurfaceAltBrush" Color="#EEE6DC" />
-                    <SolidColorBrush x:Key="CatroStrokeBrush" Color="#D9D0C4" />
-                    <SolidColorBrush x:Key="CatroTextBrush" Color="#292521" />
-                    <SolidColorBrush x:Key="CatroTextSecondaryBrush" Color="#716A63" />
-                    <SolidColorBrush x:Key="CatroTextTertiaryBrush" Color="#938A81" />
-                    <SolidColorBrush x:Key="CatroAccentBrush" Color="#C8785A" />
-                    <SolidColorBrush x:Key="CatroAccentHoverBrush" Color="#B96B50" />
-                    <SolidColorBrush x:Key="CatroAccentSoftBrush" Color="#F1D8CC" />
-                    <SolidColorBrush x:Key="CatroSageBrush" Color="#6F8E76" />
-                    <SolidColorBrush x:Key="CatroSageSoftBrush" Color="#DFE9DF" />
-                    <SolidColorBrush x:Key="CatroRoseBrush" Color="#AD6F76" />
-                    <SolidColorBrush x:Key="CatroRoseSoftBrush" Color="#F0DEE1" />
-                    <SolidColorBrush x:Key="CatroWarmSoftBrush" Color="#EFE2C9" />
+                    <SolidColorBrush x:Key="CatroBackgroundBrush" Color="#FBF8F1" />
+                    <SolidColorBrush x:Key="CatroRailBrush" Color="#F3EDE1" />
+                    <SolidColorBrush x:Key="CatroSurfaceBrush" Color="#FFFDF8" />
+                    <SolidColorBrush x:Key="CatroSurfaceAltBrush" Color="#F1EADC" />
+                    <SolidColorBrush x:Key="CatroStrokeBrush" Color="#E3DACA" />
+                    <SolidColorBrush x:Key="CatroTextBrush" Color="#2A241D" />
+                    <SolidColorBrush x:Key="CatroTextSecondaryBrush" Color="#5E554A" />
+                    <SolidColorBrush x:Key="CatroTextTertiaryBrush" Color="#6F6559" />
+                    <SolidColorBrush x:Key="CatroAccentBrush" Color="#A6512D" />
+                    <SolidColorBrush x:Key="CatroAccentHoverBrush" Color="#94472A" />
+                    <SolidColorBrush x:Key="CatroAccentSoftBrush" Color="#F7E9DF" />
+                    <SolidColorBrush x:Key="CatroSageBrush" Color="#46704F" />
+                    <SolidColorBrush x:Key="CatroSageSoftBrush" Color="#E6EFE5" />
+                    <SolidColorBrush x:Key="CatroRoseBrush" Color="#9E4652" />
+                    <SolidColorBrush x:Key="CatroRoseSoftBrush" Color="#F6E3E5" />
+                    <SolidColorBrush x:Key="CatroWarmSoftBrush" Color="#F3E7CC" />
 
-                    <!-- WinUI accent-aware controls inherit the same warm palette instead of OS blue. -->
-                    <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#C8785A" />
-                    <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#B96B50" />
-                    <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#A65D45" />
-                    <SolidColorBrush x:Key="AccentFillColorDisabledBrush" Color="#E2CFC6" />
-                    <SolidColorBrush x:Key="FocusVisualPrimaryBrush" Color="#C8785A" />
-                    <SolidColorBrush x:Key="FocusVisualSecondaryBrush" Color="#FCFAF7" />
+                    <!-- WinUI's accent consumers (accent buttons, NavigationView, toggles, focus) use
+                         the same terracotta instead of the OS accent. -->
+                    <Color x:Key="SystemAccentColor">#A6512D</Color>
+                    <Color x:Key="SystemAccentColorLight1">#B8673F</Color>
+                    <Color x:Key="SystemAccentColorLight2">#CB8460</Color>
+                    <Color x:Key="SystemAccentColorLight3">#DFA88A</Color>
+                    <Color x:Key="SystemAccentColorDark1">#94472A</Color>
+                    <Color x:Key="SystemAccentColorDark2">#7F3C24</Color>
+                    <Color x:Key="SystemAccentColorDark3">#66301D</Color>
+                    <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#A6512D" />
+                    <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#94472A" />
+                    <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#7F3C24" />
+                    <SolidColorBrush x:Key="AccentFillColorDisabledBrush" Color="#E8DCCF" />
+                    <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="#FBEFE8" />
+                    <SolidColorBrush x:Key="FocusVisualPrimaryBrush" Color="#A6512D" />
+                    <SolidColorBrush x:Key="FocusVisualSecondaryBrush" Color="#FFFDF8" />
+                    <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#A6512D" />
+                    <SolidColorBrush x:Key="NavigationViewContentBackground" Color="#FFFDF8" />
+                    <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="#E3DACA" />
+                    <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="#FBF8F1" />
+                    <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="#FBF8F1" />
                 </ResourceDictionary>
 
+                <!-- Dark: warm espresso with the same terracotta family. -->
                 <ResourceDictionary x:Key="Default">
-                    <SolidColorBrush x:Key="CatroBackgroundBrush" Color="#171512" />
-                    <SolidColorBrush x:Key="CatroRailBrush" Color="#1C1916" />
-                    <SolidColorBrush x:Key="CatroSurfaceBrush" Color="#211E1A" />
-                    <SolidColorBrush x:Key="CatroSurfaceAltBrush" Color="#29251F" />
-                    <SolidColorBrush x:Key="CatroStrokeBrush" Color="#39332C" />
-                    <SolidColorBrush x:Key="CatroTextBrush" Color="#F3EDE6" />
-                    <SolidColorBrush x:Key="CatroTextSecondaryBrush" Color="#B0A69C" />
-                    <SolidColorBrush x:Key="CatroTextTertiaryBrush" Color="#827970" />
-                    <SolidColorBrush x:Key="CatroAccentBrush" Color="#D79072" />
-                    <SolidColorBrush x:Key="CatroAccentHoverBrush" Color="#E09C7D" />
-                    <SolidColorBrush x:Key="CatroAccentSoftBrush" Color="#3B2A23" />
-                    <SolidColorBrush x:Key="CatroSageBrush" Color="#89A08B" />
-                    <SolidColorBrush x:Key="CatroSageSoftBrush" Color="#263128" />
-                    <SolidColorBrush x:Key="CatroRoseBrush" Color="#C4868C" />
-                    <SolidColorBrush x:Key="CatroRoseSoftBrush" Color="#38272A" />
-                    <SolidColorBrush x:Key="CatroWarmSoftBrush" Color="#342E22" />
+                    <SolidColorBrush x:Key="CatroBackgroundBrush" Color="#161310" />
+                    <SolidColorBrush x:Key="CatroRailBrush" Color="#1B1814" />
+                    <SolidColorBrush x:Key="CatroSurfaceBrush" Color="#201C18" />
+                    <SolidColorBrush x:Key="CatroSurfaceAltBrush" Color="#2A251F" />
+                    <SolidColorBrush x:Key="CatroStrokeBrush" Color="#3A332B" />
+                    <SolidColorBrush x:Key="CatroTextBrush" Color="#F4EEE6" />
+                    <SolidColorBrush x:Key="CatroTextSecondaryBrush" Color="#BFB4A8" />
+                    <SolidColorBrush x:Key="CatroTextTertiaryBrush" Color="#9A8F83" />
+                    <SolidColorBrush x:Key="CatroAccentBrush" Color="#E0906B" />
+                    <SolidColorBrush x:Key="CatroAccentHoverBrush" Color="#E9A07D" />
+                    <SolidColorBrush x:Key="CatroAccentSoftBrush" Color="#3D2A21" />
+                    <SolidColorBrush x:Key="CatroSageBrush" Color="#8FB295" />
+                    <SolidColorBrush x:Key="CatroSageSoftBrush" Color="#24302A" />
+                    <SolidColorBrush x:Key="CatroRoseBrush" Color="#D58C95" />
+                    <SolidColorBrush x:Key="CatroRoseSoftBrush" Color="#3A2629" />
+                    <SolidColorBrush x:Key="CatroWarmSoftBrush" Color="#352E22" />
 
-                    <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#D79072" />
-                    <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#E09C7D" />
-                    <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#BD785E" />
-                    <SolidColorBrush x:Key="AccentFillColorDisabledBrush" Color="#4A3931" />
-                    <SolidColorBrush x:Key="FocusVisualPrimaryBrush" Color="#D79072" />
-                    <SolidColorBrush x:Key="FocusVisualSecondaryBrush" Color="#211E1A" />
+                    <Color x:Key="SystemAccentColor">#E0906B</Color>
+                    <Color x:Key="SystemAccentColorLight1">#E9A07D</Color>
+                    <Color x:Key="SystemAccentColorLight2">#F0B497</Color>
+                    <Color x:Key="SystemAccentColorLight3">#F6CAB4</Color>
+                    <Color x:Key="SystemAccentColorDark1">#CC7F5C</Color>
+                    <Color x:Key="SystemAccentColorDark2">#B06A4A</Color>
+                    <Color x:Key="SystemAccentColorDark3">#8F553B</Color>
+                    <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#E0906B" />
+                    <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#E9A07D" />
+                    <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#CC7F5C" />
+                    <SolidColorBrush x:Key="AccentFillColorDisabledBrush" Color="#4A3A31" />
+                    <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="#1B1410" />
+                    <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="#3A2A21" />
+                    <SolidColorBrush x:Key="FocusVisualPrimaryBrush" Color="#E0906B" />
+                    <SolidColorBrush x:Key="FocusVisualSecondaryBrush" Color="#201C18" />
+                    <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#E0906B" />
+                    <SolidColorBrush x:Key="NavigationViewContentBackground" Color="#201C18" />
+                    <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="#3A332B" />
+                    <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="#161310" />
+                    <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="#161310" />
                 </ResourceDictionary>
 
                 <ResourceDictionary x:Key="HighContrast">
@@ -86,12 +118,13 @@
             <Style x:Key="CatroEyebrowTextStyle" TargetType="TextBlock">
                 <Setter Property="FontSize" Value="11" />
                 <Setter Property="FontWeight" Value="SemiBold" />
-                <Setter Property="CharacterSpacing" Value="120" />
+                <Setter Property="CharacterSpacing" Value="80" />
                 <Setter Property="Foreground" Value="{ThemeResource CatroTextTertiaryBrush}" />
             </Style>
 
             <Style x:Key="CatroPageTitleTextStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="30" />
+                <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
+                <Setter Property="FontSize" Value="28" />
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="Foreground" Value="{ThemeResource CatroTextBrush}" />
                 <Setter Property="TextWrapping" Value="Wrap" />
@@ -117,7 +150,7 @@
                 <Setter Property="Background" Value="{ThemeResource CatroSurfaceBrush}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource CatroStrokeBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="18" />
+                <Setter Property="CornerRadius" Value="14" />
             </Style>
 
             <Style x:Key="CatroSoftCardStyle" TargetType="Border" BasedOn="{StaticResource CatroCardStyle}">
@@ -125,27 +158,26 @@
                 <Setter Property="BorderThickness" Value="0" />
             </Style>
 
-            <Style x:Key="CatroPrimaryButtonStyle" TargetType="Button">
-                <Setter Property="Background" Value="{ThemeResource CatroAccentBrush}" />
-                <Setter Property="Foreground" Value="White" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="CornerRadius" Value="12" />
-                <Setter Property="Padding" Value="16,9" />
-                <Setter Property="MinHeight" Value="38" />
+            <!-- Based on AccentButtonStyle so hover, pressed, disabled and on-accent text all come
+                 from the theme instead of falling back to the stock gray button states. -->
+            <Style x:Key="CatroPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Padding" Value="16,8" />
+                <Setter Property="MinHeight" Value="36" />
                 <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
 
-            <Style x:Key="CatroSecondaryButtonStyle" TargetType="Button">
+            <Style x:Key="CatroSecondaryButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                 <Setter Property="Background" Value="{ThemeResource CatroSurfaceAltBrush}" />
                 <Setter Property="Foreground" Value="{ThemeResource CatroTextBrush}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource CatroStrokeBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="12" />
-                <Setter Property="Padding" Value="14,8" />
-                <Setter Property="MinHeight" Value="38" />
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Padding" Value="14,7" />
+                <Setter Property="MinHeight" Value="36" />
             </Style>
 
-            <Style x:Key="CatroNavButtonStyle" TargetType="Button">
+            <Style x:Key="CatroNavButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                 <Setter Property="Width" Value="48" />
                 <Setter Property="Height" Value="48" />
                 <Setter Property="Padding" Value="0" />

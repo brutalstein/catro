@@ -40,6 +40,12 @@ struct ServerView : ServerViewT<ServerView> {
     void OnPopOutStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnFullScreenStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnSizeChanged(IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
+    void OnMessageContainerChanging(
+        Microsoft::UI::Xaml::Controls::ListViewBase const&,
+        Microsoft::UI::Xaml::Controls::ContainerContentChangingEventArgs const&);
+    void OnMemberContainerChanging(
+        Microsoft::UI::Xaml::Controls::ListViewBase const&,
+        Microsoft::UI::Xaml::Controls::ContainerContentChangingEventArgs const&);
     void SetLocalState(const catro::community::LocalState& state);
     void SetDirectorySession(
         const catro::platform::windows::DirectoryServiceConfig& service,

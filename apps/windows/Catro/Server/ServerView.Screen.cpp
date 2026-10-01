@@ -272,6 +272,7 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
 
         controls::ContentDialog dialog;
         dialog.XamlRoot(XamlRoot());
+        dialog.RequestedTheme(ActualTheme());
         dialog.Title(box_value(hstring{L"Share your screen"}));
         dialog.PrimaryButtonText(L"Go live");
         dialog.CloseButtonText(L"Cancel");

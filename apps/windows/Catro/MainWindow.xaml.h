@@ -40,6 +40,7 @@ private:
     void ApplyDirectoryServerToPage();
     void UpdateRail();
     void UpdateConnectionUi();
+    void UpdateCaptionButtons();
 
     catro::app::ShellState shell_state_;
     catro::app::WorkspaceSnapshot workspace_state_ =
