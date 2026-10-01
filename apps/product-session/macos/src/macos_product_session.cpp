@@ -2,11 +2,14 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <deque>
 #include <exception>
 #include <mutex>
 #include <set>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <variant>
@@ -47,6 +50,31 @@ template <class T>
 
 } // namespace
 
+ProductMediaApi native_media_api() noexcept {
+    ProductMediaApi api;
+    api.room_create = catro_room_runtime_create;
+    api.room_destroy = catro_room_runtime_destroy;
+    api.room_start = catro_room_runtime_start;
+    api.room_stop = catro_room_runtime_stop;
+    api.room_claim_screen = catro_room_runtime_claim_screen;
+    api.room_release_screen = catro_room_runtime_release_screen;
+    api.screen = screen::RoomScreenApi{
+        .snapshot = catro_room_runtime_snapshot,
+        .send_video = catro_room_runtime_send_video,
+        .receive_video = catro_room_runtime_receive_video,
+        .send_stream_audio = catro_room_runtime_send_stream_audio,
+        .receive_stream_audio = catro_room_runtime_receive_stream_audio,
+    };
+    api.voice_create = catro_voice_runtime_create;
+    api.voice_destroy = catro_voice_runtime_destroy;
+    api.voice_start = catro_voice_runtime_start;
+    api.voice_stop = catro_voice_runtime_stop;
+    api.voice_set_muted = catro_voice_runtime_set_muted;
+    api.voice_set_deafened = catro_voice_runtime_set_deafened;
+    api.voice_snapshot = catro_voice_runtime_snapshot;
+    return api;
+}
+
 const ServerItem* ProductSnapshot::active_server() const noexcept {
     const auto found = std::find_if(servers.begin(), servers.end(),
                                     [this](const ServerItem& server) { return server.id == active_server_id; });
@@ -55,7 +83,11 @@ const ServerItem* ProductSnapshot::active_server() const noexcept {
 
 struct ProductSession::Impl {
     Impl(ProductSessionDependencies dependencies, Listener listener)
-        : deps_(std::move(dependencies)), listener_(std::move(listener)) {
+        : deps_(std::move(dependencies)), listener_(std::move(listener)),
+          screen_(std::make_unique<screen::MacScreenShareRuntime>(deps_.media.screen)) {
+        if (!deps_.enumerate_sources) {
+            deps_.enumerate_sources = [] { return platform::macos::MacScreenCapture{}.enumerate_sources(); };
+        }
         worker_ = std::thread([this] { run(); });
     }
 
@@ -82,6 +114,16 @@ struct ProductSession::Impl {
         queue_ready_.notify_all();
         if (worker_.joinable()) {
             worker_.join();
+        }
+        // The worker is gone, so media teardown runs here without racing a command.
+        leave_voice();
+        if (voice_ != nullptr) {
+            deps_.media.voice_destroy(voice_);
+            voice_ = nullptr;
+        }
+        if (room_ != nullptr) {
+            deps_.media.room_destroy(room_);
+            room_ = nullptr;
         }
     }
 
@@ -192,6 +234,9 @@ struct ProductSession::Impl {
             return;
         }
         if (server_id != activated_id_) {
+            if (!state_.media.voice_server_id.empty() && state_.media.voice_server_id != server_id) {
+                leave_voice(); // voice belongs to the server being left
+            }
             state_.active_server_id = server_id;
             state_.members.clear();
             state_.messages.clear();
@@ -324,6 +369,7 @@ struct ProductSession::Impl {
         if (!online()) {
             return;
         }
+        refresh_media();
         refresh_messages();
         if (++poll_ticks_ % kSlowPollTicks == 0) {
             refresh_members();
@@ -342,8 +388,254 @@ struct ProductSession::Impl {
         body();
     }
 
+    // Mirrors the Windows shell so both platforms derive the same RTP stream ids.
+    [[nodiscard]] std::uint32_t local_stream_id() const noexcept {
+        std::uint32_t value = 0x4354524fU; // "CTRO"
+        if (deps_.local_state) {
+            for (std::size_t index = 0; index < 4; ++index) {
+                value = (value << 5U) ^ (value >> 27U) ^
+                        std::to_integer<std::uint8_t>(deps_.local_state->identity.id.bytes[index]);
+            }
+        }
+        return value == 0 ? 1U : value;
+    }
+
+    void fail_voice(std::string status) {
+        state_.media.phase = VoicePhase::failed;
+        state_.media.status = std::move(status);
+    }
+
+    // Provisioning, room, voice, then screen listening, in the Windows order.
+    void join_voice() {
+        auto& media = state_.media;
+        if (media.phase == VoicePhase::joining || media.phase == VoicePhase::joined) {
+            return;
+        }
+        if (media.phase == VoicePhase::failed) {
+            leave_voice();
+        }
+        const auto* server = state_.active_server();
+        if (server == nullptr || server->voice_channel_id.empty()) {
+            media.status = "This server has no voice channel.";
+            return;
+        }
+        const auto server_id = server->id;
+        const auto channel_id = server->voice_channel_id;
+        media.phase = VoicePhase::joining;
+        media.status = "Authorizing room…";
+        publish();
+
+        auto provisioned = client_->request_rtc_provisioning(access_token_, server_id, channel_id, token());
+        if (const auto* error = error_of(provisioned)) {
+            fail_voice("Room authorization failed: " + error->message);
+            return;
+        }
+        // The parser already rejects incomplete provisioning (peers 2..5, ICE, signaling URL).
+        const auto& rtc = std::get<community::RtcProvisioning>(provisioned);
+        if (room_ == nullptr) {
+            room_ = deps_.media.room_create();
+        }
+        if (voice_ == nullptr) {
+            voice_ = deps_.media.voice_create();
+        }
+        if (room_ == nullptr || voice_ == nullptr) {
+            fail_voice("Voice runtime is unavailable.");
+            return;
+        }
+        std::vector<const char*> ice_urls;
+        for (const auto& url : rtc.ice_servers) {
+            ice_urls.push_back(url.c_str());
+        }
+        const CatroRoomRuntimeConfig room_config{
+            .signaling_url = rtc.signaling_url.c_str(),
+            .access_token = rtc.token.c_str(),
+            .server_id = rtc.server_id.c_str(),
+            .channel_id = rtc.channel_id.c_str(),
+            .user_id = rtc.peer_id.c_str(),
+            .ice_server_urls = ice_urls.data(),
+            .ice_server_count = ice_urls.size(),
+            .max_remote_peers = static_cast<std::uint32_t>(rtc.max_room_peers - 1),
+            .allow_insecure_signaling = rtc.allow_insecure_signaling ? std::uint8_t{1} : std::uint8_t{0},
+            .allow_no_turn = rtc.allow_no_turn ? std::uint8_t{1} : std::uint8_t{0},
+        };
+        if (deps_.media.room_start(room_, &room_config) != 0) {
+            const auto room = deps_.media.screen.snapshot(room_);
+            fail_voice(room.error[0] == '\0' ? std::string{"Room connection error"}
+                                             : std::string{"Room connection error: "} + room.error);
+            return;
+        }
+        const CatroVoiceRuntimeConfig voice_config{
+            .room_runtime = room_,
+            .bind_address = nullptr,
+            .bind_port = 0,
+            .peer_address = nullptr,
+            .peer_port = 0,
+            .stream_id = local_stream_id(),
+            .jitter_packets = 3,
+            .bitrate = 48'000,
+            .input_endpoint = nullptr,
+            .output_endpoint = nullptr,
+        };
+        if (deps_.media.voice_start(voice_, &voice_config) != 0) {
+            const auto voice = deps_.media.voice_snapshot(voice_);
+            deps_.media.room_stop(room_);
+            fail_voice(voice.error[0] == '\0' ? std::string{"Voice could not start."}
+                                              : std::string{"Voice could not start: "} + voice.error);
+            return;
+        }
+        peer_id_ = rtc.peer_id;
+        media.phase = VoicePhase::joined;
+        media.voice_server_id = server_id;
+        media.status = "Voice connected";
+        screen::ScreenTransportConfig transport;
+        transport.room_runtime = room_;
+        if (const auto failure = screen_->start_listening(transport)) {
+            media.status = "Stream viewing unavailable: " + failure->message;
+        }
+        refresh_media();
+    }
+
+    void leave_voice() {
+        stop_share();
+        screen_->set_remote_viewing_enabled(false);
+        screen_->stop();
+        if (voice_ != nullptr) {
+            deps_.media.voice_stop(voice_);
+        }
+        if (room_ != nullptr) {
+            deps_.media.room_stop(room_);
+        }
+        peer_id_.clear();
+        auto sources = std::move(state_.media.sources);
+        state_.media = MediaSnapshot{};
+        state_.media.sources = std::move(sources);
+    }
+
+    // ponytail: waits on the serial worker for up to 3 s like the Windows shell; other commands
+    // queue behind it. Move to a timer-driven state if that delay becomes visible.
+    [[nodiscard]] bool await_screen_ownership() {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+        while (std::chrono::steady_clock::now() < deadline && !stopping_.load(std::memory_order_acquire)) {
+            const auto room = deps_.media.screen.snapshot(room_);
+            const std::string_view owner{room.screen_owner};
+            if (owner == peer_id_) {
+                return true;
+            }
+            if (!owner.empty()) {
+                state_.media.status = "Another participant is sharing";
+                return false;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        deps_.media.room_release_screen(room_);
+        state_.media.status = "Screen ownership request timed out";
+        return false;
+    }
+
+    void start_share(const ShareRequest& request) {
+        auto& media = state_.media;
+        if (media.phase != VoicePhase::joined) {
+            media.status = "Join voice before sharing.";
+            return;
+        }
+        if (media.sharing) {
+            return;
+        }
+        screen::MacScreenShareConfig config;
+        config.source = request.source;
+        config.room_runtime = room_;
+        config.max_width = request.max_width;
+        config.max_height = request.max_height;
+        config.fps = request.fps;
+        config.bitrate = request.bitrate;
+        config.share_audio = request.share_audio;
+        config.ssrc = local_stream_id() ^ 0x56494430U;
+        if (config.ssrc == 0) {
+            config.ssrc = 1;
+        }
+        // Rejected before claiming, so bad settings never take the room's single share slot.
+        if (!screen::valid_share(config)) {
+            media.status = "Invalid screen-share settings";
+            return;
+        }
+        const auto room = deps_.media.screen.snapshot(room_);
+        const std::string_view owner{room.screen_owner};
+        if (!owner.empty() && owner != peer_id_) {
+            media.status = "Another participant is sharing";
+            return;
+        }
+        if (owner != peer_id_) {
+            if (deps_.media.room_claim_screen(room_) != 0) {
+                media.status = "Screen ownership request failed";
+                return;
+            }
+            if (!await_screen_ownership()) {
+                return;
+            }
+        }
+        if (const auto failure = screen_->start(config)) {
+            deps_.media.room_release_screen(room_);
+            media.status = "Screen share failed: " + failure->message;
+            refresh_media();
+            return;
+        }
+        media.sharing = true;
+        media.status = "Sharing " + request.source.title;
+        refresh_media();
+    }
+
+    void stop_share() {
+        if (!state_.media.sharing) {
+            return;
+        }
+        screen_->stop_sharing();
+        deps_.media.room_release_screen(room_);
+        state_.media.sharing = false;
+        state_.media.status = "Voice connected";
+    }
+
+    void refresh_media() {
+        auto& media = state_.media;
+        if (media.phase != VoicePhase::joined) {
+            return;
+        }
+        const auto room = deps_.media.screen.snapshot(room_);
+        media.peer_count = room.peer_count;
+        media.screen_owner = room.screen_owner;
+        const auto voice = deps_.media.voice_snapshot(voice_);
+        media.muted = voice.muted != 0;
+        media.deafened = voice.deafened != 0;
+        const auto share = screen_->snapshot();
+        media.remote_available = share.remote_available;
+        if (media.sharing && share.state == screen::ScreenShareState::failed) {
+            stop_share();
+            media.status = "Screen share stopped: " + share.error;
+        }
+        if (room.state == CATRO_ROOM_FAILED) {
+            stop_share();
+            fail_voice(std::string{"Room connection lost: "} + room.error);
+        } else if (voice.state == CATRO_VOICE_FAILED) {
+            stop_share();
+            fail_voice(std::string{"Voice stopped: "} + voice.error);
+        }
+    }
+
+    void load_sources() {
+        auto result = deps_.enumerate_sources();
+        if (result.error) {
+            state_.media.sources.clear();
+            state_.media.status = platform::macos::name(result.error->code);
+            return;
+        }
+        state_.media.sources = std::move(result.sources);
+    }
+
     ProductSessionDependencies deps_;
     Listener listener_;
+    std::unique_ptr<screen::MacScreenShareRuntime> screen_;
+    CatroRoomRuntimeHandle room_ = nullptr;
+    CatroVoiceRuntimeHandle voice_ = nullptr;
+    std::string peer_id_;
     ProductSnapshot state_;
     std::unique_ptr<platform::macos::DirectoryHttpTransport> transport_;
     std::optional<platform::macos::DirectoryClient> client_;
@@ -489,6 +781,61 @@ void ProductSession::decide_request(std::string request_id, bool approve) {
             impl->refresh_members();
         });
     });
+}
+
+void ProductSession::join_voice() {
+    impl_->enqueue([impl = impl_.get()] { impl->online_command([&] { impl->join_voice(); }); });
+}
+
+void ProductSession::leave_voice() {
+    impl_->enqueue([impl = impl_.get()] { impl->leave_voice(); });
+}
+
+void ProductSession::set_muted(bool muted) {
+    impl_->enqueue([impl = impl_.get(), muted] {
+        if (impl->state_.media.phase == VoicePhase::joined) {
+            impl->deps_.media.voice_set_muted(impl->voice_, muted ? 1U : 0U);
+            impl->state_.media.muted = muted;
+        }
+    });
+}
+
+void ProductSession::set_deafened(bool deafened) {
+    impl_->enqueue([impl = impl_.get(), deafened] {
+        if (impl->state_.media.phase == VoicePhase::joined) {
+            impl->deps_.media.voice_set_deafened(impl->voice_, deafened ? 1U : 0U);
+            impl->state_.media.deafened = deafened;
+        }
+    });
+}
+
+void ProductSession::load_sources() {
+    impl_->enqueue([impl = impl_.get()] { impl->load_sources(); });
+}
+
+void ProductSession::start_share(ShareRequest request) {
+    impl_->enqueue([impl = impl_.get(), request = std::move(request)] { impl->start_share(request); });
+}
+
+void ProductSession::stop_share() {
+    impl_->enqueue([impl = impl_.get()] { impl->stop_share(); });
+}
+
+void ProductSession::set_watching(bool watching) {
+    impl_->enqueue([impl = impl_.get(), watching] {
+        if (impl->state_.media.phase == VoicePhase::joined) {
+            impl->screen_->set_remote_viewing_enabled(watching);
+            impl->state_.media.watching = watching;
+        }
+    });
+}
+
+std::optional<screen::ScreenShareError> ProductSession::attach_preview_surface(void* host_layer) {
+    return impl_->screen_->attach_preview_surface(host_layer);
+}
+
+std::optional<screen::ScreenShareError> ProductSession::attach_remote_surface(void* host_layer) {
+    return impl_->screen_->attach_remote_surface(host_layer);
 }
 
 void ProductSession::stop() noexcept {

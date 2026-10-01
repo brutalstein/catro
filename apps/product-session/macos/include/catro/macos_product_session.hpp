@@ -3,7 +3,9 @@
 #include <PresentationState.hpp>
 #include <catro/community/directory.hpp>
 #include <catro/community/model.hpp>
+#include <catro/macos_screen_runtime.hpp>
 #include <catro/platform/macos/directory_client.hpp>
+#include <catro/voice_runtime.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -59,6 +61,61 @@ struct ServerLookupItem {
     std::string relationship;
 };
 
+enum class VoicePhase : std::uint8_t {
+    idle,
+    joining,
+    joined,
+    failed,
+};
+
+struct MediaSnapshot {
+    VoicePhase phase = VoicePhase::idle;
+    // Server whose voice channel is joined; leaving that server leaves the room.
+    std::string voice_server_id;
+    // User-facing voice/share status line (ownership busy, permission denied, room error, ...).
+    std::string status;
+    bool muted = false;
+    bool deafened = false;
+    std::uint32_t peer_count = 0;
+    // This client is sharing its screen.
+    bool sharing = false;
+    // Room peer id of the current sharer; empty when nobody shares.
+    std::string screen_owner;
+    bool remote_available = false;
+    bool watching = false;
+    std::vector<platform::macos::CaptureSource> sources;
+};
+
+struct ShareRequest {
+    platform::macos::CaptureSource source;
+    std::uint32_t max_width = 1920;
+    std::uint32_t max_height = 1080;
+    std::uint32_t fps = 30;
+    std::uint32_t bitrate = 6'000'000;
+    bool share_audio = false;
+};
+
+// Room and voice C ABI entry points. Tests swap in a deterministic fake room; production uses
+// native_media_api(). The screen runtime receives the same room functions.
+struct ProductMediaApi {
+    CatroRoomRuntimeHandle (*room_create)() noexcept = nullptr;
+    void (*room_destroy)(CatroRoomRuntimeHandle) noexcept = nullptr;
+    std::int32_t (*room_start)(CatroRoomRuntimeHandle, const CatroRoomRuntimeConfig*) noexcept = nullptr;
+    void (*room_stop)(CatroRoomRuntimeHandle) noexcept = nullptr;
+    std::int32_t (*room_claim_screen)(CatroRoomRuntimeHandle) noexcept = nullptr;
+    void (*room_release_screen)(CatroRoomRuntimeHandle) noexcept = nullptr;
+    screen::RoomScreenApi screen;
+    CatroVoiceRuntimeHandle (*voice_create)() noexcept = nullptr;
+    void (*voice_destroy)(CatroVoiceRuntimeHandle) noexcept = nullptr;
+    std::int32_t (*voice_start)(CatroVoiceRuntimeHandle, const CatroVoiceRuntimeConfig*) noexcept = nullptr;
+    void (*voice_stop)(CatroVoiceRuntimeHandle) noexcept = nullptr;
+    void (*voice_set_muted)(CatroVoiceRuntimeHandle, std::uint8_t) noexcept = nullptr;
+    void (*voice_set_deafened)(CatroVoiceRuntimeHandle, std::uint8_t) noexcept = nullptr;
+    CatroVoiceRuntimeSnapshot (*voice_snapshot)(CatroVoiceRuntimeHandle) noexcept = nullptr;
+};
+
+[[nodiscard]] ProductMediaApi native_media_api() noexcept;
+
 // Immutable copy published after every completed command; the shell never sees live state.
 struct ProductSnapshot {
     std::uint64_t revision = 0;
@@ -72,6 +129,7 @@ struct ProductSnapshot {
     std::vector<JoinRequestItem> pending_requests;
     std::string invite_code;
     std::optional<ServerLookupItem> lookup;
+    MediaSnapshot media;
     // One-shot user-facing outcome of the last command (request sent, invite rejected, ...).
     std::string notice;
 
@@ -86,6 +144,9 @@ struct ProductSessionDependencies {
     std::function<std::unique_ptr<platform::macos::DirectoryHttpTransport>(
         const community::DirectoryServiceConfig&)>
         make_transport;
+    ProductMediaApi media = native_media_api();
+    // Runs on the session worker; ScreenCaptureKit enumeration must stay off the main thread.
+    std::function<platform::macos::CaptureEnumerationResult()> enumerate_sources;
 };
 
 // Directory session of the macOS product shell. Every command runs on one serial worker thread,
@@ -113,7 +174,22 @@ public:
     void lookup_server(std::string server_code);
     void request_join(std::string server_code, std::string note);
     void decide_request(std::string request_id, bool approve);
-    // Cancels in-flight network work and joins the worker; no listener call follows.
+
+    // Joins the active server's voice channel: RTC provisioning, room, voice, then screen listening.
+    void join_voice();
+    void leave_voice();
+    void set_muted(bool muted);
+    void set_deafened(bool deafened);
+    void load_sources();
+    // Claims room screen ownership (busy/timeout fail closed), then starts capture; released on failure.
+    void start_share(ShareRequest request);
+    void stop_share();
+    void set_watching(bool watching);
+    // Main thread only; forwards a caller-owned CALayer* (nullptr detaches) to the screen runtime.
+    [[nodiscard]] std::optional<screen::ScreenShareError> attach_preview_surface(void* host_layer);
+    [[nodiscard]] std::optional<screen::ScreenShareError> attach_remote_surface(void* host_layer);
+
+    // Cancels in-flight network work, joins the worker and leaves voice; no listener call follows.
     void stop() noexcept;
 
     [[nodiscard]] ProductSnapshot snapshot() const;
