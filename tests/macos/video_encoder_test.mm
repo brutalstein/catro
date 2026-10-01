@@ -56,8 +56,8 @@ NativeVideoFrame frame() {
         .lease = std::make_shared<int>(1),
         .pixel_buffer = reinterpret_cast<void*>(1),
         .sequence = 7,
-        .width = 1920,
-        .height = 1080,
+        .width = 1280,
+        .height = 720,
         .pts_100ns = 500,
     };
 }

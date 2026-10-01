@@ -457,15 +457,19 @@ std::optional<ScreenCaptureError> MacScreenCapture::start_source(
 }
 
 void MacScreenCapture::stop() noexcept {
+    bool was_active = false;
     {
         std::scoped_lock lock(impl_->mutex);
+        was_active = impl_->stats.state != ScreenCaptureState::idle;
         ++impl_->generation;
         impl_->stats.state = ScreenCaptureState::idle;
         impl_->stats.error.reset();
         impl_->latest = {};
         impl_->ready.notify_all();
     }
-    impl_->adapter->stop();
+    if (was_active) {
+        impl_->adapter->stop();
+    }
 }
 
 bool MacScreenCapture::wait_for_latest(

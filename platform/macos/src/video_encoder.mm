@@ -436,14 +436,18 @@ std::optional<VideoEncoderError> MacH264HardwareEncoder::encode(
 }
 
 void MacH264HardwareEncoder::stop() noexcept {
+    bool was_active = false;
     {
         std::scoped_lock lock(impl_->mutex);
+        was_active = impl_->active;
         ++impl_->generation;
         impl_->active = false;
         impl_->on_output = {};
         impl_->on_failure = {};
     }
-    impl_->adapter->stop();
+    if (was_active) {
+        impl_->adapter->stop();
+    }
 }
 
 bool MacH264HardwareEncoder::running() const noexcept {

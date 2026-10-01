@@ -11,6 +11,9 @@
 namespace catro::platform::macos {
 namespace {
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 class SampleBufferPresenterAdapter final : public VideoPresenterNativeAdapter {
 public:
     SampleBufferPresenterAdapter()
@@ -159,6 +162,8 @@ private:
     __strong AVSampleBufferDisplayLayer* display_layer_;
     __weak CALayer* host_layer_ = nil;
 };
+
+#pragma clang diagnostic pop
 
 } // namespace
 

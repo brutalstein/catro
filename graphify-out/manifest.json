@@ -2154,9 +2154,9 @@
     "semantic_hash": ""
   },
   "tests/macos/video_encoder_test.mm": {
-    "mtime": 1790866262.7749786,
-    "seen": 1790866295.7673247,
-    "ast_hash": "d564fdd008c770ef38577b6c17b5945f",
+    "mtime": 1790869221.0768847,
+    "seen": 1790869239.6520753,
+    "ast_hash": "3643d3dc5e48f1597e606298cdca2dfe",
     "semantic_hash": ""
   },
   "tests/macos/video_presenter_test.mm": {
@@ -2190,27 +2190,27 @@
     "semantic_hash": ""
   },
   "platform/macos/src/screen_capture.mm": {
-    "mtime": 1790868302.094324,
-    "seen": 1790868332.0546207,
-    "ast_hash": "ee441dd626e7644976c011271c0fb819",
+    "mtime": 1790869221.0608988,
+    "seen": 1790869239.6520753,
+    "ast_hash": "27d8405480e4cf7b6205a606005afdcc",
     "semantic_hash": ""
   },
   "platform/macos/src/video_decoder.mm": {
-    "mtime": 1790867753.5495436,
-    "seen": 1790867889.6682804,
-    "ast_hash": "73db70f762bdeb8419be1621ec3494d6",
+    "mtime": 1790869221.0768847,
+    "seen": 1790869239.6520753,
+    "ast_hash": "56ee72b2e175216b4a195622d619757a",
     "semantic_hash": ""
   },
   "platform/macos/src/video_encoder.mm": {
-    "mtime": 1790867552.8493502,
-    "seen": 1790867889.6682804,
-    "ast_hash": "5ed79533b24c2097e16f9f7962fb4cbb",
+    "mtime": 1790869221.0608988,
+    "seen": 1790869239.6520753,
+    "ast_hash": "de7f64da8794c928d80558e12ca26bb8",
     "semantic_hash": ""
   },
   "platform/macos/src/video_presenter.mm": {
-    "mtime": 1790868722.230531,
-    "seen": 1790868737.9882994,
-    "ast_hash": "ae967c2748fb47a730ad768ddb8a6295",
+    "mtime": 1790869221.0768847,
+    "seen": 1790869239.6520753,
+    "ast_hash": "401fc92a50f2287c991e4ef2931df5e7",
     "semantic_hash": ""
   }
 }
