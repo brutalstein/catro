@@ -146,6 +146,9 @@ if(APPLE)
     catro_add_test(macos_screen_runtime macos/screen_runtime_test.mm)
     target_link_libraries(catro_macos_screen_runtime_test PRIVATE catro_screen_runtime_macos
         "-framework QuartzCore")
+
+    catro_add_test(macos_product_session macos/product_session_test.cpp)
+    target_link_libraries(catro_macos_product_session_test PRIVATE catro_product_session_macos)
 endif()
 
 # Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.

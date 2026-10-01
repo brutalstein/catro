@@ -76,6 +76,7 @@ add_subdirectory(apps/voice-runtime/macos)
 add_subdirectory(apps/screen-runtime/common)
 add_subdirectory(apps/screen-runtime/windows)
 add_subdirectory(apps/screen-runtime/macos)
+add_subdirectory(apps/product-session/macos)
 
 if(CATRO_BUILD_TESTS)
     enable_testing()
