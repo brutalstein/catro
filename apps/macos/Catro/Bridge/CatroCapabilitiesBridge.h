@@ -1,5 +1,8 @@
 #import <Foundation/Foundation.h>
 
+// The product workspace bridge lives beside the session library so tests build without Swift.
+#import "../../../product-session/macos/bridge/CatroProductBridge.h"
+
 // The only surface Swift sees of the C++ core: immutable value objects copied from the shared
 // diagnostics view model, and a service handle with a start/refresh/stop lifecycle. No C++ type,
 // CoreFoundation reference, or Metal object crosses this header.

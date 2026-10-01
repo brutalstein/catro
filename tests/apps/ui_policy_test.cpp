@@ -335,3 +335,56 @@ TEST_CASE("owner access requests stay virtualized authorized and bounded") {
     CHECK(source.find("directory_server_->role != \"owner\"") != std::string::npos);
     CHECK(source.find("directory_server_->public_code.empty()") != std::string::npos);
 }
+
+TEST_CASE("macOS product shell stays native accessible and free of view-body media work") {
+    const std::filesystem::path root = CATRO_MACOS_UI_DIR;
+    const std::array views{
+        "Product/ServerWorkspace.swift", "Product/ChannelSidebar.swift", "Product/MemberSidebar.swift",
+        "Product/VoiceControls.swift",   "Product/StreamViewer.swift",   "Product/SourcePicker.swift",
+        "Product/SettingsView.swift",    "CatroApp.swift",
+    };
+    std::string all;
+    for (const auto* file : views) {
+        const auto source = read(root / file);
+        INFO(file);
+        // Only AppModel owns the bridge; views never reach native media directly.
+        CHECK(source.find("CatroProductBridge") == std::string::npos);
+        CHECK(source.find("bridge.") == std::string::npos);
+        // Catro's own source picker, never the stock ScreenCaptureKit one.
+        CHECK(source.find("SCContentSharingPicker") == std::string::npos);
+        all += source;
+    }
+
+    CHECK(read(root / "Product/ServerWorkspace.swift").find("NavigationSplitView") != std::string::npos);
+    for (const auto* file : {"Product/ServerWorkspace.swift", "Product/ChannelSidebar.swift",
+                             "Product/MemberSidebar.swift", "Product/SourcePicker.swift"}) {
+        INFO(file);
+        const auto source = read(root / file);
+        CHECK((source.find("List(") != std::string::npos || source.find("List {") != std::string::npos));
+    }
+    CHECK(all.find(".accessibilityLabel(") != std::string::npos);
+    CHECK(all.find(".help(") != std::string::npos);
+
+    const auto app = read(root / "CatroApp.swift");
+    CHECK(app.find(".keyboardShortcut(\"j\", modifiers: [.command, .shift])") != std::string::npos);
+    CHECK(app.find(".keyboardShortcut(\"m\", modifiers: [.command, .shift])") != std::string::npos);
+    CHECK(app.find(".keyboardShortcut(\"d\", modifiers: [.command, .shift])") != std::string::npos);
+
+    // Any motion must honour Reduce Motion.
+    if (all.find("withAnimation") != std::string::npos || all.find(".animation(") != std::string::npos) {
+        CHECK(all.find("accessibilityReduceMotion") != std::string::npos);
+    }
+
+    // Layers attach only from NSView lifecycle callbacks.
+    const auto stream = read(root / "Product/StreamViewer.swift");
+    CHECK(stream.find("NSViewRepresentable") != std::string::npos);
+    CHECK(stream.find("dismantleNSView") != std::string::npos);
+
+    // Same Settings rows and values as Windows.
+    const auto settings = read(root / "Product/SettingsView.swift");
+    for (const auto* row : {"\"Theme\", value: \"System\"", "\"Microphone\", value: \"Default\"",
+                            "\"Output\", value: \"Default\"", "\"Profile\", value: \"Balanced\""}) {
+        INFO(row);
+        CHECK(settings.find(row) != std::string::npos);
+    }
+}

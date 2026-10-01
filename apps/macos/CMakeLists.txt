@@ -1,5 +1,6 @@
-# SwiftUI diagnostics shell. CMake generates the Xcode project (macos-clang preset), so the shell
-# links the core, platform, and view-model targets directly instead of prebuilt libraries.
+# SwiftUI product shell (servers, text, voice, screen sharing, settings) and the diagnostics window.
+# CMake generates the Xcode project (macos-clang preset), so the shell links the core, platform, and
+# view-model targets directly instead of prebuilt libraries.
 enable_language(Swift)
 
 set(bridge_header ${CMAKE_CURRENT_SOURCE_DIR}/Catro/Bridge/CatroCapabilitiesBridge.h)
@@ -10,6 +11,14 @@ add_executable(catro_macos_app MACOSX_BUNDLE
     Catro/Diagnostics/DiagnosticsViewModel.swift
     Catro/Audio/AudioView.swift
     Catro/Audio/AudioViewModel.swift
+    Catro/Product/AppModel.swift
+    Catro/Product/ServerWorkspace.swift
+    Catro/Product/ChannelSidebar.swift
+    Catro/Product/MemberSidebar.swift
+    Catro/Product/VoiceControls.swift
+    Catro/Product/SourcePicker.swift
+    Catro/Product/StreamViewer.swift
+    Catro/Product/SettingsView.swift
     Catro/Bridge/CatroCapabilitiesBridge.mm
     Catro/Bridge/CatroAudioBridge.mm
     ${bridge_header})
@@ -27,8 +36,8 @@ target_include_directories(catro_macos_app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/C
 target_compile_options(catro_macos_app PRIVATE
     "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-import-objc-header ${bridge_header}>"
     "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
-target_link_libraries(catro_macos_app PRIVATE catro_diagnostics Catro::Macos
-    "-framework AppKit" "-framework SwiftUI")
+target_link_libraries(catro_macos_app PRIVATE catro_diagnostics Catro::Macos catro_product_bridge_macos
+    "-framework AppKit" "-framework SwiftUI" "-framework QuartzCore")
 
 # The passive probe helper runs from beside the application executable.
 add_dependencies(catro_macos_app catro_capability_probe)

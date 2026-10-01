@@ -104,6 +104,7 @@ target_link_libraries(catro_presentation_state_test PRIVATE Catro::Shell)
 catro_add_test(ui_policy apps/ui_policy_test.cpp)
 target_compile_definitions(catro_ui_policy_test PRIVATE
     CATRO_WINDOWS_XAML_DIR="${CMAKE_SOURCE_DIR}/apps/windows/Catro"
+    CATRO_MACOS_UI_DIR="${CMAKE_SOURCE_DIR}/apps/macos/Catro"
 )
 catro_add_test(report_cli tools/report_cli_test.cpp)
 target_link_libraries(catro_report_cli_test PRIVATE catro_report_cli)
