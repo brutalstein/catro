@@ -83,10 +83,24 @@ The Windows shell has a reproducible external accessibility-tree crash:
 - October 1, 2026 05:19:10: the no-UIA screenshot attempt again ended with `0xc000027b`; WER at
   05:19:13 again named `combase.dll` and preserved `8001010e`.
 
-The failure matches the upstream Windows App SDK issue
-[microsoft-ui-xaml#11139](https://github.com/microsoft/microsoft-ui-xaml/issues/11139). Application
-state refactoring is not a fix for this failure. Narrator/UIA and screen-reader readiness remain a
-release blocker.
+These failures were first attributed to the upstream Windows App SDK issue
+[microsoft-ui-xaml#11139](https://github.com/microsoft/microsoft-ui-xaml/issues/11139).
+
+**Resolved October 2, 2026 — the cause was in Catro.** Dump analysis showed:
+
+- The XAML-generated `wWinMain` called `winrt::init_apartment()`, putting the UI thread in the
+  MTA. A `winrt::apartment_context` captured there never marshalled back, so
+  `MainWindow::BeginDirectoryBootstrap` touched XAML from the thread pool and its
+  `fire_and_forget` coroutine terminated the process 7–23 seconds after every launch, with or
+  without UI Automation clients.
+- With an MTA UI thread, a cross-process UI Automation raw-view walk failed at the XAML island
+  root (`E_UNEXPECTED`) and could end in an access violation inside `Microsoft.UI.Xaml.dll`.
+
+Fixes: coroutines resume through the UI thread's `DispatcherQueue` (`UiThread` in `pch.h`), and
+Catro supplies its own `wWinMain` (`DISABLE_XAML_GENERATED_MAIN`) with a single-threaded
+apartment. Evidence on this host: three launches stayed alive for 45 seconds (previously all
+died), and a cross-process `System.Windows.Automation` raw-view walk reached all 57 elements twice
+without a crash (previously it failed at element 8). `catro_ui_policy` pins both fixes.
 
 ## Release status
 
@@ -98,7 +112,7 @@ release blocker.
 | Full Windows test script | Pass, 49/49 |
 | Keyboard smoke execution | Blocked: host rejected foreground acquisition |
 | Default and narrow visual acceptance | Blocked/pending clean interactive desktop run |
-| Narrator/UIA | Blocked by upstream/framework crash |
+| Narrator/UIA | Cross-process UIA walk passes; live Narrator session still pending |
 
 Production-parity work resumes at Task 4 only after this interruption is handed off with these
 open gates unchanged. No Task 4–5 runtime interface was modified.

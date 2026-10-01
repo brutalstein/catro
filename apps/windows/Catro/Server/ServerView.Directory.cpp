@@ -116,7 +116,7 @@ ServerView::BeginMemberRefresh() {
     const auto service = *directory_service_;
     const auto access_token = directory_access_token_;
     const auto server_id = directory_server_->id;
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
     auto result =
@@ -189,7 +189,7 @@ ServerView::BeginJoinRequestRefresh() {
         directory_access_token_;
     const auto server_id =
         directory_server_->id;
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
     auto result =
@@ -393,7 +393,7 @@ ServerView::BeginJoinRequestDecision(
         approve
             ? L"Approving access request…"
             : L"Rejecting access request…");
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
     auto result =
@@ -525,7 +525,7 @@ ServerView::BeginMessageRefresh() {
     const auto access_token = directory_access_token_;
     const auto server = *directory_server_;
     const auto after = message_cursor_;
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
     auto result =
@@ -629,7 +629,7 @@ ServerView::BeginSendMessage() {
     const auto service = *directory_service_;
     const auto access_token = directory_access_token_;
     const auto server = *directory_server_;
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
     auto result =
@@ -695,7 +695,7 @@ ServerView::BeginInvite() {
         directory_access_token_;
     const auto server_id =
         directory_server_->id;
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
 

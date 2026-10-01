@@ -388,3 +388,21 @@ TEST_CASE("macOS product shell stays native accessible and free of view-body med
         CHECK(settings.find(row) != std::string::npos);
     }
 }
+
+TEST_CASE("Windows shell coroutines return to the UI thread through its DispatcherQueue") {
+    // WinUI 3's generated wWinMain initializes the UI thread in the MTA, so an apartment_context
+    // captured there never marshals back and the next XAML call fails with RPC_E_WRONG_THREAD.
+    const auto root = std::filesystem::path(CATRO_WINDOWS_XAML_DIR);
+    const auto source = read_main_sources(root) + read_server_sources(root);
+    CHECK(source.find("apartment_context") == std::string::npos);
+    CHECK(source.find("UiThread ui_thread") != std::string::npos);
+
+    const auto pch = read(root / "pch.h");
+    CHECK(pch.find("TryEnqueue") != std::string::npos);
+    CHECK(pch.find("HasThreadAccess") != std::string::npos);
+
+    // An STA UI thread keeps the XAML island walkable by cross-process UI Automation clients.
+    CHECK(read(root / "Catro.vcxproj").find("DISABLE_XAML_GENERATED_MAIN") != std::string::npos);
+    CHECK(read(root / "App.xaml.cpp").find("init_apartment(winrt::apartment_type::single_threaded)") !=
+          std::string::npos);
+}

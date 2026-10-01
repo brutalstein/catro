@@ -194,8 +194,7 @@ ServerView::ClaimScreenOwnership() {
         co_return true;
     }
 
-    auto ui_thread =
-        winrt::apartment_context{};
+    UiThread ui_thread;
     const auto deadline =
         std::chrono::steady_clock::now() +
         std::chrono::seconds{3};
@@ -246,7 +245,7 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
     UpdateVoiceUi();
 
     try {
-        winrt::apartment_context ui_thread;
+        UiThread ui_thread;
         std::vector<
             catro::platform::windows::CaptureSource> sources;
         std::exception_ptr enumeration_failure;

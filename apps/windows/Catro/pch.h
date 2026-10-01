@@ -27,3 +27,26 @@
 #include <winrt/Microsoft.UI.Xaml.Markup.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.Navigation.h>
+
+#include <coroutine>
+
+// Captures the calling UI thread and resumes a coroutine on it. WinUI 3's generated wWinMain puts
+// the UI thread in the MTA, so winrt::apartment_context cannot marshal back to it and the next XAML
+// call would fail with RPC_E_WRONG_THREAD; the thread's DispatcherQueue always can.
+class UiThread {
+public:
+    UiThread() : queue_(winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread()) {}
+
+    bool await_ready() const noexcept { return queue_.HasThreadAccess(); }
+
+    void await_suspend(std::coroutine_handle<> resume) const {
+        // A refused enqueue means the window is shutting down; the continuation is dropped rather
+        // than resumed on a thread that cannot touch XAML.
+        (void)queue_.TryEnqueue([resume] { resume(); });
+    }
+
+    void await_resume() const noexcept {}
+
+private:
+    winrt::Microsoft::UI::Dispatching::DispatcherQueue queue_;
+};

@@ -54,7 +54,7 @@ MainWindow::BeginDirectoryBootstrap() {
     }
 
     const auto state = *local_state_;
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
 
@@ -330,7 +330,7 @@ MainWindow::BeginServerCodeLookup(
     const auto service = *directory_service_;
     const auto access_token =
         directory_access_token_;
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
     auto lookup =
@@ -557,7 +557,7 @@ MainWindow::BeginInviteJoin(
         *directory_service_;
     const auto access_token =
         directory_access_token_;
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
     const auto accepted =
@@ -624,7 +624,7 @@ MainWindow::BeginOutgoingJoinRequestRefresh() {
     const auto service = *directory_service_;
     const auto access_token =
         directory_access_token_;
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
     auto result =
@@ -709,7 +709,7 @@ MainWindow::BeginDirectoryServerRefresh() {
         active_directory_server_
             ? active_directory_server_->id
             : std::string{};
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
     auto result =

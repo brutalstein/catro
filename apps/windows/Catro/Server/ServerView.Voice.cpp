@@ -110,7 +110,7 @@ ServerView::BeginVoiceJoin() {
         *directory_server_;
     const auto requested_server_id =
         server.id;
-    winrt::apartment_context ui_thread;
+    UiThread ui_thread;
 
     co_await winrt::resume_background();
 
