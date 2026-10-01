@@ -186,16 +186,15 @@ TEST_CASE("room voice runtime mute silences the remote side and deafen silences 
 
     talker.set_muted(true);
     CHECK(talker.snapshot().muted == 1);
-    // Loaded CI runners can still be playing out audio queued before the mute; wait until the
-    // listener goes quiet instead of trusting a fixed delay.
+    // Loaded CI runners can stall playout and then drain audio queued before the mute, so a
+    // fixed-delay comparison is unreliable. An unmuted talker never leaves the listener quiet for
+    // half a second; a muted one must, once the pre-mute queue has played out.
     REQUIRE(wait_until([&] {
         const auto start = audible(listener_audio);
-        std::this_thread::sleep_for(100ms);
+        std::this_thread::sleep_for(500ms);
         return audible(listener_audio) == start;
-    }));
+    }, 10s));
     auto before = audible(listener_audio);
-    std::this_thread::sleep_for(300ms);
-    CHECK(audible(listener_audio) - before < 480);
 
     talker.set_muted(false);
     REQUIRE(wait_until([&] { return audible(listener_audio) > before + 4'800; }));

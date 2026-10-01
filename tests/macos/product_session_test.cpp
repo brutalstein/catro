@@ -564,6 +564,8 @@ TEST_CASE("macOS product session joins voice through provisioning, room, voice a
 
     session.set_muted(true);
     session.set_deafened(true);
+    // Both toggles publish; settle them first so poll_once observes the poll's own revision.
+    REQUIRE(wait_until(session, [](const auto& s) { return s.media.muted && s.media.deafened; }));
     {
         std::scoped_lock lock(media.mutex);
         media.peers = 2;
