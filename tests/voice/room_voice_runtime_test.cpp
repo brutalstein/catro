@@ -186,7 +186,13 @@ TEST_CASE("room voice runtime mute silences the remote side and deafen silences 
 
     talker.set_muted(true);
     CHECK(talker.snapshot().muted == 1);
-    std::this_thread::sleep_for(300ms);
+    // Loaded CI runners can still be playing out audio queued before the mute; wait until the
+    // listener goes quiet instead of trusting a fixed delay.
+    REQUIRE(wait_until([&] {
+        const auto start = audible(listener_audio);
+        std::this_thread::sleep_for(100ms);
+        return audible(listener_audio) == start;
+    }));
     auto before = audible(listener_audio);
     std::this_thread::sleep_for(300ms);
     CHECK(audible(listener_audio) - before < 480);
