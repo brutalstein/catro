@@ -98,7 +98,9 @@ public:
                 source_.on_render(frames);
                 std::uint64_t audible = 0;
                 for (const auto sample : frames) {
-                    audible += std::abs(sample) > 1e-5F ? 1U : 0U;
+                    // -60 dBFS: Opus can decode digital silence to tiny non-zero residue (seen on
+                    // arm64), which is not audible and must not count as leaked audio.
+                    audible += std::abs(sample) > 1e-3F ? 1U : 0U;
                 }
                 nonzero_samples_.fetch_add(audible, std::memory_order_relaxed);
                 next += 10ms;
