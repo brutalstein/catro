@@ -149,6 +149,10 @@ if(APPLE)
 
     catro_add_test(macos_product_session macos/product_session_test.cpp)
     target_link_libraries(catro_macos_product_session_test PRIVATE catro_product_session_macos)
+
+    catro_add_test(macos_product_bridge macos/product_bridge_test.mm)
+    target_link_libraries(catro_macos_product_bridge_test PRIVATE catro_product_bridge_macos)
+    target_compile_options(catro_macos_product_bridge_test PRIVATE -fobjc-arc)
 endif()
 
 # Native Windows layers target the MSVC toolchain; other Windows compilers build the portable core only.

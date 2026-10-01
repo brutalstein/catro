@@ -423,8 +423,8 @@ TEST_CASE("macOS product session synchronizes and resets state on server switch"
     CHECK(snapshot.workspace.send_message.available());
     REQUIRE(snapshot.members.size() == 2);
     CHECK(snapshot.members.front().owner);
-    CHECK(snapshot.members.front().self);
-    CHECK_FALSE(snapshot.members.back().self);
+    CHECK(snapshot.members.front().is_self);
+    CHECK_FALSE(snapshot.members.back().is_self);
     REQUIRE(snapshot.messages.size() == 3);
     CHECK(snapshot.messages.back().content == "server-1:3");
     REQUIRE(snapshot.pending_requests.size() == 1);

@@ -38,7 +38,7 @@ struct MemberItem {
     std::string user_id;
     std::string display_name;
     bool owner = false;
-    bool self = false;
+    bool is_self = false;
 };
 
 struct MessageItem {

@@ -10,3 +10,12 @@ target_link_libraries(catro_product_session_macos
     PRIVATE catro_room_runtime
 )
 catro_enable_warnings(catro_product_session_macos)
+
+# Objective-C++ bridge Swift imports; kept beside the session so the Makefile sanitizer build (which
+# skips the Swift app) still compiles and tests it.
+add_library(catro_product_bridge_macos STATIC bridge/CatroProductBridge.mm)
+target_include_directories(catro_product_bridge_macos PUBLIC bridge)
+target_link_libraries(catro_product_bridge_macos
+    PUBLIC catro_product_session_macos "-framework Foundation" "-framework QuartzCore")
+target_compile_options(catro_product_bridge_macos PRIVATE -fobjc-arc)
+catro_enable_warnings(catro_product_bridge_macos)
