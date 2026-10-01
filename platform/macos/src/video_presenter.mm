@@ -44,7 +44,7 @@ public:
         }
         display_layer_.hidden = !visible;
         if (!visible) {
-            [display_layer_ flushAndRemoveImage];
+            flush(true);
         }
         return std::nullopt;
     }
@@ -55,10 +55,10 @@ public:
             return VideoPresenterError{
                 VideoPresenterErrorCode::invalid_source, 0};
         }
-        if (display_layer_.status == AVQueuedSampleBufferRenderingStatusFailed) {
-            [display_layer_ flush];
+        if (failed()) {
+            flush(false);
         }
-        if (!display_layer_.readyForMoreMediaData) {
+        if (!ready()) {
             return VideoPresenterError{
                 VideoPresenterErrorCode::present_failed, 0};
         }
@@ -98,7 +98,11 @@ public:
         __strong AVSampleBufferDisplayLayer* layer = display_layer_;
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!layer.hidden && layer.superlayer != nil) {
-                [layer enqueueSampleBuffer:sample];
+                if (@available(macOS 15.0, *)) {
+                    [layer.sampleBufferRenderer enqueueSampleBuffer:sample];
+                } else {
+                    [layer enqueueSampleBuffer:sample];
+                }
             }
             CFRelease(sample);
         });
@@ -107,7 +111,7 @@ public:
 
     void reset() noexcept override {
         auto detach = ^{
-            [display_layer_ flushAndRemoveImage];
+            flush(true);
             [display_layer_ removeFromSuperlayer];
             display_layer_.hidden = YES;
             host_layer_ = nil;
@@ -124,6 +128,34 @@ public:
     }
 
 private:
+    [[nodiscard]] bool failed() const noexcept {
+        if (@available(macOS 15.0, *)) {
+            return display_layer_.sampleBufferRenderer.status ==
+                AVQueuedSampleBufferRenderingStatusFailed;
+        }
+        return display_layer_.status ==
+            AVQueuedSampleBufferRenderingStatusFailed;
+    }
+
+    [[nodiscard]] bool ready() const noexcept {
+        if (@available(macOS 15.0, *)) {
+            return display_layer_.sampleBufferRenderer.readyForMoreMediaData;
+        }
+        return display_layer_.readyForMoreMediaData;
+    }
+
+    void flush(bool remove_image) noexcept {
+        if (@available(macOS 15.0, *)) {
+            [display_layer_.sampleBufferRenderer
+                flushWithRemovalOfDisplayedImage:remove_image
+                               completionHandler:nil];
+        } else if (remove_image) {
+            [display_layer_ flushAndRemoveImage];
+        } else {
+            [display_layer_ flush];
+        }
+    }
+
     __strong AVSampleBufferDisplayLayer* display_layer_;
     __weak CALayer* host_layer_ = nil;
 };
