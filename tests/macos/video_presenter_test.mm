@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
+#include <cstdint>
 #include <thread>
 
 using namespace catro;
@@ -53,12 +54,18 @@ TEST_CASE("macOS presenter shows surfaces, tracks resizes, and detaches its laye
 TEST_CASE("macOS presenter tolerates visibility changes while a worker presents") {
     MacVideoPresenter presenter;
     std::atomic_bool running{true};
+    std::atomic<std::uint64_t> attempts{0};
     std::thread worker([&] {
         const auto frame = test::make_nv12_surface(320, 180);
         while (running.load()) {
             (void)presenter.present(frame);
+            attempts.fetch_add(1);
         }
     });
+    // Thread start-up can outlast the toggles; make sure they overlap real presents.
+    while (attempts.load() == 0) {
+        std::this_thread::yield();
+    }
     for (int index = 0; index < 50; ++index) {
         presenter.set_visible(index % 2 == 0);
         std::this_thread::yield();
