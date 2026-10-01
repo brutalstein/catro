@@ -2190,9 +2190,9 @@
     "semantic_hash": ""
   },
   "platform/macos/src/screen_capture.mm": {
-    "mtime": 1790867753.5495436,
-    "seen": 1790867889.6682804,
-    "ast_hash": "bbf96ee04aaf7400646a4b821b90abea",
+    "mtime": 1790868302.094324,
+    "seen": 1790868332.0546207,
+    "ast_hash": "ee441dd626e7644976c011271c0fb819",
     "semantic_hash": ""
   },
   "platform/macos/src/video_decoder.mm": {

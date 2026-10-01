@@ -70704,7 +70704,7 @@
       "file_type": "code",
       "norm_label": "catroscreenstreamoutput",
       "source_file": "platform/macos/src/screen_capture.mm",
-      "source_location": "L32"
+      "source_location": "L39"
     },
     {
       "id": "platform_macos_src_screen_capture_catroscreenstreamoutput_initwithframehandlerstophandler",
@@ -70715,7 +70715,7 @@
       "file_type": "code",
       "norm_label": "-initwithframehandlerstophandler",
       "source_file": "platform/macos/src/screen_capture.mm",
-      "source_location": "L33"
+      "source_location": "L40"
     },
     {
       "id": "platform_macos_src_screen_capture_catroscreenstreamoutput_streamdidoutputsamplebufferoftype",
@@ -70726,7 +70726,7 @@
       "file_type": "code",
       "norm_label": "-streamdidoutputsamplebufferoftype",
       "source_file": "platform/macos/src/screen_capture.mm",
-      "source_location": "L58"
+      "source_location": "L65"
     },
     {
       "id": "platform_macos_src_screen_capture_mm_nsobject",
@@ -206757,7 +206757,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "platform/macos/src/screen_capture.mm",
-      "source_location": "L32",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -218406,7 +218406,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "platform/macos/src/screen_capture.mm",
-      "source_location": "L32",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -218417,7 +218417,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "platform/macos/src/screen_capture.mm",
-      "source_location": "L32",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -218923,7 +218923,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "platform/macos/src/screen_capture.mm",
-      "source_location": "L32",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -222278,7 +222278,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "platform/macos/src/screen_capture.mm",
-      "source_location": "L33",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -222289,7 +222289,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "platform/macos/src/screen_capture.mm",
-      "source_location": "L58",
+      "source_location": "L65",
       "weight": 1.0
     },
     {
@@ -231068,5 +231068,5 @@
       "source_file": "docs/superpowers/specs/2026-09-26-native-foundation-capabilities-design.md"
     }
   ],
-  "built_at_commit": "3a332cecd08c56e9b2b2b7434970d41fc138936d"
+  "built_at_commit": "cbc5ff4dfe55bdcbf5ccb67b6dd0a437c865a08b"
 }

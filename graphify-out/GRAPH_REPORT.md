@@ -1,7 +1,7 @@
 # Graph Report - catro  (2026-10-01)
 
 ## Corpus Check
-- 338 files · ~267,407 words
+- 338 files · ~267,423 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 22 file(s) not represented in the graph (top: (none) 5, .idl 5, .cmake 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3a332cec`
+- Built from commit: `cbc5ff4d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

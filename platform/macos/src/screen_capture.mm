@@ -18,8 +18,13 @@ namespace catro::platform::macos {
 namespace {
 
 [[nodiscard]] std::string utf8(NSString* value) {
-    return value == nil ? std::string{} : std::string{value.UTF8String ?: ""};
+    if (value == nil || value.UTF8String == nullptr) {
+        return {};
+    }
+    return std::string{value.UTF8String};
 }
+
+} // namespace
 
 [[nodiscard]] ScreenCaptureError native_error(
     NSError* error,
@@ -28,6 +33,8 @@ namespace {
         fallback,
         error == nil ? 0 : static_cast<std::int64_t>(error.code)};
 }
+
+} // namespace catro::platform::macos
 
 @interface CatroScreenStreamOutput : NSObject <SCStreamOutput, SCStreamDelegate>
 - (instancetype)initWithFrameHandler:
@@ -83,7 +90,7 @@ namespace {
         ? static_cast<std::int64_t>(
               CMTimeConvertScale(pts, 10'000'000, kCMTimeRoundingMethod_Default).value)
         : 0;
-    _frameHandler(NativeVideoFrame{
+    _frameHandler(catro::platform::macos::NativeVideoFrame{
         .lease = std::move(lease),
         .pixel_buffer = pixel,
         .sequence = _sequence.fetch_add(1, std::memory_order_relaxed) + 1,
@@ -96,13 +103,16 @@ namespace {
 
 - (void)stream:(SCStream*)stream didStopWithError:(NSError*)error {
     (void)stream;
-    _stopHandler(native_error(
+    _stopHandler(catro::platform::macos::native_error(
         error,
         CGPreflightScreenCaptureAccess()
-            ? ScreenCaptureErrorCode::frame_failure
-            : ScreenCaptureErrorCode::permission_denied));
+            ? catro::platform::macos::ScreenCaptureErrorCode::frame_failure
+            : catro::platform::macos::ScreenCaptureErrorCode::permission_denied));
 }
 @end
+
+namespace catro::platform::macos {
+namespace {
 
 class ScreenCaptureKitAdapter final : public ScreenCaptureNativeAdapter {
 public:
