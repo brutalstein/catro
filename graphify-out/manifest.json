@@ -1,812 +1,2162 @@
 {
   "CMakePresets.json": {
-    "mtime": 1790450903.8870878,
-    "seen": 1790470014.403427,
-    "ast_hash": "95a0c37719939a46230416152a5158da",
-    "semantic_hash": "95a0c37719939a46230416152a5158da"
+    "mtime": 1790819158.2654715,
+    "seen": 1790821662.815639,
+    "ast_hash": "5d86617a9ef5f28dad407f4110078021",
+    "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/evidence.hpp": {
-    "mtime": 1790460487.510962,
-    "seen": 1790470014.403427,
-    "ast_hash": "abcb3a8c44da02f40daac4217fa0b075",
-    "semantic_hash": "abcb3a8c44da02f40daac4217fa0b075"
+    "mtime": 1790819158.316145,
+    "seen": 1790821662.815639,
+    "ast_hash": "d852869670fe906d5fcb06c713a4bbec",
+    "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/ids.hpp": {
-    "mtime": 1790460087.312589,
-    "seen": 1790470014.403427,
-    "ast_hash": "c111ade456726418e1ff7c25ad93c541",
-    "semantic_hash": "c111ade456726418e1ff7c25ad93c541"
+    "mtime": 1790819158.316145,
+    "seen": 1790821662.815639,
+    "ast_hash": "ff8c204e4a73ec120dd689a73695d7fe",
+    "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/media_plan.hpp": {
-    "mtime": 1790462490.8799672,
-    "seen": 1790470014.403427,
-    "ast_hash": "19f65983475e2b65e25b4baed07a112d",
-    "semantic_hash": "19f65983475e2b65e25b4baed07a112d"
+    "mtime": 1790819158.3171444,
+    "seen": 1790821662.815639,
+    "ast_hash": "acd15bffc05442265c62c51b4b7e954b",
+    "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/model.hpp": {
-    "mtime": 1790461682.3311832,
-    "seen": 1790470014.403427,
-    "ast_hash": "b342bd6fbe9584ce62a81498bdfda21f",
-    "semantic_hash": "b342bd6fbe9584ce62a81498bdfda21f"
+    "mtime": 1790819158.3181455,
+    "seen": 1790821662.815639,
+    "ast_hash": "be32d0adc8db5edfe30daa8558a5fb94",
+    "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/policy.hpp": {
-    "mtime": 1790462492.3268826,
-    "seen": 1790470014.403427,
-    "ast_hash": "a4f2a7d093f1139bf75a2c3ed8defa74",
-    "semantic_hash": "a4f2a7d093f1139bf75a2c3ed8defa74"
+    "mtime": 1790819158.3191462,
+    "seen": 1790821662.815639,
+    "ast_hash": "b71c73974ea9dc667445817b48cc7782",
+    "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/rational.hpp": {
-    "mtime": 1790460088.61804,
-    "seen": 1790470014.403427,
-    "ast_hash": "456d49be3c38360b62bd42a09a9f20ee",
-    "semantic_hash": "456d49be3c38360b62bd42a09a9f20ee"
+    "mtime": 1790819158.320145,
+    "seen": 1790821662.815639,
+    "ast_hash": "2889c518e51f77f32e0f6a7386a14270",
+    "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/snapshot_diff.hpp": {
-    "mtime": 1790460753.3254344,
-    "seen": 1790470014.403427,
-    "ast_hash": "0dd718387dc8f8c260c50318c992a86d",
-    "semantic_hash": "0dd718387dc8f8c260c50318c992a86d"
+    "mtime": 1790819158.3210943,
+    "seen": 1790821662.815639,
+    "ast_hash": "e56fa95a87640aa4d4e327d301c1957c",
+    "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/validation.hpp": {
-    "mtime": 1790460751.8831458,
-    "seen": 1790470014.403427,
-    "ast_hash": "63e0670b04823dcbd8b6d85a6d493b00",
-    "semantic_hash": "63e0670b04823dcbd8b6d85a6d493b00"
+    "mtime": 1790819158.3218403,
+    "seen": 1790821662.815639,
+    "ast_hash": "720807a0393fd930aa06d2c753b73f35",
+    "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/version.hpp": {
-    "mtime": 1790460085.9308643,
-    "seen": 1790470014.403427,
-    "ast_hash": "6429ab2792dec358504a6d47a16ec720",
-    "semantic_hash": "6429ab2792dec358504a6d47a16ec720"
+    "mtime": 1790819158.322349,
+    "seen": 1790821662.815639,
+    "ast_hash": "dc73f42106ecb409a1998b2c78ebb2a0",
+    "semantic_hash": ""
   },
   "core/capabilities/src/candidate_ranking.cpp": {
-    "mtime": 1790462893.4727755,
-    "seen": 1790470014.403427,
-    "ast_hash": "8602a99cae7f5c057213801219ef46e9",
-    "semantic_hash": "8602a99cae7f5c057213801219ef46e9"
+    "mtime": 1790819158.3233545,
+    "seen": 1790821662.815639,
+    "ast_hash": "e4fa5b0bf097bbe1f487c3ad804a2ee7",
+    "semantic_hash": ""
   },
   "core/capabilities/src/local_envelope.cpp": {
-    "mtime": 1790462740.3701942,
-    "seen": 1790470014.403427,
-    "ast_hash": "6f714721142040340613572b92d79a0f",
-    "semantic_hash": "6f714721142040340613572b92d79a0f"
+    "mtime": 1790819158.3233545,
+    "seen": 1790821662.815639,
+    "ast_hash": "ce9e334bea449da8cf6de7b91a9ef177",
+    "semantic_hash": ""
   },
   "core/capabilities/src/operating_profile.cpp": {
-    "mtime": 1790461402.6943924,
-    "seen": 1790470014.403427,
-    "ast_hash": "59f94e2ae8f4f0c111e99dcfe0b45f4c",
-    "semantic_hash": "59f94e2ae8f4f0c111e99dcfe0b45f4c"
+    "mtime": 1790819158.3243527,
+    "seen": 1790821662.815639,
+    "ast_hash": "f1f39dbe7f83016ce66e4571b93ba9eb",
+    "semantic_hash": ""
   },
   "core/capabilities/src/policy.cpp": {
-    "mtime": 1790462831.6679475,
-    "seen": 1790470014.403427,
-    "ast_hash": "d0e0b2769cfabcfe8683d2ae6530aedb",
-    "semantic_hash": "d0e0b2769cfabcfe8683d2ae6530aedb"
+    "mtime": 1790819158.3253527,
+    "seen": 1790821662.815639,
+    "ast_hash": "d9d646f4c04f30d878c942a290711246",
+    "semantic_hash": ""
   },
   "core/capabilities/src/policy_internal.hpp": {
-    "mtime": 1790462707.8212662,
-    "seen": 1790470014.403427,
-    "ast_hash": "c5733a56436c9936040f770e0d06b2a5",
-    "semantic_hash": "c5733a56436c9936040f770e0d06b2a5"
+    "mtime": 1790819158.3253527,
+    "seen": 1790821662.815639,
+    "ast_hash": "6e2a186d30b5d85f245067068c0d8053",
+    "semantic_hash": ""
   },
   "core/capabilities/src/snapshot_diff.cpp": {
-    "mtime": 1790460960.4367478,
-    "seen": 1790470014.403427,
-    "ast_hash": "2725a10b2d50f1a2f315fe87e3f7182c",
-    "semantic_hash": "2725a10b2d50f1a2f315fe87e3f7182c"
+    "mtime": 1790819158.3263535,
+    "seen": 1790821662.815639,
+    "ast_hash": "d30029ca9008f4867b5db6a5d2a33e3e",
+    "semantic_hash": ""
   },
   "core/capabilities/src/validation.cpp": {
-    "mtime": 1790463229.9376564,
-    "seen": 1790470014.403427,
-    "ast_hash": "2c628efe0218e93948c23209e817aa05",
-    "semantic_hash": "2c628efe0218e93948c23209e817aa05"
+    "mtime": 1790819158.3273528,
+    "seen": 1790821662.815639,
+    "ast_hash": "b44ca35697e61020d16e973fed8114da",
+    "semantic_hash": ""
   },
   "core/reporting/include/catro/reporting/canonical_json.hpp": {
-    "mtime": 1790470569.2278724,
-    "seen": 1790470710.080231,
-    "ast_hash": "e1f1888983cb8d4791d598c7e70d5c44",
+    "mtime": 1790819158.3348956,
+    "seen": 1790821662.815639,
+    "ast_hash": "46d1d4ea269a8a4bc5fe58f04e438024",
     "semantic_hash": ""
   },
   "core/reporting/include/catro/reporting/human_report.hpp": {
-    "mtime": 1790480143.8330672,
-    "seen": 1790503972.257685,
-    "ast_hash": "a50e50a9d50e26d15aaa6a3334e85b2a",
+    "mtime": 1790819158.3348956,
+    "seen": 1790821662.815639,
+    "ast_hash": "badc7ce0710b91945ba841210155de36",
     "semantic_hash": ""
   },
   "core/reporting/include/catro/reporting/report.hpp": {
-    "mtime": 1790480951.567772,
-    "seen": 1790503972.257685,
-    "ast_hash": "8adc3fbeceb96f48eb30c1396f86428f",
+    "mtime": 1790819158.3358943,
+    "seen": 1790821662.815639,
+    "ast_hash": "cbc8194adb63ef0a1ee1de46378b7614",
     "semantic_hash": ""
   },
   "core/reporting/src/canonical_json.cpp": {
-    "mtime": 1790478795.4763763,
-    "seen": 1790503972.257685,
-    "ast_hash": "d85dcde3074dc52383225f30ba4ac192",
+    "mtime": 1790819158.336895,
+    "seen": 1790821662.815639,
+    "ast_hash": "216fae0db7bc57b44462c5dee84a375b",
     "semantic_hash": ""
   },
   "core/reporting/src/human_report.cpp": {
-    "mtime": 1790480143.8330672,
-    "seen": 1790503972.257685,
-    "ast_hash": "db10af954230ca104bde0bb342e54b34",
+    "mtime": 1790819158.3378966,
+    "seen": 1790821662.815639,
+    "ast_hash": "25cdbc9ea8af29ba18e61c415cf7357b",
     "semantic_hash": ""
   },
   "core/reporting/src/schema.hpp": {
-    "mtime": 1790478795.4763763,
-    "seen": 1790503972.257685,
-    "ast_hash": "bae57a8c2abe9d8fb34c5eb9cb04f20d",
+    "mtime": 1790819158.3378966,
+    "seen": 1790821662.815639,
+    "ast_hash": "b44c023a59cbfc16714e1295369db262",
     "semantic_hash": ""
   },
   "tests/capabilities/canonical_determinism_test.cpp": {
-    "mtime": 1790463448.850906,
-    "seen": 1790470014.403427,
-    "ast_hash": "671609fdba6432370d6f68571045e510",
-    "semantic_hash": "671609fdba6432370d6f68571045e510"
+    "mtime": 1790819158.5917034,
+    "seen": 1790821662.815639,
+    "ast_hash": "325904dd9215fad0c005b5963ec160bd",
+    "semantic_hash": ""
   },
   "tests/capabilities/local_envelope_test.cpp": {
-    "mtime": 1790461347.6392083,
-    "seen": 1790470014.403427,
-    "ast_hash": "b0da948a224f5ee2810ec9e0feb5b708",
-    "semantic_hash": "b0da948a224f5ee2810ec9e0feb5b708"
+    "mtime": 1790819158.5926294,
+    "seen": 1790821662.815639,
+    "ast_hash": "26942631d459d3f26eadba4da9279e48",
+    "semantic_hash": ""
   },
   "tests/capabilities/model_test.cpp": {
-    "mtime": 1790460205.4815435,
-    "seen": 1790470014.403427,
-    "ast_hash": "8482822d2157ddfe8cb11690573149b6",
-    "semantic_hash": "8482822d2157ddfe8cb11690573149b6"
+    "mtime": 1790819158.5936332,
+    "seen": 1790821662.815639,
+    "ast_hash": "95fb88bbdd946384f723bb6617d1ec87",
+    "semantic_hash": ""
   },
   "tests/capabilities/operating_profile_test.cpp": {
-    "mtime": 1790461346.2275789,
-    "seen": 1790470014.403427,
-    "ast_hash": "6f26634a6bcd166cba28e8e88c087bbc",
-    "semantic_hash": "6f26634a6bcd166cba28e8e88c087bbc"
+    "mtime": 1790819158.5936332,
+    "seen": 1790821662.815639,
+    "ast_hash": "ad8676891b26d2d1e339a5957af761e8",
+    "semantic_hash": ""
   },
   "tests/capabilities/policy_pathology_test.cpp": {
-    "mtime": 1790463271.037628,
-    "seen": 1790470014.403427,
-    "ast_hash": "d4edafff7e754715008c69823cc8fee8",
-    "semantic_hash": "d4edafff7e754715008c69823cc8fee8"
+    "mtime": 1790819158.594633,
+    "seen": 1790821662.815639,
+    "ast_hash": "96c7dbada959806a8bc08a58292b8e78",
+    "semantic_hash": ""
   },
   "tests/capabilities/policy_test.cpp": {
-    "mtime": 1790462863.6560252,
-    "seen": 1790470014.403427,
-    "ast_hash": "f7bc07f2c7bd214eb6c1f5f36046212f",
-    "semantic_hash": "f7bc07f2c7bd214eb6c1f5f36046212f"
+    "mtime": 1790819158.594633,
+    "seen": 1790821662.815639,
+    "ast_hash": "16292e6e1f8635c3a3131b872f906bd1",
+    "semantic_hash": ""
   },
   "tests/capabilities/reporting_test.cpp": {
-    "mtime": 1790470386.3781588,
-    "seen": 1790470710.080231,
-    "ast_hash": "caa523b816f1fb35e27077235457d4ed",
+    "mtime": 1790819158.5967743,
+    "seen": 1790821662.815639,
+    "ast_hash": "50a744513de22b2ca7fde821ffa30bdd",
     "semantic_hash": ""
   },
   "tests/capabilities/snapshot_diff_test.cpp": {
-    "mtime": 1790460704.5164802,
-    "seen": 1790470014.403427,
-    "ast_hash": "18f01b190a8bab3f061a40bcd9f5cc4c",
-    "semantic_hash": "18f01b190a8bab3f061a40bcd9f5cc4c"
+    "mtime": 1790819158.5967743,
+    "seen": 1790821662.815639,
+    "ast_hash": "5f68f52e3a4407f31384e777e36bee8a",
+    "semantic_hash": ""
   },
   "tests/capabilities/validation_test.cpp": {
-    "mtime": 1790463241.8649824,
-    "seen": 1790470014.403427,
-    "ast_hash": "9f07a7f58e1746cd985d9ed2e53ab051",
-    "semantic_hash": "9f07a7f58e1746cd985d9ed2e53ab051"
+    "mtime": 1790819158.5977714,
+    "seen": 1790821662.815639,
+    "ast_hash": "a9f81a62eab8946a52293e34155d42a1",
+    "semantic_hash": ""
   },
   "tests/fixtures/apple_silicon_macbook.json": {
-    "mtime": 1790463950.1627848,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.5977714,
+    "seen": 1790821662.815639,
     "ast_hash": "965a2d92fd2d85bbee53eb7ba80f0d1b",
     "semantic_hash": "965a2d92fd2d85bbee53eb7ba80f0d1b"
   },
   "tests/fixtures/capability_fixtures.cpp": {
-    "mtime": 1790463258.986387,
-    "seen": 1790470014.403427,
-    "ast_hash": "335870a2772b2fbcd7ea1329e5702bee",
-    "semantic_hash": "335870a2772b2fbcd7ea1329e5702bee"
+    "mtime": 1790819158.5977714,
+    "seen": 1790821662.815639,
+    "ast_hash": "b67cd17f5c4776ddf523a289cd1135de",
+    "semantic_hash": ""
   },
   "tests/fixtures/capability_fixtures.hpp": {
-    "mtime": 1790463256.1210518,
-    "seen": 1790470014.403427,
-    "ast_hash": "e8d97df9a9eeeee87a0204ac5c4d5b61",
-    "semantic_hash": "e8d97df9a9eeeee87a0204ac5c4d5b61"
+    "mtime": 1790819158.601452,
+    "seen": 1790821662.815639,
+    "ast_hash": "b674b14414332348f25b4fd4f334e94a",
+    "semantic_hash": ""
   },
   "tests/fixtures/headless_session.json": {
-    "mtime": 1790463950.2353144,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.601452,
+    "seen": 1790821662.815639,
     "ast_hash": "dbe5f9ab1ccdc2a4eb86755ca101d8a0",
     "semantic_hash": "dbe5f9ab1ccdc2a4eb86755ca101d8a0"
   },
   "tests/fixtures/high_end_desktop.json": {
-    "mtime": 1790463950.11697,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.6024592,
+    "seen": 1790821662.815639,
     "ast_hash": "c49d4bc2e78724b5d0395885d11b672b",
     "semantic_hash": "c49d4bc2e78724b5d0395885d11b672b"
   },
   "tests/fixtures/hot_apple_silicon.json": {
-    "mtime": 1790463950.1759322,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.6024592,
+    "seen": 1790821662.815639,
     "ast_hash": "d7f1ceadc10b753661c435a90326ae0f",
     "semantic_hash": "d7f1ceadc10b753661c435a90326ae0f"
   },
   "tests/fixtures/hybrid_laptop.json": {
-    "mtime": 1790463950.1486797,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.6024592,
+    "seen": 1790821662.815639,
     "ast_hash": "b9d74b6ab96e0ea960557c8c098f9360",
     "semantic_hash": "b9d74b6ab96e0ea960557c8c098f9360"
   },
   "tests/fixtures/intel_laptop_on_battery.json": {
-    "mtime": 1790463950.1326678,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.6024592,
+    "seen": 1790821662.815639,
     "ast_hash": "361069d9fd921415d35b42d844df7739",
     "semantic_hash": "361069d9fd921415d35b42d844df7739"
   },
   "tests/fixtures/missing_gpu_driver.json": {
-    "mtime": 1790463950.2250507,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.6057122,
+    "seen": 1790821662.815639,
     "ast_hash": "c82d8f431765216d0d1dae6a97d400ad",
     "semantic_hash": "c82d8f431765216d0d1dae6a97d400ad"
   },
   "tests/fixtures/mixed_refresh_desktop.json": {
-    "mtime": 1790463950.2743669,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.6057122,
+    "seen": 1790821662.815639,
     "ast_hash": "ad940980bd65787f484c23947fc53eb8",
     "semantic_hash": "ad940980bd65787f484c23947fc53eb8"
   },
   "tests/fixtures/no_microphone.json": {
-    "mtime": 1790463950.2588503,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.6067166,
+    "seen": 1790821662.815639,
     "ast_hash": "536e148fc2e2ee9f6c29934de2e91c72",
     "semantic_hash": "536e148fc2e2ee9f6c29934de2e91c72"
   },
   "tests/fixtures/older_intel_mac.json": {
-    "mtime": 1790463950.1897821,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.607716,
+    "seen": 1790821662.815639,
     "ast_hash": "944aa9d6f65dc4e7d329cabece1cdfea",
     "semantic_hash": "944aa9d6f65dc4e7d329cabece1cdfea"
   },
   "tests/fixtures/partial_probe_failure.json": {
-    "mtime": 1790463950.281881,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.6087158,
+    "seen": 1790821662.815639,
     "ast_hash": "5d4b08562c33e1a30863b9a640058984",
     "semantic_hash": "5d4b08562c33e1a30863b9a640058984"
   },
   "tests/fixtures/remote_session.json": {
-    "mtime": 1790463950.2468338,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.6090338,
+    "seen": 1790821662.815639,
     "ast_hash": "dfc63f2205de8d7269e5b1bf47edebc4",
     "semantic_hash": "dfc63f2205de8d7269e5b1bf47edebc4"
   },
   "tests/fixtures/software_only.json": {
-    "mtime": 1790463950.2002692,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.6090338,
+    "seen": 1790821662.815639,
     "ast_hash": "9d284e9afe2517038241afaf5c3e11be",
     "semantic_hash": "9d284e9afe2517038241afaf5c3e11be"
   },
   "tests/fixtures/unknown_codec_limits.json": {
-    "mtime": 1790463950.2122927,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.6100848,
+    "seen": 1790821662.815639,
     "ast_hash": "919828c09a182bd5d63575e501f44d7f",
     "semantic_hash": "919828c09a182bd5d63575e501f44d7f"
   },
   "CMakeLists.txt": {
-    "mtime": 1790503718.0499701,
-    "seen": 1790503972.257685,
-    "ast_hash": "ba2703c50326fc139f17cbe9abf1b19f",
+    "mtime": 1790819158.2654715,
+    "seen": 1790821662.815639,
+    "ast_hash": "566ae8c96941d4312e4579cc4cc2dcf1",
     "semantic_hash": ""
   },
   "core/capabilities/CMakeLists.txt": {
-    "mtime": 1790478043.3297422,
-    "seen": 1790503972.257685,
+    "mtime": 1790819158.3151462,
+    "seen": 1790821662.815639,
     "ast_hash": "383b64ed5e63b51ef969c335a9564a65",
     "semantic_hash": ""
   },
   "core/reporting/CMakeLists.txt": {
-    "mtime": 1790463318.1039276,
-    "seen": 1790470014.403427,
-    "ast_hash": "6098a2a590fd9ea5f9d17d08c02f6033",
-    "semantic_hash": "6098a2a590fd9ea5f9d17d08c02f6033"
+    "mtime": 1790819158.3328905,
+    "seen": 1790821662.815639,
+    "ast_hash": "0e93686e7cd82ea3acd34875f7b8696c",
+    "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-09-26-native-foundation-capabilities.md": {
-    "mtime": 1790450750.3779387,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.3716686,
+    "seen": 1790821662.815639,
     "ast_hash": "1db5e28a106d9cf41c33843afab61aca",
     "semantic_hash": "1db5e28a106d9cf41c33843afab61aca"
   },
   "docs/superpowers/specs/2026-09-26-native-foundation-capabilities-design.md": {
-    "mtime": 1790450750.378939,
-    "seen": 1790470014.403427,
+    "mtime": 1790819158.3777409,
+    "seen": 1790821662.815639,
     "ast_hash": "b015330fba1bd967b3580202ba40e590",
     "semantic_hash": "b015330fba1bd967b3580202ba40e590"
   },
   "tests/CMakeLists.txt": {
-    "mtime": 1790478239.3009875,
-    "seen": 1790503972.257685,
-    "ast_hash": "1ad8c905abec0f5368e8ea0b4df7c04c",
+    "mtime": 1790819390.411517,
+    "seen": 1790821662.815639,
+    "ast_hash": "30f4c65a4a3d35d9091f3bbb6bdb2bc4",
     "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/probe.hpp": {
-    "mtime": 1790478795.4763763,
-    "seen": 1790503972.257685,
-    "ast_hash": "ea0478d31a086a31f2694c854c985ec5",
+    "mtime": 1790819158.3191462,
+    "seen": 1790821662.815639,
+    "ast_hash": "3559fb5547002f324605c2ec671cdf56",
     "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/probe_coordinator.hpp": {
-    "mtime": 1790478142.6347363,
-    "seen": 1790503972.257685,
+    "mtime": 1790819158.320145,
+    "seen": 1790821662.815639,
     "ast_hash": "1f2414ff86c4d2054759ac4bdc7604f4",
     "semantic_hash": ""
   },
   "core/capabilities/src/probe_coordinator.cpp": {
-    "mtime": 1790478795.4763763,
-    "seen": 1790503972.257685,
-    "ast_hash": "0e85418000ba635d765a5726244e8110",
+    "mtime": 1790819158.3263535,
+    "seen": 1790821662.815639,
+    "ast_hash": "fb2a4e3d705d192c453c3955c7aba53f",
     "semantic_hash": ""
   },
   "tests/capabilities/probe_coordinator_test.cpp": {
-    "mtime": 1790478795.4763763,
-    "seen": 1790503972.257685,
-    "ast_hash": "c97bc4046e8fb15fabc4c4b599206f5d",
+    "mtime": 1790819158.5956347,
+    "seen": 1790821662.815639,
+    "ast_hash": "32a6d0e6b4656e69960cc7aec4202f85",
     "semantic_hash": ""
   },
   "tests/helpers/fake_probe_executor.hpp": {
-    "mtime": 1790470386.3763454,
-    "seen": 1790470710.080231,
-    "ast_hash": "d57b461539d8915c04b105d3ae7f68bc",
+    "mtime": 1790819158.611588,
+    "seen": 1790821662.815639,
+    "ast_hash": "47c85e718887949ec8b32ee84d7e6c24",
     "semantic_hash": ""
   },
   "apps/diagnostics/DiagnosticsViewModel.cpp": {
-    "mtime": 1790481640.9107823,
-    "seen": 1790503972.257685,
-    "ast_hash": "441c35f16a5e2daea41c0dc1358e29e2",
+    "mtime": 1790819158.2704718,
+    "seen": 1790821662.815639,
+    "ast_hash": "0a056ba84067a6a7b28a18edf1d6e5f2",
     "semantic_hash": ""
   },
   "apps/diagnostics/DiagnosticsViewModel.hpp": {
-    "mtime": 1790480420.1502702,
-    "seen": 1790503972.257685,
-    "ast_hash": "fda7e0b8d3f948f163213ae8e79652a8",
+    "mtime": 1790819158.271472,
+    "seen": 1790821662.815639,
+    "ast_hash": "bba7e29c258270bc9a198eb5fc2991a2",
     "semantic_hash": ""
   },
   "apps/macos/Catro/Bridge/CatroCapabilitiesBridge.h": {
-    "mtime": 1790503331.4271812,
-    "seen": 1790503972.257685,
-    "ast_hash": "be870fd7fd2a85f28ea720e830b756a5",
+    "mtime": 1790819158.275222,
+    "seen": 1790821662.815639,
+    "ast_hash": "3b69d518724e2d18aed57e4bfd035607",
     "semantic_hash": ""
   },
   "apps/macos/Catro/Bridge/CatroCapabilitiesBridge.mm": {
-    "mtime": 1790503374.2623656,
-    "seen": 1790503972.257685,
-    "ast_hash": "cb095e99ffd4fb33a464a0f33c7defa6",
+    "mtime": 1790819158.276222,
+    "seen": 1790821662.815639,
+    "ast_hash": "f7c638677249807abc5b4826654bbb53",
     "semantic_hash": ""
   },
   "apps/macos/Catro/CatroApp.swift": {
-    "mtime": 1790503488.8799965,
-    "seen": 1790503972.257685,
-    "ast_hash": "6b433e268020dd2c5843c9ce09cf6bda",
+    "mtime": 1790819158.276222,
+    "seen": 1790821662.815639,
+    "ast_hash": "715fdf9307a4f5d5d083d8ebeda41702",
     "semantic_hash": ""
   },
   "apps/macos/Catro/Diagnostics/DiagnosticsView.swift": {
-    "mtime": 1790503474.1132295,
-    "seen": 1790503972.257685,
-    "ast_hash": "627c74bcceb1bafbea92d1b2dfd56ec4",
+    "mtime": 1790819158.276222,
+    "seen": 1790821662.815639,
+    "ast_hash": "5a538c7dc36e4b3f7ead2be8259f08fe",
     "semantic_hash": ""
   },
   "apps/macos/Catro/Diagnostics/DiagnosticsViewModel.swift": {
-    "mtime": 1790503428.2956567,
-    "seen": 1790503972.257685,
-    "ast_hash": "23f09172717ddb074481af02b8323a8e",
+    "mtime": 1790819158.277725,
+    "seen": 1790821662.815639,
+    "ast_hash": "e527d2aa0fadd5f038cce74a06873a87",
     "semantic_hash": ""
   },
   "apps/windows/Catro.sln": {
-    "mtime": 1790480951.572147,
-    "seen": 1790503972.257685,
+    "mtime": 1790819158.2903936,
+    "seen": 1790821662.815639,
     "ast_hash": "a50ecd08e7671c250b04aa6d2247970c",
     "semantic_hash": ""
   },
   "apps/windows/Catro/App.xaml": {
-    "mtime": 1790480951.5736837,
-    "seen": 1790503972.257685,
-    "ast_hash": "2d7afcc917d48aba9f3f90dc999652cc",
+    "mtime": 1790819158.2913935,
+    "seen": 1790821662.815639,
+    "ast_hash": "8d0068842b15031bd4dfada0acdc97ff",
     "semantic_hash": ""
   },
   "apps/windows/Catro/App.xaml.cpp": {
-    "mtime": 1790480951.5742044,
-    "seen": 1790503972.257685,
-    "ast_hash": "73db87e3a61e2c3b1508591f189f662c",
+    "mtime": 1790819158.2913935,
+    "seen": 1790821662.815639,
+    "ast_hash": "ab39deebbdff75c5ea1e460ff6dd1ace",
     "semantic_hash": ""
   },
   "apps/windows/Catro/App.xaml.h": {
-    "mtime": 1790480951.5742044,
-    "seen": 1790503972.257685,
-    "ast_hash": "ce6adf30d5399903a23ff037e0feb680",
+    "mtime": 1790819158.2924283,
+    "seen": 1790821662.815639,
+    "ast_hash": "ab6038bcc7e11473adb0ca8c530cbcd5",
     "semantic_hash": ""
   },
   "apps/windows/Catro/Diagnostics/DiagnosticsView.xaml": {
-    "mtime": 1790480951.5778425,
-    "seen": 1790503972.257685,
-    "ast_hash": "2e911ba5b89247b61e73df137be03170",
+    "mtime": 1790819158.2979023,
+    "seen": 1790821662.815639,
+    "ast_hash": "f094be891e443ff11a127c984098d049",
     "semantic_hash": ""
   },
   "apps/windows/Catro/Diagnostics/DiagnosticsView.xaml.cpp": {
-    "mtime": 1790480951.5788727,
-    "seen": 1790503972.257685,
-    "ast_hash": "8dbab92bf16676615009b164574c68aa",
+    "mtime": 1790819158.2979023,
+    "seen": 1790821662.815639,
+    "ast_hash": "4b866147d1164f4eb5bd8ed39704502b",
     "semantic_hash": ""
   },
   "apps/windows/Catro/Diagnostics/DiagnosticsView.xaml.h": {
-    "mtime": 1790503103.786474,
-    "seen": 1790503972.257685,
+    "mtime": 1790819158.2991166,
+    "seen": 1790821662.815639,
     "ast_hash": "e2dd692b69537fd70a2fd791beb69ec7",
     "semantic_hash": ""
   },
   "apps/windows/Catro/MainWindow.xaml": {
-    "mtime": 1790480951.5757787,
-    "seen": 1790503972.257685,
-    "ast_hash": "d636af53ed8345c13fcbfdd0e3424627",
+    "mtime": 1790821379.5630383,
+    "seen": 1790821662.815639,
+    "ast_hash": "76159e45792b5cad8408a67ce8519745",
     "semantic_hash": ""
   },
   "apps/windows/Catro/MainWindow.xaml.cpp": {
-    "mtime": 1790480951.5768096,
-    "seen": 1790503972.257685,
-    "ast_hash": "0cfe0b5437ddabd88165e5ddbc3dd3bc",
+    "mtime": 1790820788.7609546,
+    "seen": 1790821662.815639,
+    "ast_hash": "22dfb1767a030f572056771d2820747d",
     "semantic_hash": ""
   },
   "apps/windows/Catro/MainWindow.xaml.h": {
-    "mtime": 1790480951.576295,
-    "seen": 1790503972.257685,
-    "ast_hash": "91e94c4b093e8f844d189b57cb799b8d",
+    "mtime": 1790820016.0999796,
+    "seen": 1790821662.815639,
+    "ast_hash": "5431c34097573c52a20eec7ffd1642fc",
     "semantic_hash": ""
   },
   "apps/windows/Catro/pch.cpp": {
-    "mtime": 1790480951.5731719,
-    "seen": 1790503972.257685,
-    "ast_hash": "5298f1c2ecd1b1f9d600f40f09457014",
+    "mtime": 1790819158.3071325,
+    "seen": 1790821662.815639,
+    "ast_hash": "c3983f0b0e76008fa00e7b987353ade1",
     "semantic_hash": ""
   },
   "apps/windows/Catro/pch.h": {
-    "mtime": 1790480951.572659,
-    "seen": 1790503972.257685,
-    "ast_hash": "e6f1d424411734edd2556665e0f0ecdc",
+    "mtime": 1790819158.3081324,
+    "seen": 1790821662.815639,
+    "ast_hash": "6c492ecca49f39423df50e9dac56b730",
     "semantic_hash": ""
   },
   "platform/macos/include/catro/platform/macos/capability_service.hpp": {
-    "mtime": 1790481869.7429013,
-    "seen": 1790503972.257685,
-    "ast_hash": "05151364d7daa753134e46d4d0350116",
+    "mtime": 1790819158.495567,
+    "seen": 1790821662.815639,
+    "ast_hash": "9537f612b8bf64ff42395aadace5a99c",
     "semantic_hash": ""
   },
   "platform/macos/src/capability_service.mm": {
-    "mtime": 1790482230.4801412,
-    "seen": 1790503972.257685,
-    "ast_hash": "c01729f5a69d858f3d5b07be6c796575",
+    "mtime": 1790819158.4977093,
+    "seen": 1790821662.815639,
+    "ast_hash": "2f6250cc71699e47418e40d43a600df8",
     "semantic_hash": ""
   },
   "platform/macos/src/macos_translation.cpp": {
-    "mtime": 1790502620.1977,
-    "seen": 1790503972.257685,
-    "ast_hash": "0bc869505c0bb2728adceac7e58798ec",
+    "mtime": 1790819158.4998913,
+    "seen": 1790821662.815639,
+    "ast_hash": "119b7dc8f14195b95a3900ddf4683e76",
     "semantic_hash": ""
   },
   "platform/macos/src/macos_translation.hpp": {
-    "mtime": 1790502509.650461,
-    "seen": 1790503972.257685,
-    "ast_hash": "01e3344cc5cece1a6fdaae702d990bbd",
+    "mtime": 1790819158.5013962,
+    "seen": 1790821662.815639,
+    "ast_hash": "24942d3937b7cef3c997f1f73654c8f9",
     "semantic_hash": ""
   },
   "platform/macos/src/probe_dispatch.mm": {
-    "mtime": 1790482121.7930493,
-    "seen": 1790503972.257685,
-    "ast_hash": "4b2a37f544910a69acded6593fd32313",
+    "mtime": 1790819158.5024004,
+    "seen": 1790821662.815639,
+    "ast_hash": "293372cd480afa7589a57b6b893656c0",
     "semantic_hash": ""
   },
   "platform/macos/src/probe_support.hpp": {
-    "mtime": 1790502721.1073973,
-    "seen": 1790503972.257685,
-    "ast_hash": "3a7e5f3df0c71f626d9d3d94b9a0fd36",
+    "mtime": 1790819158.502804,
+    "seen": 1790821662.815639,
+    "ast_hash": "b5911bde31b72e93a34b4197681d2a88",
     "semantic_hash": ""
   },
   "platform/macos/src/probe_support.mm": {
-    "mtime": 1790502735.2606618,
-    "seen": 1790503972.257685,
-    "ast_hash": "e87e0c9a2730227f8f39bd6357356f83",
+    "mtime": 1790819158.5034728,
+    "seen": 1790821662.815639,
+    "ast_hash": "250fd2417dc8073433029bf3fd04f819",
     "semantic_hash": ""
   },
   "platform/macos/src/probes/audio_probe.mm": {
-    "mtime": 1790502846.3424318,
-    "seen": 1790503972.257685,
-    "ast_hash": "407d6a3c80aa37bcb9e56f600788aa1d",
+    "mtime": 1790819158.5044725,
+    "seen": 1790821662.815639,
+    "ast_hash": "283c143c414f5926af33228ff9299db5",
     "semantic_hash": ""
   },
   "platform/macos/src/probes/encoder_probe.mm": {
-    "mtime": 1790502799.5397885,
-    "seen": 1790503972.257685,
-    "ast_hash": "6469c68e6bce8aec69947fe104829251",
+    "mtime": 1790819158.5054724,
+    "seen": 1790821662.815639,
+    "ast_hash": "68392b5a14c43aabb032c984c8970fb3",
     "semantic_hash": ""
   },
   "platform/macos/src/probes/gpu_display_probe.mm": {
-    "mtime": 1790502769.207026,
-    "seen": 1790503972.257685,
-    "ast_hash": "04654ea0e55143e286fb6a0d1b55e165",
+    "mtime": 1790819158.5054724,
+    "seen": 1790821662.815639,
+    "ast_hash": "247e9755122742f39c524110346c7ba5",
     "semantic_hash": ""
   },
   "platform/macos/src/probes/runtime_probe.mm": {
-    "mtime": 1790482104.9749627,
-    "seen": 1790503972.257685,
-    "ast_hash": "850adf5d902bbf0c33cd8eb00345f554",
+    "mtime": 1790819158.5064745,
+    "seen": 1790821662.815639,
+    "ast_hash": "a01224ee0ed33c7f40d26515deb73c00",
     "semantic_hash": ""
   },
   "platform/macos/src/probes/system_probe.mm": {
-    "mtime": 1790482065.1669953,
-    "seen": 1790503972.257685,
-    "ast_hash": "b0d283a6483c74abdf9cb1e7e0b336f2",
+    "mtime": 1790819158.5074718,
+    "seen": 1790821662.815639,
+    "ast_hash": "3dd160b8381202d2b805c10598f5bb87",
     "semantic_hash": ""
   },
   "platform/macos/src/process_probe_executor.mm": {
-    "mtime": 1790503032.921324,
-    "seen": 1790503972.257685,
-    "ast_hash": "14e8e601c4419a444ecff57c00e41168",
+    "mtime": 1790819158.5074718,
+    "seen": 1790821662.815639,
+    "ast_hash": "4ed671cb4afeba73647e0c8a7028a7c4",
     "semantic_hash": ""
   },
   "platform/windows/include/catro/platform/windows/capability_service.hpp": {
-    "mtime": 1790471118.626076,
-    "seen": 1790503972.257685,
-    "ast_hash": "79a65eeb09b199ca34104d9e743cc0c3",
+    "mtime": 1790819158.5104725,
+    "seen": 1790821662.815639,
+    "ast_hash": "a23d78f1f402a929d1db78faeb2fb84a",
     "semantic_hash": ""
   },
   "platform/windows/src/capability_service.cpp": {
-    "mtime": 1790479353.9092815,
-    "seen": 1790503972.257685,
-    "ast_hash": "552013afb1ab065b378757d6c26b0802",
+    "mtime": 1790819158.5167937,
+    "seen": 1790821662.815639,
+    "ast_hash": "1788fcdaa0ebe6148b277c350d6d03ed",
     "semantic_hash": ""
   },
   "platform/windows/src/probe_dispatch.cpp": {
-    "mtime": 1790479306.6326807,
-    "seen": 1790503972.257685,
-    "ast_hash": "9441147b6eca0f198bee409bb4353cd1",
+    "mtime": 1790819158.5187929,
+    "seen": 1790821662.815639,
+    "ast_hash": "c2990379d5c9b301899a5b7113093bde",
     "semantic_hash": ""
   },
   "platform/windows/src/probes/audio_probe.cpp": {
-    "mtime": 1790479376.3016195,
-    "seen": 1790503972.257685,
-    "ast_hash": "f2cb7150ab5c74efaa700c645f85cf60",
+    "mtime": 1790819158.5187929,
+    "seen": 1790821662.815639,
+    "ast_hash": "f5dbddce6a0d989fde7c83a2cac72aae",
     "semantic_hash": ""
   },
   "platform/windows/src/probes/encoder_probe.cpp": {
-    "mtime": 1790479850.6108,
-    "seen": 1790503972.257685,
-    "ast_hash": "1399e783344f25bee6212b75af565fb6",
+    "mtime": 1790819158.519793,
+    "seen": 1790821662.815639,
+    "ast_hash": "e474a1bd32daa77e6e3564a35dad5131",
     "semantic_hash": ""
   },
   "platform/windows/src/probes/gpu_display_probe.cpp": {
-    "mtime": 1790478664.1720638,
-    "seen": 1790503972.257685,
-    "ast_hash": "d06b6579659d6545a11505b372729c6c",
+    "mtime": 1790819158.519793,
+    "seen": 1790821662.815639,
+    "ast_hash": "24c15ad1abd21df110620f9ae8fc8d8c",
     "semantic_hash": ""
   },
   "platform/windows/src/probes/runtime_probe.cpp": {
-    "mtime": 1790471240.244651,
-    "seen": 1790503972.257685,
-    "ast_hash": "89a9d09ebd484bbb5d0170e8dd528b43",
+    "mtime": 1790819158.5214198,
+    "seen": 1790821662.815639,
+    "ast_hash": "053b451e0bae7705ce760535294606c8",
     "semantic_hash": ""
   },
   "platform/windows/src/probes/system_probe.cpp": {
-    "mtime": 1790471296.5424216,
-    "seen": 1790503972.257685,
-    "ast_hash": "7fc26bfe96fff6cd159e65d27c04f323",
+    "mtime": 1790819158.5214198,
+    "seen": 1790821662.815639,
+    "ast_hash": "486bb454f50d44f37cf7776303345a32",
     "semantic_hash": ""
   },
   "platform/windows/src/process_probe_executor.cpp": {
-    "mtime": 1790478186.5475502,
-    "seen": 1790503972.257685,
-    "ast_hash": "c6d88d1e76d56e7ff0f619539317122f",
+    "mtime": 1790819158.5228891,
+    "seen": 1790821662.815639,
+    "ast_hash": "5558ed4a41c83402ffcbbd10c68d70bd",
     "semantic_hash": ""
   },
   "platform/windows/src/windows_translation.cpp": {
-    "mtime": 1790479850.6094632,
-    "seen": 1790503972.257685,
-    "ast_hash": "7ef3ffb0f6de0e6a54038211105cb2ee",
+    "mtime": 1790819158.5276175,
+    "seen": 1790821662.815639,
+    "ast_hash": "4828fa39f3866d48568fbc0b9f97bcc4",
     "semantic_hash": ""
   },
   "platform/windows/src/windows_translation.hpp": {
-    "mtime": 1790479850.6094632,
-    "seen": 1790503972.257685,
-    "ast_hash": "47e5e53e6298a53513af1a9ff86cda96",
+    "mtime": 1790819158.5286167,
+    "seen": 1790821662.815639,
+    "ast_hash": "9d80010f0c48cb00ccd179808cb7eeaf",
     "semantic_hash": ""
   },
   "scripts/bootstrap.ps1": {
-    "mtime": 1790503589.660844,
-    "seen": 1790503972.257685,
-    "ast_hash": "f43fcc50df63c6a47fab3202707eee8b",
+    "mtime": 1790819158.5286167,
+    "seen": 1790821662.815639,
+    "ast_hash": "c22dd62e038fb4e651c13d0f43ffd56d",
     "semantic_hash": ""
   },
   "scripts/bootstrap.sh": {
-    "mtime": 1790503623.2201607,
-    "seen": 1790503972.257685,
+    "mtime": 1790819158.5296168,
+    "seen": 1790821662.815639,
     "ast_hash": "e9bc763b1fc1f9a77f65b7ef181b534e",
     "semantic_hash": ""
   },
   "scripts/build.ps1": {
-    "mtime": 1790503602.1874352,
-    "seen": 1790503972.257685,
-    "ast_hash": "36d2e357acb9441fb009a4730ffec1e6",
+    "mtime": 1790819158.5306194,
+    "seen": 1790821662.815639,
+    "ast_hash": "249034d60c93981ea5aac0c5ae0063fe",
     "semantic_hash": ""
   },
   "scripts/build.sh": {
-    "mtime": 1790503628.7914484,
-    "seen": 1790503972.257685,
+    "mtime": 1790819158.5306194,
+    "seen": 1790821662.815639,
     "ast_hash": "96eae4be1d9a1eab1e758659c996e986",
     "semantic_hash": ""
   },
   "scripts/run.ps1": {
-    "mtime": 1790503693.561985,
-    "seen": 1790503972.257685,
-    "ast_hash": "758a83c8cf054a7d77ddcf09199be7e7",
+    "mtime": 1790819158.534125,
+    "seen": 1790821662.815639,
+    "ast_hash": "bbf69a1cdb1d27886bea96f985cc05d7",
     "semantic_hash": ""
   },
   "scripts/run.sh": {
-    "mtime": 1790503643.15173,
-    "seen": 1790503972.257685,
+    "mtime": 1790819158.534125,
+    "seen": 1790821662.815639,
     "ast_hash": "2f7004dd8f332f0fb069676b7676bdc6",
     "semantic_hash": ""
   },
   "scripts/test.ps1": {
-    "mtime": 1790503607.8207357,
-    "seen": 1790503972.257685,
-    "ast_hash": "e3ac9391004365ae3a89396e3749c7b8",
+    "mtime": 1790819158.5351272,
+    "seen": 1790821662.815639,
+    "ast_hash": "cacf47681ae0b21c498100c1b87a0f48",
     "semantic_hash": ""
   },
   "scripts/test.sh": {
-    "mtime": 1790503634.0449567,
-    "seen": 1790503972.257685,
+    "mtime": 1790819158.5351272,
+    "seen": 1790821662.815639,
     "ast_hash": "1b2d81c78b3c035a1577eabd791e9115",
     "semantic_hash": ""
   },
   "tests/helpers/hanging_probe_helper.cpp": {
-    "mtime": 1790471041.9691074,
-    "seen": 1790503972.257685,
-    "ast_hash": "c9a09f4622876a68e36216fd4f1f9267",
+    "mtime": 1790819158.611588,
+    "seen": 1790821662.815639,
+    "ast_hash": "587831a323789eee9d268e44a9531307",
     "semantic_hash": ""
   },
   "tests/windows/process_probe_executor_test.cpp": {
-    "mtime": 1790471041.970108,
-    "seen": 1790503972.257685,
-    "ast_hash": "91e65cb903b42c7b068102d11e978519",
+    "mtime": 1790819158.6277752,
+    "seen": 1790821662.815639,
+    "ast_hash": "d5bbd8322772e7634604ffa603e2d2f5",
     "semantic_hash": ""
   },
   "tests/windows/system_runtime_probe_test.cpp": {
-    "mtime": 1790479566.9733174,
-    "seen": 1790503972.257685,
-    "ast_hash": "1045939b1293622058407067b061d688",
+    "mtime": 1790819158.6297753,
+    "seen": 1790821662.815639,
+    "ast_hash": "84c9fb73eaf46d5cf8b21213167c3911",
     "semantic_hash": ""
   },
   "tools/capability-probe/main.cpp": {
-    "mtime": 1790478684.4935184,
-    "seen": 1790503972.257685,
-    "ast_hash": "7137970a09f3fbf227476583716e9158",
+    "mtime": 1790819158.6366785,
+    "seen": 1790821662.815639,
+    "ast_hash": "4cda2d564e332d6d16db562cf33eb5d5",
     "semantic_hash": ""
   },
   "tools/capability-probe/main_macos.mm": {
-    "mtime": 1790502673.5738108,
-    "seen": 1790503972.257685,
-    "ast_hash": "c0f3dc271f880a6d345750da3ac0d3d5",
+    "mtime": 1790819158.6366785,
+    "seen": 1790821662.815639,
+    "ast_hash": "c91e6a4af117f9a16ad38014501fc21f",
     "semantic_hash": ""
   },
   "tools/capability-report/main.cpp": {
-    "mtime": 1790480951.567772,
-    "seen": 1790503972.257685,
-    "ast_hash": "3d354b817af185ed8645ea8aa2d54c75",
+    "mtime": 1790819158.637678,
+    "seen": 1790821662.815639,
+    "ast_hash": "aaf39ccc784ae5d6ac727c3ad0a364b1",
     "semantic_hash": ""
   },
   "tools/capability-report/main_macos.mm": {
-    "mtime": 1790502900.8206954,
-    "seen": 1790503972.257685,
-    "ast_hash": "e4b29183503da1ff00ee89d6eb77de1a",
+    "mtime": 1790819158.637678,
+    "seen": 1790821662.815639,
+    "ast_hash": "1fd70c0a6f8237b7370511bc68691647",
     "semantic_hash": ""
   },
   "tools/capability-report/report_cli.cpp": {
-    "mtime": 1790479687.9883397,
-    "seen": 1790503972.257685,
-    "ast_hash": "da28fd4efc327a5e6ab0696db30b848f",
+    "mtime": 1790819158.6386797,
+    "seen": 1790821662.815639,
+    "ast_hash": "645fefe772a421d6238cf37cc9b7eb6f",
     "semantic_hash": ""
   },
   "tools/capability-report/report_cli.hpp": {
-    "mtime": 1790480951.567772,
-    "seen": 1790503972.257685,
-    "ast_hash": "645882e928f72c236a627f05b096f7a9",
+    "mtime": 1790819158.6396785,
+    "seen": 1790821662.815639,
+    "ast_hash": "e50c0bcd9b30a7f470c2634bab2b8d39",
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1790503733.896787,
-    "seen": 1790503972.257685,
-    "ast_hash": "96d94fd4642d0c64f5158733efbac09a",
+    "mtime": 1790819158.262468,
+    "seen": 1790821662.815639,
+    "ast_hash": "1cf75839c1a729f7828ba9bd4727ef8f",
     "semantic_hash": ""
   },
   "CONTRIBUTING.md": {
-    "mtime": 1790503819.9712043,
-    "seen": 1790503972.257685,
-    "ast_hash": "93939a9a046d9190699f7605df032c26",
+    "mtime": 1790819158.2664754,
+    "seen": 1790821662.815639,
+    "ast_hash": "528faa2e2c8c5e9a08fd084eaf245acb",
     "semantic_hash": ""
   },
   "DEPENDENCIES.md": {
-    "mtime": 1790503962.4880931,
-    "seen": 1790503972.257685,
-    "ast_hash": "b2a0902a8c9f62ad4a175066d34836cf",
+    "mtime": 1790819158.2674735,
+    "seen": 1790821662.815639,
+    "ast_hash": "f7856d8aa6a9b6f30ae607c6402869ae",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1790503783.4022467,
-    "seen": 1790503972.257685,
-    "ast_hash": "c69c9416e46b5b501e7af215645c2bc8",
+    "mtime": 1790821433.2873776,
+    "seen": 1790821662.815639,
+    "ast_hash": "d0f206472348171a28287a4218aa60df",
     "semantic_hash": ""
   },
   "SECURITY.md": {
-    "mtime": 1790503821.2415154,
-    "seen": 1790503972.257685,
-    "ast_hash": "aab2bab6cdcdd5a8568da25c3a7053f7",
+    "mtime": 1790819158.268472,
+    "seen": 1790821662.815639,
+    "ast_hash": "b5bf4dd834d8eee36d6c1f20e92ca9b2",
     "semantic_hash": ""
   },
   "apps/diagnostics/CMakeLists.txt": {
-    "mtime": 1790503103.7218795,
-    "seen": 1790503972.257685,
-    "ast_hash": "fd220ae7fdca7ac3a1ee52ee6e182cf7",
+    "mtime": 1790819158.2704718,
+    "seen": 1790821662.815639,
+    "ast_hash": "e7f7deba362335d406267a3a69132b19",
     "semantic_hash": ""
   },
   "apps/macos/CMakeLists.txt": {
-    "mtime": 1790503513.2345383,
-    "seen": 1790503972.257685,
-    "ast_hash": "1a0769dbc996e94dd9515d1f91a9fe70",
+    "mtime": 1790819158.271472,
+    "seen": 1790821662.815639,
+    "ast_hash": "c6f3ac7ab1c330686831a94cf60f8a5b",
     "semantic_hash": ""
   },
   "docs/architecture/capability-system.md": {
-    "mtime": 1790503904.8353243,
-    "seen": 1790503972.257685,
-    "ast_hash": "67ad0823c4d56e688f20c7a7779ceaeb",
+    "mtime": 1790819158.3631656,
+    "seen": 1790821662.815639,
+    "ast_hash": "94d3700d9c88c17f9ac00937bbbde6b4",
     "semantic_hash": ""
   },
   "docs/architecture/decisions/0001-split-native-shells.md": {
-    "mtime": 1790503913.6054976,
-    "seen": 1790503972.257685,
-    "ast_hash": "f400674be336c8c130c25231d51bf20d",
+    "mtime": 1790819158.3641653,
+    "seen": 1790821662.815639,
+    "ast_hash": "ec03d3f5f3134bc63711c4b053840ca8",
     "semantic_hash": ""
   },
   "docs/architecture/decisions/0002-isolated-passive-probes.md": {
-    "mtime": 1790503922.9532547,
-    "seen": 1790503972.257685,
-    "ast_hash": "94b3695d86a33f7427c4e435b17e06a0",
+    "mtime": 1790819158.3641653,
+    "seen": 1790821662.815639,
+    "ast_hash": "e8b2f9edda632c767a1ab1bcc06bc21d",
     "semantic_hash": ""
   },
   "docs/building.md": {
-    "mtime": 1790503866.5670047,
-    "seen": 1790503972.257685,
-    "ast_hash": "769043ffbc9a67f0c183c58aa57b822a",
+    "mtime": 1790819158.3681653,
+    "seen": 1790821662.815639,
+    "ast_hash": "b410f84ec30699a4b46bb3450a093580",
     "semantic_hash": ""
   },
   "docs/troubleshooting.md": {
-    "mtime": 1790503892.5370154,
-    "seen": 1790503972.257685,
-    "ast_hash": "e7889800deb3faeebba266894e1814cf",
+    "mtime": 1790821433.2887485,
+    "seen": 1790821662.815639,
+    "ast_hash": "2837cd595747e2dd9cd30c516f86f21e",
     "semantic_hash": ""
   },
   "platform/macos/CMakeLists.txt": {
-    "mtime": 1790502649.7420607,
-    "seen": 1790503972.257685,
-    "ast_hash": "87e830a3567971d7888d7e10b189b8fd",
+    "mtime": 1790819158.4935675,
+    "seen": 1790821662.815639,
+    "ast_hash": "46d847a53d8d3498b74333ee35bf9d0b",
     "semantic_hash": ""
   },
   "platform/windows/CMakeLists.txt": {
-    "mtime": 1790479306.6331832,
-    "seen": 1790503972.257685,
-    "ast_hash": "0828f714054ff45223bae671340e0619",
+    "mtime": 1790819158.5084715,
+    "seen": 1790821662.815639,
+    "ast_hash": "e0a78c9cec8ca6eb4e20633e7be04904",
     "semantic_hash": ""
   },
   "tools/capability-probe/CMakeLists.txt": {
-    "mtime": 1790502683.646206,
-    "seen": 1790503972.257685,
-    "ast_hash": "6ae941c65a44ae5cf6cd364d17d5fd29",
+    "mtime": 1790819158.635677,
+    "seen": 1790821662.815639,
+    "ast_hash": "995e7bc7f6c0626e423bdddff9850c8d",
     "semantic_hash": ""
   },
   "tools/capability-report/CMakeLists.txt": {
-    "mtime": 1790502908.4710982,
-    "seen": 1790503972.257685,
-    "ast_hash": "300a1bf944f05b6f4e9c0a1e742f9194",
+    "mtime": 1790819158.637678,
+    "seen": 1790821662.815639,
+    "ast_hash": "d78ace3ec905abe8d1d1ed33bc46591b",
+    "semantic_hash": ""
+  },
+  "apps/diagnostics/AudioViewModel.cpp": {
+    "mtime": 1790819158.268472,
+    "seen": 1790821662.815639,
+    "ast_hash": "d4ffe3d0466cd0a5cd9a03eec304fc10",
+    "semantic_hash": ""
+  },
+  "apps/diagnostics/AudioViewModel.hpp": {
+    "mtime": 1790819158.269472,
+    "seen": 1790821662.815639,
+    "ast_hash": "8ad50ed3318960f5dc38ab70ff14b598",
+    "semantic_hash": ""
+  },
+  "apps/macos/Catro/Audio/AudioView.swift": {
+    "mtime": 1790819158.2732182,
+    "seen": 1790821662.815639,
+    "ast_hash": "9b977630b5ad62ab7f2ed7cb8f68dc14",
+    "semantic_hash": ""
+  },
+  "apps/macos/Catro/Audio/AudioViewModel.swift": {
+    "mtime": 1790819158.2742212,
+    "seen": 1790821662.815639,
+    "ast_hash": "f21efddc04df93b0b6feb9797eb856d2",
+    "semantic_hash": ""
+  },
+  "apps/macos/Catro/Bridge/CatroAudioBridge.mm": {
+    "mtime": 1790819158.2742212,
+    "seen": 1790821662.815639,
+    "ast_hash": "9b0f0c787657ff31d594d46f8f10122e",
+    "semantic_hash": ""
+  },
+  "apps/room-runtime/windows/include/catro/room_runtime.h": {
+    "mtime": 1790819158.2797284,
+    "seen": 1790821662.815639,
+    "ast_hash": "a3d7030472fd275b2413cf4df597427e",
+    "semantic_hash": ""
+  },
+  "apps/room-runtime/windows/src/room_runtime.cpp": {
+    "mtime": 1790819158.2797284,
+    "seen": 1790821662.815639,
+    "ast_hash": "e16b7495a3067cebd563213ce24c40c3",
+    "semantic_hash": ""
+  },
+  "apps/screen-runtime/windows/include/catro/screen_runtime.hpp": {
+    "mtime": 1790819158.2822337,
+    "seen": 1790821662.815639,
+    "ast_hash": "1cc190dc96f6d3f421059e7e66269ab8",
+    "semantic_hash": ""
+  },
+  "apps/screen-runtime/windows/screen_runtime.cpp": {
+    "mtime": 1790819158.2833934,
+    "seen": 1790821662.815639,
+    "ast_hash": "17d1bbac2aa0ec1a24b029824eaac594",
+    "semantic_hash": ""
+  },
+  "apps/shell/PresentationState.cpp": {
+    "mtime": 1790819837.0439343,
+    "seen": 1790821662.815639,
+    "ast_hash": "aead8ccf64a06561cd68b9f684803d1d",
+    "semantic_hash": ""
+  },
+  "apps/shell/PresentationState.hpp": {
+    "mtime": 1790819837.0429287,
+    "seen": 1790821662.815639,
+    "ast_hash": "c13340d2dab9dfce8ff5a1cca8699965",
+    "semantic_hash": ""
+  },
+  "apps/shell/ShellModel.cpp": {
+    "mtime": 1790819158.284393,
+    "seen": 1790821662.815639,
+    "ast_hash": "8751025ba69db8608ac163487a93ffaf",
+    "semantic_hash": ""
+  },
+  "apps/shell/ShellModel.hpp": {
+    "mtime": 1790819158.284393,
+    "seen": 1790821662.815639,
+    "ast_hash": "76d12ba091e7748bdc9fc6905fb24142",
+    "semantic_hash": ""
+  },
+  "apps/voice-runtime/common/include/catro/room_voice_runtime.hpp": {
+    "mtime": 1790819158.286394,
+    "seen": 1790821662.815639,
+    "ast_hash": "23cf2ec570c7b8126740a5b6ad298109",
+    "semantic_hash": ""
+  },
+  "apps/voice-runtime/common/include/catro/voice_runtime.h": {
+    "mtime": 1790819158.286394,
+    "seen": 1790821662.815639,
+    "ast_hash": "50b3c25224518d3da5d12c8ecafc4f04",
+    "semantic_hash": ""
+  },
+  "apps/voice-runtime/common/src/room_voice_runtime.cpp": {
+    "mtime": 1790819158.287393,
+    "seen": 1790821662.815639,
+    "ast_hash": "b1c8329f13cd1ff9b7541ba64d7dc11c",
+    "semantic_hash": ""
+  },
+  "apps/voice-runtime/macos/src/voice_runtime.mm": {
+    "mtime": 1790819158.2883928,
+    "seen": 1790821662.815639,
+    "ast_hash": "504b572eca8f9c27545c5b85bd01f060",
+    "semantic_hash": ""
+  },
+  "apps/voice-runtime/windows/src/voice_runtime.cpp": {
+    "mtime": 1790819158.2903936,
+    "seen": 1790821662.815639,
+    "ast_hash": "8984a631f695a0c869f7311fe81ebca8",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Audio/AudioView.xaml": {
+    "mtime": 1790819158.2928035,
+    "seen": 1790821662.815639,
+    "ast_hash": "d9e1a68924d7f196eb5f3158e9f02f6b",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Audio/AudioView.xaml.cpp": {
+    "mtime": 1790819158.293807,
+    "seen": 1790821662.815639,
+    "ast_hash": "5b4d44ec92065ec43059fcfda4c29b01",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Audio/AudioView.xaml.h": {
+    "mtime": 1790819158.294807,
+    "seen": 1790821662.815639,
+    "ast_hash": "03d5a5bdc6e8b3706143397ab827dd2f",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/MainWindow.Directory.cpp": {
+    "mtime": 1790865142.3975847,
+    "seen": 1790865702.4392364,
+    "ast_hash": "3bd5c28308c35e58e5ad3346042c6b1e",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Server/ServerView.Directory.cpp": {
+    "mtime": 1790865436.2601516,
+    "seen": 1790865702.4392364,
+    "ast_hash": "70b39945cdd8c2cd0f733997f2d25733",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Server/ServerView.RuntimeConfig.hpp": {
+    "mtime": 1790820130.1769493,
+    "seen": 1790821662.815639,
+    "ast_hash": "73074dc207ec7bde234977f42fbb9349",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Server/ServerView.Screen.cpp": {
+    "mtime": 1790865291.3923888,
+    "seen": 1790865702.4392364,
+    "ast_hash": "70bcf7093e07d9a555dbeaebf3e43018",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Server/ServerView.State.cpp": {
+    "mtime": 1790865142.3970807,
+    "seen": 1790865702.4392364,
+    "ast_hash": "427e23eae7a62201a256746122987d76",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Server/ServerView.Voice.cpp": {
+    "mtime": 1790865142.39608,
+    "seen": 1790865702.4392364,
+    "ast_hash": "4cbb9d2903cec056affd151352cadb55",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Server/ServerView.xaml": {
+    "mtime": 1790821379.5630383,
+    "seen": 1790821662.815639,
+    "ast_hash": "db3b63e943bea9d64d66f22527e662f0",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Server/ServerView.xaml.cpp": {
+    "mtime": 1790820214.251357,
+    "seen": 1790821662.815639,
+    "ast_hash": "b76a3ada8bb948712067c87a4993fa81",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Server/ServerView.xaml.h": {
+    "mtime": 1790865142.395079,
+    "seen": 1790865702.4392364,
+    "ast_hash": "4cdb6ff6a72f4edb4e92057809b9e198",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Settings/SettingsView.xaml": {
+    "mtime": 1790819158.3051326,
+    "seen": 1790821662.815639,
+    "ast_hash": "05bb8c76db0532127b3d738faa3ae71e",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Settings/SettingsView.xaml.cpp": {
+    "mtime": 1790819158.3061335,
+    "seen": 1790821662.815639,
+    "ast_hash": "457b9361ec64772dc921241bf2a99866",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Settings/SettingsView.xaml.h": {
+    "mtime": 1790819158.3061335,
+    "seen": 1790821662.815639,
+    "ast_hash": "270fa3ad367f6a57b61f46237f06c2f9",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/resource.h": {
+    "mtime": 1790819158.3081324,
+    "seen": 1790821662.815639,
+    "ast_hash": "54667222aa39d631dec2cd1ec844e5e8",
+    "semantic_hash": ""
+  },
+  "core/audio/include/catro/audio/engine.hpp": {
+    "mtime": 1790819158.3116348,
+    "seen": 1790821662.815639,
+    "ast_hash": "8e5c1d6363612c17ba6e4adae9bf60f8",
+    "semantic_hash": ""
+  },
+  "core/audio/include/catro/audio/external_session.hpp": {
+    "mtime": 1790819158.3121412,
+    "seen": 1790821662.815639,
+    "ast_hash": "16f03b46c09676482ec2a5006f3d9c93",
+    "semantic_hash": ""
+  },
+  "core/audio/include/catro/audio/monitor_pipe.hpp": {
+    "mtime": 1790819158.3126023,
+    "seen": 1790821662.815639,
+    "ast_hash": "8661dfd006aa7c2791b0e4e338b32dcb",
+    "semantic_hash": ""
+  },
+  "core/audio/include/catro/audio/realtime.hpp": {
+    "mtime": 1790819158.3131452,
+    "seen": 1790821662.815639,
+    "ast_hash": "2ade59cb2de111d817109416f7cf7438",
+    "semantic_hash": ""
+  },
+  "core/audio/src/engine.cpp": {
+    "mtime": 1790819158.3141456,
+    "seen": 1790821662.815639,
+    "ast_hash": "f5486c6dcc70bb38f3160016a05af104",
+    "semantic_hash": ""
+  },
+  "core/audio/src/external_session.cpp": {
+    "mtime": 1790819158.3141456,
+    "seen": 1790821662.815639,
+    "ast_hash": "e2c565f29aeb59493296b869b9d081e3",
+    "semantic_hash": ""
+  },
+  "core/community/include/catro/community/directory.hpp": {
+    "mtime": 1790819158.3293533,
+    "seen": 1790821662.815639,
+    "ast_hash": "5d815b0ff676cc0a7d1060faf9196d1c",
+    "semantic_hash": ""
+  },
+  "core/community/include/catro/community/model.hpp": {
+    "mtime": 1790819158.3303537,
+    "seen": 1790821662.815639,
+    "ast_hash": "f24c1bf94e236949090bcf86a20fdd4f",
+    "semantic_hash": ""
+  },
+  "core/community/include/catro/community/state_codec.hpp": {
+    "mtime": 1790819158.3303537,
+    "seen": 1790821662.815639,
+    "ast_hash": "56e0497f067eab48314699a57aa7350a",
+    "semantic_hash": ""
+  },
+  "core/community/src/directory.cpp": {
+    "mtime": 1790819158.3313534,
+    "seen": 1790821662.815639,
+    "ast_hash": "8e486d73db7677a9eb15c2c0b6c366e1",
+    "semantic_hash": ""
+  },
+  "core/community/src/model.cpp": {
+    "mtime": 1790819158.3313534,
+    "seen": 1790821662.815639,
+    "ast_hash": "b67e59db305bc0064afafb3b370796fd",
+    "semantic_hash": ""
+  },
+  "core/community/src/state_codec.cpp": {
+    "mtime": 1790819158.3324785,
+    "seen": 1790821662.815639,
+    "ast_hash": "241f9e4578289e04b9d168c020180c0f",
+    "semantic_hash": ""
+  },
+  "core/rtc/include/catro/rtc/room_media_policy.hpp": {
+    "mtime": 1790819158.3398943,
+    "seen": 1790821662.815639,
+    "ast_hash": "0d8bae3f0410f2a9f3a3bc346c918c8e",
+    "semantic_hash": ""
+  },
+  "core/rtc/include/catro/rtc/room_mesh_transport.hpp": {
+    "mtime": 1790819158.3398943,
+    "seen": 1790821662.815639,
+    "ast_hash": "3129d88921eda7d24f00e4d88759287a",
+    "semantic_hash": ""
+  },
+  "core/rtc/src/room_mesh_transport.cpp": {
+    "mtime": 1790819158.341399,
+    "seen": 1790821662.815639,
+    "ast_hash": "c964c9d8c9deb30961d8c03a652e3b48",
+    "semantic_hash": ""
+  },
+  "core/transport/include/catro/transport/udp_peer_socket.hpp": {
+    "mtime": 1790819158.3435082,
+    "seen": 1790821662.815639,
+    "ast_hash": "dd03820e9477d415d91a3a0d8f5d321f",
+    "semantic_hash": ""
+  },
+  "core/transport/src/udp_peer_socket.cpp": {
+    "mtime": 1790819158.3445108,
+    "seen": 1790821662.815639,
+    "ast_hash": "185ba968c756d3d13fccca27b97e13ec",
+    "semantic_hash": ""
+  },
+  "core/video/include/catro/video/geometry.hpp": {
+    "mtime": 1790819158.3465083,
+    "seen": 1790821662.815639,
+    "ast_hash": "6ed94123a90d6e93151550de5e6d5c72",
+    "semantic_hash": ""
+  },
+  "core/video/include/catro/video/rtp_h264.hpp": {
+    "mtime": 1790819158.3465083,
+    "seen": 1790821662.815639,
+    "ast_hash": "29d692616b9e6f1e0b74fc18d2ea03d4",
+    "semantic_hash": ""
+  },
+  "core/video/src/rtp_h264.cpp": {
+    "mtime": 1790819158.3475072,
+    "seen": 1790821662.815639,
+    "ast_hash": "01d46c25ed02f8060468dcd50c983a47",
+    "semantic_hash": ""
+  },
+  "core/voice/include/catro/voice/audio_bridge.hpp": {
+    "mtime": 1790819158.348509,
+    "seen": 1790821662.815639,
+    "ast_hash": "6707c841c8f9d62c8b4d8ea8bdf01467",
+    "semantic_hash": ""
+  },
+  "core/voice/include/catro/voice/codec.hpp": {
+    "mtime": 1790819158.3497353,
+    "seen": 1790821662.815639,
+    "ast_hash": "8440c6c910f19457edc9c513d94e19d3",
+    "semantic_hash": ""
+  },
+  "core/voice/include/catro/voice/jitter.hpp": {
+    "mtime": 1790819158.3497353,
+    "seen": 1790821662.815639,
+    "ast_hash": "6760421b4993fbcec9cc39745f8fee25",
+    "semantic_hash": ""
+  },
+  "core/voice/include/catro/voice/packet.hpp": {
+    "mtime": 1790819158.3497353,
+    "seen": 1790821662.815639,
+    "ast_hash": "3135345265f7ef77fcc61dcc84b18c94",
+    "semantic_hash": ""
+  },
+  "core/voice/include/catro/voice/pipeline.hpp": {
+    "mtime": 1790819158.3497353,
+    "seen": 1790821662.815639,
+    "ast_hash": "79cbf4b65eba1f4b6a190233bf4643ea",
+    "semantic_hash": ""
+  },
+  "core/voice/include/catro/voice/sequence.hpp": {
+    "mtime": 1790819158.3512383,
+    "seen": 1790821662.815639,
+    "ast_hash": "4d44fadefb0747cbb8b961116218570f",
+    "semantic_hash": ""
+  },
+  "core/voice/src/audio_bridge.cpp": {
+    "mtime": 1790819158.3522472,
+    "seen": 1790821662.815639,
+    "ast_hash": "56ad4a0fbdbbd27c6ea26f53e7b2eafa",
+    "semantic_hash": ""
+  },
+  "core/voice/src/codec.cpp": {
+    "mtime": 1790819158.3526561,
+    "seen": 1790821662.815639,
+    "ast_hash": "8b12a636a75bf7fb47d7da083032727c",
+    "semantic_hash": ""
+  },
+  "core/voice/src/jitter.cpp": {
+    "mtime": 1790819158.35366,
+    "seen": 1790821662.815639,
+    "ast_hash": "3272847ed1638c25a81ee44686c97c61",
+    "semantic_hash": ""
+  },
+  "core/voice/src/packet.cpp": {
+    "mtime": 1790819158.35366,
+    "seen": 1790821662.815639,
+    "ast_hash": "d80dc680cd4974d488953ba890d8bb84",
+    "semantic_hash": ""
+  },
+  "core/voice/src/pipeline.cpp": {
+    "mtime": 1790819158.3546593,
+    "seen": 1790821662.815639,
+    "ast_hash": "5cfe866112bd23189a3e135a0d040561",
+    "semantic_hash": ""
+  },
+  "deploy/oracle-free/backup.sh": {
+    "mtime": 1790819158.3576605,
+    "seen": 1790821662.815639,
+    "ast_hash": "77768eff0f23890206b3f9aab5e67fce",
+    "semantic_hash": ""
+  },
+  "deploy/oracle-free/install.sh": {
+    "mtime": 1790819158.3596642,
+    "seen": 1790821662.815639,
+    "ast_hash": "32c00cd44f26fe8f69d86064a214e1dd",
+    "semantic_hash": ""
+  },
+  "deploy/oracle-free/restore.sh": {
+    "mtime": 1790819158.3596642,
+    "seen": 1790821662.815639,
+    "ast_hash": "4d26793f8c8853fa40de00f8a9b4f9b8",
+    "semantic_hash": ""
+  },
+  "deploy/oracle-free/update.sh": {
+    "mtime": 1790819158.3606606,
+    "seen": 1790821662.815639,
+    "ast_hash": "819437819589186679aa5f9174bcbeef",
+    "semantic_hash": ""
+  },
+  "deploy/oracle-free/verify.sh": {
+    "mtime": 1790819158.3616598,
+    "seen": 1790821662.815639,
+    "ast_hash": "d18a4eb96e1968a4a06388bb3c24c30b",
+    "semantic_hash": ""
+  },
+  "platform/macos/include/catro/platform/macos/audio_platform.hpp": {
+    "mtime": 1790819158.4945672,
+    "seen": 1790821662.815639,
+    "ast_hash": "7e584c098c53bafca8da7e57239213a6",
+    "semantic_hash": ""
+  },
+  "platform/macos/include/catro/platform/macos/directory_client.hpp": {
+    "mtime": 1790819158.495567,
+    "seen": 1790821662.815639,
+    "ast_hash": "d4af97e4731ea7356808c6fc8e5c35b2",
+    "semantic_hash": ""
+  },
+  "platform/macos/include/catro/platform/macos/local_state.hpp": {
+    "mtime": 1790819158.4967098,
+    "seen": 1790821662.815639,
+    "ast_hash": "d331a071d7f3c6a8f1762fb08e15dab6",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/audio_platform.mm": {
+    "mtime": 1790819158.4977093,
+    "seen": 1790821662.815639,
+    "ast_hash": "e8922f5ba88a102a1470aa533fb986c8",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/directory_client.mm": {
+    "mtime": 1790819158.4988916,
+    "seen": 1790821662.815639,
+    "ast_hash": "a961d56bbac00981771a06b612c8ea2b",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/local_state.mm": {
+    "mtime": 1790819158.4998913,
+    "seen": 1790821662.815639,
+    "ast_hash": "499346c9b9a25f29294de4b40185ec46",
+    "semantic_hash": ""
+  },
+  "platform/windows/include/catro/platform/windows/audio_platform.hpp": {
+    "mtime": 1790819158.5104725,
+    "seen": 1790821662.815639,
+    "ast_hash": "102f0fd05697739907dc08af85f83c0a",
+    "semantic_hash": ""
+  },
+  "platform/windows/include/catro/platform/windows/directory_client.hpp": {
+    "mtime": 1790819158.5114732,
+    "seen": 1790821662.815639,
+    "ast_hash": "1d218f11079bc64a283e87f38aed74c8",
+    "semantic_hash": ""
+  },
+  "platform/windows/include/catro/platform/windows/local_state.hpp": {
+    "mtime": 1790819158.5114732,
+    "seen": 1790821662.815639,
+    "ast_hash": "e76b4ff5dbedf33ea262f74174d52c83",
+    "semantic_hash": ""
+  },
+  "platform/windows/include/catro/platform/windows/process_loopback_audio.hpp": {
+    "mtime": 1790819158.5127895,
+    "seen": 1790821662.815639,
+    "ast_hash": "522e854888ae79a5b6b84e03aab49b7f",
+    "semantic_hash": ""
+  },
+  "platform/windows/include/catro/platform/windows/screen_capture.hpp": {
+    "mtime": 1790819158.513793,
+    "seen": 1790821662.815639,
+    "ast_hash": "32de761c0da1ddb40e9f273deea58023",
+    "semantic_hash": ""
+  },
+  "platform/windows/include/catro/platform/windows/video_decoder.hpp": {
+    "mtime": 1790819158.513793,
+    "seen": 1790821662.815639,
+    "ast_hash": "d5545c51b218f1cb27a0b4c1d2b89f68",
+    "semantic_hash": ""
+  },
+  "platform/windows/include/catro/platform/windows/video_encoder.hpp": {
+    "mtime": 1790819158.514793,
+    "seen": 1790821662.815639,
+    "ast_hash": "043afd89c0efdd742b91eda467451843",
+    "semantic_hash": ""
+  },
+  "platform/windows/include/catro/platform/windows/video_presenter.hpp": {
+    "mtime": 1790819158.514793,
+    "seen": 1790821662.815639,
+    "ast_hash": "d3624623cb9cc1299c592376a6cf7bc2",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/audio_platform.cpp": {
+    "mtime": 1790819158.5157938,
+    "seen": 1790821662.815639,
+    "ast_hash": "c3fdf29bdfa0cccb76f2d31d21839e90",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/directory_client.cpp": {
+    "mtime": 1790819158.5177937,
+    "seen": 1790821662.815639,
+    "ast_hash": "6ff5ff085d031b815e25161a9a6791e7",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/local_state.cpp": {
+    "mtime": 1790819158.5177937,
+    "seen": 1790821662.815639,
+    "ast_hash": "61dea08c0341b4068ae77b1cc6949cb9",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/process_loopback_audio.cpp": {
+    "mtime": 1790819158.5228891,
+    "seen": 1790821662.815639,
+    "ast_hash": "2d7eebe75cad1fc8a10f14ce3f6f9283",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/screen_capture.cpp": {
+    "mtime": 1790819158.5236177,
+    "seen": 1790821662.815639,
+    "ast_hash": "1fcb3e5c1d8c1ef0393977b81fc93c70",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/text.hpp": {
+    "mtime": 1790819158.5246181,
+    "seen": 1790821662.815639,
+    "ast_hash": "b535b6f9c5e2e8f13b32c49d0d5cddab",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/video_decoder.cpp": {
+    "mtime": 1790819158.5256171,
+    "seen": 1790821662.815639,
+    "ast_hash": "ac81b514811d5fb3d32744373c44a065",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/video_encoder.cpp": {
+    "mtime": 1790819158.5266175,
+    "seen": 1790821662.815639,
+    "ast_hash": "429127f72de12c5f09cdfce158c5d4f7",
+    "semantic_hash": ""
+  },
+  "platform/windows/src/video_presenter.cpp": {
+    "mtime": 1790819158.5266175,
+    "seen": 1790821662.815639,
+    "ast_hash": "95c5bebf4d2821e9b9dd01d11431d2f8",
+    "semantic_hash": ""
+  },
+  "scripts/install-macos.sh": {
+    "mtime": 1790819158.5316179,
+    "seen": 1790821662.815639,
+    "ast_hash": "3aea7253d791253b2c904babcb5a14f4",
+    "semantic_hash": ""
+  },
+  "scripts/install-windows.ps1": {
+    "mtime": 1790819158.5321214,
+    "seen": 1790821662.815639,
+    "ast_hash": "e53576f0fd09e4cfdf7f2ee64c50edb4",
+    "semantic_hash": ""
+  },
+  "scripts/package-macos.sh": {
+    "mtime": 1790819158.5331259,
+    "seen": 1790821662.815639,
+    "ast_hash": "93d21cc45f182878cdd3b7bc683da730",
+    "semantic_hash": ""
+  },
+  "scripts/package-windows.ps1": {
+    "mtime": 1790819158.5331259,
+    "seen": 1790821662.815639,
+    "ast_hash": "f228ade4c57e2179c380f9403014442e",
+    "semantic_hash": ""
+  },
+  "scripts/verify.ps1": {
+    "mtime": 1790819158.5361252,
+    "seen": 1790821662.815639,
+    "ast_hash": "f866e022b2c53fd1175819b916a1c94e",
+    "semantic_hash": ""
+  },
+  "services/signaling/directory.go": {
+    "mtime": 1790819158.538126,
+    "seen": 1790821662.815639,
+    "ast_hash": "1f1f709ee5f39158a5b8f6e932a8c046",
+    "semantic_hash": ""
+  },
+  "services/signaling/go.mod": {
+    "mtime": 1790819158.5391257,
+    "seen": 1790821662.815639,
+    "ast_hash": "e92b872b520961414471bb77e2080d70",
+    "semantic_hash": ""
+  },
+  "services/signaling/main.go": {
+    "mtime": 1790819158.5401254,
+    "seen": 1790821662.815639,
+    "ast_hash": "7fdda5a0a7c11c9e70eed56703d40821",
+    "semantic_hash": ""
+  },
+  "services/signaling/main_test.go": {
+    "mtime": 1790819158.5401254,
+    "seen": 1790821662.815639,
+    "ast_hash": "2ab5d65aa960b52e1910bd5c1d20be48",
+    "semantic_hash": ""
+  },
+  "services/signaling/rate_limit.go": {
+    "mtime": 1790819158.5416276,
+    "seen": 1790821662.815639,
+    "ast_hash": "c84562a20ca5fd621c40cb37f5c0cfe1",
+    "semantic_hash": ""
+  },
+  "services/signaling/rate_limit_test.go": {
+    "mtime": 1790819158.5421364,
+    "seen": 1790821662.815639,
+    "ast_hash": "274b826ff7c94cfc6676724e1f88dcb6",
+    "semantic_hash": ""
+  },
+  "tests/apps/audio_view_model_test.cpp": {
+    "mtime": 1790819158.5435672,
+    "seen": 1790821662.815639,
+    "ast_hash": "d2ed037faf80e9ffa1bfbfa70f68ef7d",
+    "semantic_hash": ""
+  },
+  "tests/apps/diagnostics_test.cpp": {
+    "mtime": 1790819158.5435672,
+    "seen": 1790821662.815639,
+    "ast_hash": "02ddb24f47c074f30d80bb1a167ef750",
+    "semantic_hash": ""
+  },
+  "tests/apps/presentation_state_test.cpp": {
+    "mtime": 1790819390.4105165,
+    "seen": 1790821662.815639,
+    "ast_hash": "4e002156a32d710f7297e73de96edf4b",
+    "semantic_hash": ""
+  },
+  "tests/apps/shell_model_test.cpp": {
+    "mtime": 1790819158.5445673,
+    "seen": 1790821662.815639,
+    "ast_hash": "57517de63880533961ad9276d308a952",
+    "semantic_hash": ""
+  },
+  "tests/apps/ui_policy_test.cpp": {
+    "mtime": 1790865451.3529882,
+    "seen": 1790865702.4392364,
+    "ast_hash": "81f0663da3d19ee9bfa728f46849bd53",
+    "semantic_hash": ""
+  },
+  "tests/audio/audio_test.cpp": {
+    "mtime": 1790819158.588703,
+    "seen": 1790821662.815639,
+    "ast_hash": "c03024fd34ce80f9d133f841e8dca1c7",
+    "semantic_hash": ""
+  },
+  "tests/audio/external_session_test.cpp": {
+    "mtime": 1790819158.588703,
+    "seen": 1790821662.815639,
+    "ast_hash": "f398e12f86f400f14975b9ac782a01ae",
+    "semantic_hash": ""
+  },
+  "tests/community/community_test.cpp": {
+    "mtime": 1790819158.5977714,
+    "seen": 1790821662.815639,
+    "ast_hash": "00e0a72b53a732636b85fbb6a420c905",
+    "semantic_hash": ""
+  },
+  "tests/community/directory_test.cpp": {
+    "mtime": 1790819158.5977714,
+    "seen": 1790821662.815639,
+    "ast_hash": "8addafe765af909694f20e2046d5f27e",
+    "semantic_hash": ""
+  },
+  "tests/helpers/fake_audio_platform.hpp": {
+    "mtime": 1790819158.6100848,
+    "seen": 1790821662.815639,
+    "ast_hash": "645e58ab4925ea0243d3c4ad0e5696a4",
+    "semantic_hash": ""
+  },
+  "tests/installers/macos-installer-test.sh": {
+    "mtime": 1790819158.613023,
+    "seen": 1790821662.815639,
+    "ast_hash": "76aca75e6848ac9e5dcd7ebafa646a6b",
+    "semantic_hash": ""
+  },
+  "tests/installers/windows-installer-test.ps1": {
+    "mtime": 1790819158.6140265,
+    "seen": 1790821662.815639,
+    "ast_hash": "aa6d524f504ee38fd769c63f07f6491e",
+    "semantic_hash": ""
+  },
+  "tests/macos/directory_cancellation_test.cpp": {
+    "mtime": 1790819158.6140265,
+    "seen": 1790821662.815639,
+    "ast_hash": "799aecdcb49864c32d1753221f6af1d8",
+    "semantic_hash": ""
+  },
+  "tests/macos/directory_client_test.mm": {
+    "mtime": 1790819158.6150262,
+    "seen": 1790821662.815639,
+    "ast_hash": "b18fabc5b6b30f730167664e4980515e",
+    "semantic_hash": ""
+  },
+  "tests/macos/local_state_test.cpp": {
+    "mtime": 1790819158.6160283,
+    "seen": 1790821662.815639,
+    "ast_hash": "70375fc61c6d319945a52391c4fceaf2",
+    "semantic_hash": ""
+  },
+  "tests/macos/translation_test.cpp": {
+    "mtime": 1790819158.6160283,
+    "seen": 1790821662.815639,
+    "ast_hash": "48d7bad9595ac3b67397dfa47502dc75",
+    "semantic_hash": ""
+  },
+  "tests/macos/voice_runtime_test.cpp": {
+    "mtime": 1790819158.6170263,
+    "seen": 1790821662.815639,
+    "ast_hash": "850a9fa55c186caaed9f1cacbf7000be",
+    "semantic_hash": ""
+  },
+  "tests/rtc/room_runtime_test.cpp": {
+    "mtime": 1790819158.6170263,
+    "seen": 1790821662.815639,
+    "ast_hash": "a512293196365bc814afd6d0aa1ef294",
+    "semantic_hash": ""
+  },
+  "tests/tools/audio_check_test.cpp": {
+    "mtime": 1790819158.6180265,
+    "seen": 1790821662.815639,
+    "ast_hash": "f9e5941aaf6a1b78c171bbe94626ac3d",
+    "semantic_hash": ""
+  },
+  "tests/tools/capture_check_test.cpp": {
+    "mtime": 1790819158.619026,
+    "seen": 1790821662.815639,
+    "ast_hash": "971f1c89a33efdb529155c2f1501b7a9",
+    "semantic_hash": ""
+  },
+  "tests/tools/encode_check_test.cpp": {
+    "mtime": 1790819158.619026,
+    "seen": 1790821662.815639,
+    "ast_hash": "a2abaa9661d7ceb2eed8f97eaaeae7f2",
+    "semantic_hash": ""
+  },
+  "tests/tools/report_cli_test.cpp": {
+    "mtime": 1790819158.6200285,
+    "seen": 1790821662.815639,
+    "ast_hash": "6ca9e1fc584796dfc1018f28eec61e9a",
+    "semantic_hash": ""
+  },
+  "tests/tools/video_peer_test.cpp": {
+    "mtime": 1790819158.6200285,
+    "seen": 1790821662.815639,
+    "ast_hash": "a5d1b2fe983ea4c71a48be4e8447777d",
+    "semantic_hash": ""
+  },
+  "tests/tools/voice_peer_runtime_test.cpp": {
+    "mtime": 1790819158.6200285,
+    "seen": 1790821662.815639,
+    "ast_hash": "aadad0bd55b645b9e9a747cf78c3feed",
+    "semantic_hash": ""
+  },
+  "tests/tools/voice_peer_test.cpp": {
+    "mtime": 1790819158.6215324,
+    "seen": 1790821662.815639,
+    "ast_hash": "a30fd180a5cd5a64eb771848f0deec17",
+    "semantic_hash": ""
+  },
+  "tests/ui/windows_keyboard_smoke.ps1": {
+    "mtime": 1790865142.3975847,
+    "seen": 1790865702.4392364,
+    "ast_hash": "facbde163384c8bbee82d0c65ec4db54",
+    "semantic_hash": ""
+  },
+  "tests/video/geometry_test.cpp": {
+    "mtime": 1790819158.6215324,
+    "seen": 1790821662.815639,
+    "ast_hash": "5f3da621a6c1e7f603e838950f09f83a",
+    "semantic_hash": ""
+  },
+  "tests/video/rtp_h264_test.cpp": {
+    "mtime": 1790819158.6215324,
+    "seen": 1790821662.815639,
+    "ast_hash": "c74e7590c1d808c0053f7398205e7ba1",
+    "semantic_hash": ""
+  },
+  "tests/voice/jitter_test.cpp": {
+    "mtime": 1790819158.6227717,
+    "seen": 1790821662.815639,
+    "ast_hash": "1db3aa9facabb7aa3784c57d96929b4f",
+    "semantic_hash": ""
+  },
+  "tests/voice/pipeline_test.cpp": {
+    "mtime": 1790819158.623776,
+    "seen": 1790821662.815639,
+    "ast_hash": "0c606dc7843a2f811b56a8fa46f8cdbb",
+    "semantic_hash": ""
+  },
+  "tests/voice/realtime_bridge_test.cpp": {
+    "mtime": 1790819158.623776,
+    "seen": 1790821662.815639,
+    "ast_hash": "0863bac5bfc931edaff77d7fb16206e0",
+    "semantic_hash": ""
+  },
+  "tests/voice/room_voice_runtime_test.cpp": {
+    "mtime": 1790819158.6247752,
+    "seen": 1790821662.815639,
+    "ast_hash": "d76f506bc1d81f69bba4f5863e186a93",
+    "semantic_hash": ""
+  },
+  "tests/voice/udp_transport_test.cpp": {
+    "mtime": 1790819158.6257775,
+    "seen": 1790821662.815639,
+    "ast_hash": "aada6c449804de80ab5b9fbcefaa18a2",
+    "semantic_hash": ""
+  },
+  "tests/voice/voice_test.cpp": {
+    "mtime": 1790819158.6257775,
+    "seen": 1790821662.815639,
+    "ast_hash": "7e7bae703b494e3b5c97447dc708107e",
+    "semantic_hash": ""
+  },
+  "tests/windows/audio_platform_test.cpp": {
+    "mtime": 1790819158.6267774,
+    "seen": 1790821662.815639,
+    "ast_hash": "4cc80c23638952a4a8fafbeede41aad0",
+    "semantic_hash": ""
+  },
+  "tests/windows/local_state_test.cpp": {
+    "mtime": 1790819158.6267774,
+    "seen": 1790821662.815639,
+    "ast_hash": "c9ddaa8abdb258c0908e873446ddfdcb",
+    "semantic_hash": ""
+  },
+  "tests/windows/rtc_room_transport_test.cpp": {
+    "mtime": 1790819158.6287754,
+    "seen": 1790821662.815639,
+    "ast_hash": "5b2cffe0d0caaf9165f70363311f29af",
+    "semantic_hash": ""
+  },
+  "tests/windows/screen_capture_test.cpp": {
+    "mtime": 1790819158.6287754,
+    "seen": 1790821662.815639,
+    "ast_hash": "0fed1c282dee6294bf3cfaba0324a7b2",
+    "semantic_hash": ""
+  },
+  "tests/windows/screen_runtime_test.cpp": {
+    "mtime": 1790819158.6297753,
+    "seen": 1790821662.815639,
+    "ast_hash": "769b4be939ec364b5de14aadcd48f9de",
+    "semantic_hash": ""
+  },
+  "tests/windows/translation_test.cpp": {
+    "mtime": 1790819158.6297753,
+    "seen": 1790821662.815639,
+    "ast_hash": "3b992e22523562eb5500722f76930298",
+    "semantic_hash": ""
+  },
+  "tests/windows/video_decoder_test.cpp": {
+    "mtime": 1790819158.6312778,
+    "seen": 1790821662.815639,
+    "ast_hash": "a50d2c1dd9e677a3ae70a0901d8a012e",
+    "semantic_hash": ""
+  },
+  "tests/windows/video_encoder_test.cpp": {
+    "mtime": 1790819158.6312778,
+    "seen": 1790821662.815639,
+    "ast_hash": "70c93d351cb4ae11d64de780544ae37f",
+    "semantic_hash": ""
+  },
+  "tests/windows/video_presenter_test.cpp": {
+    "mtime": 1790819158.6322806,
+    "seen": 1790821662.815639,
+    "ast_hash": "3672d49abb9811756b448300ac250f65",
+    "semantic_hash": ""
+  },
+  "tests/windows/voice_runtime_test.cpp": {
+    "mtime": 1790819158.6326742,
+    "seen": 1790821662.815639,
+    "ast_hash": "870de0ec3190a41a80f1e61ca8dc056e",
+    "semantic_hash": ""
+  },
+  "tools/audio-check/audio_check.cpp": {
+    "mtime": 1790819158.6336782,
+    "seen": 1790821662.815639,
+    "ast_hash": "78f74ff88ce5a15c520eb9e73bec89bf",
+    "semantic_hash": ""
+  },
+  "tools/audio-check/audio_check.hpp": {
+    "mtime": 1790819158.6346774,
+    "seen": 1790821662.815639,
+    "ast_hash": "9ef59ddcaea40bef23ebefdd15a585ad",
+    "semantic_hash": ""
+  },
+  "tools/audio-check/main.cpp": {
+    "mtime": 1790819158.6346774,
+    "seen": 1790821662.815639,
+    "ast_hash": "107a53c637683308a677be92a1ed2b22",
+    "semantic_hash": ""
+  },
+  "tools/capture-check/capture_check.cpp": {
+    "mtime": 1790819158.6406777,
+    "seen": 1790821662.815639,
+    "ast_hash": "cabfa6af8f68f85b0ff4582b2b0cc7bc",
+    "semantic_hash": ""
+  },
+  "tools/capture-check/capture_check.hpp": {
+    "mtime": 1790819158.6416802,
+    "seen": 1790821662.815639,
+    "ast_hash": "4af7311a2f38266d1432af115cde043c",
+    "semantic_hash": ""
+  },
+  "tools/capture-check/main.cpp": {
+    "mtime": 1790819158.642184,
+    "seen": 1790821662.815639,
+    "ast_hash": "913d7b47725b48948d318d38b6d3265c",
+    "semantic_hash": ""
+  },
+  "tools/encode-check/encode_check.cpp": {
+    "mtime": 1790819158.643188,
+    "seen": 1790821662.815639,
+    "ast_hash": "dc1188c7a5641ec04b4bf7970f1298cd",
+    "semantic_hash": ""
+  },
+  "tools/encode-check/encode_check.hpp": {
+    "mtime": 1790819158.6441877,
+    "seen": 1790821662.815639,
+    "ast_hash": "3c1de269941659e1c80f83c643bb6d1b",
+    "semantic_hash": ""
+  },
+  "tools/encode-check/main.cpp": {
+    "mtime": 1790819158.6441877,
+    "seen": 1790821662.815639,
+    "ast_hash": "c594c033d9d0d6666cae4b8864fd2bdd",
+    "semantic_hash": ""
+  },
+  "tools/video-peer/main.cpp": {
+    "mtime": 1790819158.6451871,
+    "seen": 1790821662.815639,
+    "ast_hash": "f6e703b99089e01233fce29c1919fad0",
+    "semantic_hash": ""
+  },
+  "tools/video-peer/video_peer.cpp": {
+    "mtime": 1790819158.646188,
+    "seen": 1790821662.815639,
+    "ast_hash": "9494e508c654f8b1380d0e1af0daa953",
+    "semantic_hash": ""
+  },
+  "tools/video-peer/video_peer.hpp": {
+    "mtime": 1790819158.6471872,
+    "seen": 1790821662.815639,
+    "ast_hash": "cbb43e94cb4e0cde4da9713e2fd37a2d",
+    "semantic_hash": ""
+  },
+  "tools/voice-peer/main.cpp": {
+    "mtime": 1790819158.6481872,
+    "seen": 1790821662.815639,
+    "ast_hash": "a738fb51b4c9fa466a0f360fd4fa95dc",
+    "semantic_hash": ""
+  },
+  "tools/voice-peer/udp_socket.cpp": {
+    "mtime": 1790819158.6481872,
+    "seen": 1790821662.815639,
+    "ast_hash": "ba2cc14b8e3a57636fe4b411c970b564",
+    "semantic_hash": ""
+  },
+  "tools/voice-peer/udp_socket.hpp": {
+    "mtime": 1790819158.6491873,
+    "seen": 1790821662.815639,
+    "ast_hash": "f79c0bfde3c8624c37fac9be2a21fde5",
+    "semantic_hash": ""
+  },
+  "tools/voice-peer/voice_peer.cpp": {
+    "mtime": 1790819158.6496487,
+    "seen": 1790821662.815639,
+    "ast_hash": "e092c69cf7fb0d7d60cf4b7e9547bbe8",
+    "semantic_hash": ""
+  },
+  "tools/voice-peer/voice_peer.hpp": {
+    "mtime": 1790819158.6496487,
+    "seen": 1790821662.815639,
+    "ast_hash": "08c99aa5486324c5b55b450e531d82ee",
+    "semantic_hash": ""
+  },
+  "tools/voice-peer/worker_priority.cpp": {
+    "mtime": 1790819158.6506486,
+    "seen": 1790821662.815639,
+    "ast_hash": "8d10682f8c60710b64ff9d7c1954fd5c",
+    "semantic_hash": ""
+  },
+  "tools/voice-peer/worker_priority.hpp": {
+    "mtime": 1790819158.6506486,
+    "seen": 1790821662.815639,
+    "ast_hash": "dec289ac5cb3ff96a58e91546d69166f",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-09-30-windows-macos-production-parity/progress.md": {
+    "mtime": 1790865742.6400862,
+    "seen": 1790865785.424926,
+    "ast_hash": "65c88f7684ecfcdc51412d23501cf38a",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-10-01-native-ui-stabilization/progress.md": {
+    "mtime": 1790865742.6400862,
+    "seen": 1790865785.424926,
+    "ast_hash": "8c7f1114e57f52ba34162935d3a6fd16",
+    "semantic_hash": ""
+  },
+  "apps/room-runtime/windows/CMakeLists.txt": {
+    "mtime": 1790819158.2787282,
+    "seen": 1790821662.815639,
+    "ast_hash": "c2f480cc102d877933416b4c103884a2",
+    "semantic_hash": ""
+  },
+  "apps/screen-runtime/windows/CMakeLists.txt": {
+    "mtime": 1790819158.2812307,
+    "seen": 1790821662.815639,
+    "ast_hash": "ce650b374752ed522c63cf07bee9d4e8",
+    "semantic_hash": ""
+  },
+  "apps/shell/CMakeLists.txt": {
+    "mtime": 1790819802.9175947,
+    "seen": 1790821662.815639,
+    "ast_hash": "e54d3673435030172bbc30f74cb4a0e4",
+    "semantic_hash": ""
+  },
+  "apps/voice-runtime/common/CMakeLists.txt": {
+    "mtime": 1790819158.2853968,
+    "seen": 1790821662.815639,
+    "ast_hash": "ddba06487a4d7000e496408a6e1bfd1f",
+    "semantic_hash": ""
+  },
+  "apps/voice-runtime/macos/CMakeLists.txt": {
+    "mtime": 1790819158.2883928,
+    "seen": 1790821662.815639,
+    "ast_hash": "4ba284ab2a4dac3586944e29bdcfcba3",
+    "semantic_hash": ""
+  },
+  "apps/voice-runtime/windows/CMakeLists.txt": {
+    "mtime": 1790819158.2893932,
+    "seen": 1790821662.815639,
+    "ast_hash": "b29e36e6d48b23fe1b2235eb88cff8dd",
+    "semantic_hash": ""
+  },
+  "core/audio/CMakeLists.txt": {
+    "mtime": 1790819158.3101325,
+    "seen": 1790821662.815639,
+    "ast_hash": "c3a854b1bb58f7c1593c3a5d1028126b",
+    "semantic_hash": ""
+  },
+  "core/community/CMakeLists.txt": {
+    "mtime": 1790819158.3283532,
+    "seen": 1790821662.815639,
+    "ast_hash": "6c23d18d0b68cae4fce5c29af800ff64",
+    "semantic_hash": ""
+  },
+  "core/rtc/CMakeLists.txt": {
+    "mtime": 1790819158.3388948,
+    "seen": 1790821662.815639,
+    "ast_hash": "ed4d68a7c40cde8721eba2ed77631312",
+    "semantic_hash": ""
+  },
+  "core/transport/CMakeLists.txt": {
+    "mtime": 1790819158.342403,
+    "seen": 1790821662.815639,
+    "ast_hash": "d448cbc35ca037040d650e43d81b1697",
+    "semantic_hash": ""
+  },
+  "core/video/CMakeLists.txt": {
+    "mtime": 1790819158.3445108,
+    "seen": 1790821662.815639,
+    "ast_hash": "da1058d32591ed12eb5cd1fcec7d820c",
+    "semantic_hash": ""
+  },
+  "core/voice/CMakeLists.txt": {
+    "mtime": 1790819158.348509,
+    "seen": 1790821662.815639,
+    "ast_hash": "0cbb5d33c69c662aba676195e6b30fa9",
+    "semantic_hash": ""
+  },
+  "deploy/oracle-free/README.md": {
+    "mtime": 1790819158.3566606,
+    "seen": 1790821662.815639,
+    "ast_hash": "95924057c090a56bb0122f53dfd6bf08",
+    "semantic_hash": ""
+  },
+  "deploy/oracle-free/compose.yaml": {
+    "mtime": 1790819158.35866,
+    "seen": 1790821662.815639,
+    "ast_hash": "6b7e5e7ed21f2d8d0c55e3af8cbbd834",
+    "semantic_hash": ""
+  },
+  "docs/AGENTS.md": {
+    "mtime": 1790819158.362162,
+    "seen": 1790821662.815639,
+    "ast_hash": "c028d286b6a5a9128c23673285632b82",
+    "semantic_hash": ""
+  },
+  "docs/architecture/h264-rtp.md": {
+    "mtime": 1790819158.3651655,
+    "seen": 1790821662.815639,
+    "ast_hash": "5977e3ae3357b22fb13535d98f1ab744",
+    "semantic_hash": ""
+  },
+  "docs/architecture/personal-state.md": {
+    "mtime": 1790819158.3661652,
+    "seen": 1790821662.815639,
+    "ast_hash": "8781cb1f96b21015bdf1471d2817d4de",
+    "semantic_hash": ""
+  },
+  "docs/architecture/two-client-screen-stream.md": {
+    "mtime": 1790819158.367165,
+    "seen": 1790821662.815639,
+    "ast_hash": "b855e68dcba008a44b9bf887213e7488",
+    "semantic_hash": ""
+  },
+  "docs/architecture/windows-h264-hardware-encode.md": {
+    "mtime": 1790819158.367165,
+    "seen": 1790821662.815639,
+    "ast_hash": "46fe899824d7c92147ef15e02fb6fab2",
+    "semantic_hash": ""
+  },
+  "docs/architecture/windows-screen-capture.md": {
+    "mtime": 1790819158.3681653,
+    "seen": 1790821662.815639,
+    "ast_hash": "9c5f3c9f9c92acc4bd42b8c5553b997f",
+    "semantic_hash": ""
+  },
+  "docs/operations/oracle-free-production.md": {
+    "mtime": 1790819158.3691657,
+    "seen": 1790821662.815639,
+    "ast_hash": "933d70ac1edebbf775f8a8fe101cbd53",
+    "semantic_hash": ""
+  },
+  "docs/product/voice-stream-interaction-reference.md": {
+    "mtime": 1790819158.3701653,
+    "seen": 1790821662.815639,
+    "ast_hash": "2736316dc56277ca91d53767d297f329",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-09-27-audio-engine.md": {
+    "mtime": 1790819158.3723626,
+    "seen": 1790821662.815639,
+    "ast_hash": "739f2415fbc662bd1862dff8d7c1f161",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-09-27-two-client-voice.md": {
+    "mtime": 1790819158.3727589,
+    "seen": 1790821662.815639,
+    "ast_hash": "e7e1a32fa004e9e295ddfdd1cff1160d",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-09-29-oracle-free-production-rooms.md": {
+    "mtime": 1790819158.3737624,
+    "seen": 1790821662.815639,
+    "ast_hash": "60db475adb0efbd16c0ee38411fffb35",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-09-30-bounded-text-channels.md": {
+    "mtime": 1790819158.3737624,
+    "seen": 1790821662.815639,
+    "ast_hash": "8c2e33b726def0f3e48741a6f5641ee9",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-09-30-cross-platform-releases-and-installers.md": {
+    "mtime": 1790819158.3747625,
+    "seen": 1790821662.815639,
+    "ast_hash": "c342de4853de667548da5634794465a3",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-09-30-server-code-join-requests.md": {
+    "mtime": 1790819158.3757098,
+    "seen": 1790821662.815639,
+    "ast_hash": "c7adb3012af32ab950e27ca606bca186",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-09-30-server-member-roster.md": {
+    "mtime": 1790819158.3757098,
+    "seen": 1790821662.815639,
+    "ast_hash": "15d9cfc7785c7ecca45e76aecdeb0465",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-09-30-windows-macos-production-parity.md": {
+    "mtime": 1790819158.3767433,
+    "seen": 1790821662.815639,
+    "ast_hash": "dcf6f61e6a331c2612a2a313980cfaaa",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-10-01-native-ui-stabilization.md": {
+    "mtime": 1790819326.780509,
+    "seen": 1790821662.815639,
+    "ast_hash": "9be53051b8c59a58a90a699a51b8b594",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-09-27-audio-engine-design.md": {
+    "mtime": 1790819158.3777409,
+    "seen": 1790821662.815639,
+    "ast_hash": "d0cf79656162f9647e7f177e19f8221c",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-09-27-two-client-voice-design.md": {
+    "mtime": 1790819158.37904,
+    "seen": 1790821662.815639,
+    "ast_hash": "be1d7755be9fca84d5b3578319ff982d",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-09-29-oracle-free-production-rooms-design.md": {
+    "mtime": 1790819158.37904,
+    "seen": 1790821662.815639,
+    "ast_hash": "17a82c0342563349ac5450221afc3c81",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-09-30-bounded-text-channels-design.md": {
+    "mtime": 1790819158.37904,
+    "seen": 1790821662.815639,
+    "ast_hash": "26167e48ca1a079c154a95142a73a3b2",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-09-30-cross-platform-releases-and-installers-design.md": {
+    "mtime": 1790819158.3815436,
+    "seen": 1790821662.815639,
+    "ast_hash": "54ddd1a52c27bc4ae3ff8520427efae3",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-09-30-server-code-join-requests-design.md": {
+    "mtime": 1790819158.3815436,
+    "seen": 1790821662.815639,
+    "ast_hash": "94ca3cccaab18aabdcbcbcbb812f4ab8",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-09-30-server-member-roster-design.md": {
+    "mtime": 1790819158.382553,
+    "seen": 1790821662.815639,
+    "ast_hash": "d05d893155fffcc40ae93aa1eb78daff",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-09-30-windows-macos-production-parity-design.md": {
+    "mtime": 1790819158.382553,
+    "seen": 1790821662.815639,
+    "ast_hash": "3118cfa3062105afc22b3e84fa6090ad",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-10-01-native-ui-stabilization-design.md": {
+    "mtime": 1790819326.779457,
+    "seen": 1790821662.815639,
+    "ast_hash": "e5ea110911113e2e722152865f7aed67",
+    "semantic_hash": ""
+  },
+  "docs/ui-foundation.md": {
+    "mtime": 1790819158.382553,
+    "seen": 1790821662.815639,
+    "ast_hash": "e4207323ffbe14ac3498781f5c71dfbc",
+    "semantic_hash": ""
+  },
+  "docs/validation/native-ui-stabilization.md": {
+    "mtime": 1790865742.6390839,
+    "seen": 1790865785.424926,
+    "ast_hash": "7c4e8434f6aece018577820ba318427e",
+    "semantic_hash": ""
+  },
+  "docs/validation/oracle-free-production-acceptance.md": {
+    "mtime": 1790819158.382553,
+    "seen": 1790821662.815639,
+    "ast_hash": "accb8199752f7410a361b45038a9f3c1",
+    "semantic_hash": ""
+  },
+  "docs/voice-channel-runtime.md": {
+    "mtime": 1790819158.382553,
+    "seen": 1790821662.815639,
+    "ast_hash": "ded8f46bcb407dbe602d4b28cce68723",
+    "semantic_hash": ""
+  },
+  "docs/voice-peer.md": {
+    "mtime": 1790819158.382553,
+    "seen": 1790821662.815639,
+    "ast_hash": "a0273ea6c94526a5a41c4bc4ceb9a4f4",
+    "semantic_hash": ""
+  },
+  "services/signaling/README.md": {
+    "mtime": 1790819158.5371258,
+    "seen": 1790821662.815639,
+    "ast_hash": "464c3d5b57da9591d1b75c322b66adc3",
+    "semantic_hash": ""
+  },
+  "tools/audio-check/CMakeLists.txt": {
+    "mtime": 1790819158.6336782,
+    "seen": 1790821662.815639,
+    "ast_hash": "90506b84a258d8cb2deb6a78de25cd14",
+    "semantic_hash": ""
+  },
+  "tools/capture-check/CMakeLists.txt": {
+    "mtime": 1790819158.6406777,
+    "seen": 1790821662.815639,
+    "ast_hash": "ff575b7945fd19e6fcdce3d4f19ead36",
+    "semantic_hash": ""
+  },
+  "tools/encode-check/CMakeLists.txt": {
+    "mtime": 1790819158.643188,
+    "seen": 1790821662.815639,
+    "ast_hash": "523874fe3a1af6821c684172734a6af0",
+    "semantic_hash": ""
+  },
+  "tools/video-peer/CMakeLists.txt": {
+    "mtime": 1790819158.6451871,
+    "seen": 1790821662.815639,
+    "ast_hash": "c89a6e37752d74482db697b935517624",
+    "semantic_hash": ""
+  },
+  "tools/voice-peer/CMakeLists.txt": {
+    "mtime": 1790819158.6471872,
+    "seen": 1790821662.815639,
+    "ast_hash": "f77ba15b47b6e9fca46d1d4e2cf62d51",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-10-01-native-ui-stabilization/screenshots/default-printwindow.png": {
+    "mtime": 1790821267.629075,
+    "seen": 1790821662.815639,
+    "ast_hash": "73efa83d0027db3abd570a397bf031c2",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-10-01-native-ui-stabilization/screenshots/default.png": {
+    "mtime": 1790821151.16754,
+    "seen": 1790821662.815639,
+    "ast_hash": "a70d3a2c9c2a045324d3789840a0da7a",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Assets/Catro150.png": {
+    "mtime": 1790865468.094648,
+    "seen": 1790865702.4392364,
+    "ast_hash": "e0d61f873ba49958bdfb9cb6bd018647",
+    "semantic_hash": ""
+  },
+  "apps/windows/Catro/Assets/Catro44.png": {
+    "mtime": 1790865468.0911338,
+    "seen": 1790865702.4392364,
+    "ast_hash": "932f3b5ec287829fb3409c9c9fbe708c",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-10-01-native-ui-stabilization/review-diff.txt": {
+    "mtime": 1790821727.8922813,
+    "seen": 1790865702.4392364,
+    "ast_hash": "e187f425930b1398befaa601140cbe96",
     "semantic_hash": ""
   }
 }
