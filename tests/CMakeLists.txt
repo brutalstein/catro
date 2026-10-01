@@ -96,6 +96,8 @@ target_link_libraries(catro_audio_view_model_test PRIVATE catro_diagnostics)
 
 catro_add_test(shell_model apps/shell_model_test.cpp)
 target_link_libraries(catro_shell_model_test PRIVATE Catro::Shell)
+catro_add_test(presentation_state apps/presentation_state_test.cpp)
+target_link_libraries(catro_presentation_state_test PRIVATE Catro::Shell)
 
 catro_add_test(ui_policy apps/ui_policy_test.cpp)
 target_compile_definitions(catro_ui_policy_test PRIVATE
