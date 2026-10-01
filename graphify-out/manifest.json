@@ -786,9 +786,9 @@
     "semantic_hash": ""
   },
   "platform/macos/CMakeLists.txt": {
-    "mtime": 1790819158.4935675,
-    "seen": 1790821662.815639,
-    "ast_hash": "46d847a53d8d3498b74333ee35bf9d0b",
+    "mtime": 1790867707.7625756,
+    "seen": 1790867889.6682804,
+    "ast_hash": "d9a448943895300c3a7574e61896fd25",
     "semantic_hash": ""
   },
   "platform/windows/CMakeLists.txt": {
@@ -2130,14 +2130,14 @@
     "semantic_hash": ""
   },
   "apps/windows/Catro/Assets/Catro150.png": {
-    "mtime": 1790865468.094648,
-    "seen": 1790865702.4392364,
+    "mtime": 1790867763.2631397,
+    "seen": 1790867889.6682804,
     "ast_hash": "e0d61f873ba49958bdfb9cb6bd018647",
     "semantic_hash": ""
   },
   "apps/windows/Catro/Assets/Catro44.png": {
-    "mtime": 1790865468.0911338,
-    "seen": 1790865702.4392364,
+    "mtime": 1790867763.247372,
+    "seen": 1790867889.6682804,
     "ast_hash": "932f3b5ec287829fb3409c9c9fbe708c",
     "semantic_hash": ""
   },
@@ -2163,6 +2163,54 @@
     "mtime": 1790866262.7759757,
     "seen": 1790866295.7673247,
     "ast_hash": "a9702c48077baa1feb50a9f1446b5659",
+    "semantic_hash": ""
+  },
+  "platform/macos/include/catro/platform/macos/screen_capture.hpp": {
+    "mtime": 1790867379.6100142,
+    "seen": 1790867889.6682804,
+    "ast_hash": "880d1af944f2fe0ece950296750420da",
+    "semantic_hash": ""
+  },
+  "platform/macos/include/catro/platform/macos/video_decoder.hpp": {
+    "mtime": 1790867379.6115177,
+    "seen": 1790867889.6682804,
+    "ast_hash": "ac3f8d5d869c882c52aa5c2539a5d56c",
+    "semantic_hash": ""
+  },
+  "platform/macos/include/catro/platform/macos/video_encoder.hpp": {
+    "mtime": 1790867379.6100142,
+    "seen": 1790867889.6682804,
+    "ast_hash": "3a19cfc410a7d1453c5da500ea8adfd4",
+    "semantic_hash": ""
+  },
+  "platform/macos/include/catro/platform/macos/video_presenter.hpp": {
+    "mtime": 1790867379.6115177,
+    "seen": 1790867889.6682804,
+    "ast_hash": "0456aeac88ec93c81c5c8467b03ad329",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/screen_capture.mm": {
+    "mtime": 1790867753.5495436,
+    "seen": 1790867889.6682804,
+    "ast_hash": "bbf96ee04aaf7400646a4b821b90abea",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/video_decoder.mm": {
+    "mtime": 1790867753.5495436,
+    "seen": 1790867889.6682804,
+    "ast_hash": "73db70f762bdeb8419be1621ec3494d6",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/video_encoder.mm": {
+    "mtime": 1790867552.8493502,
+    "seen": 1790867889.6682804,
+    "ast_hash": "5ed79533b24c2097e16f9f7962fb4cbb",
+    "semantic_hash": ""
+  },
+  "platform/macos/src/video_presenter.mm": {
+    "mtime": 1790867696.8035023,
+    "seen": 1790867889.6682804,
+    "ast_hash": "b2beda47fcdb9e01ca3039aec995fb82",
     "semantic_hash": ""
   }
 }
