@@ -318,9 +318,9 @@
     "semantic_hash": "b015330fba1bd967b3580202ba40e590"
   },
   "tests/CMakeLists.txt": {
-    "mtime": 1790819390.411517,
-    "seen": 1790821662.815639,
-    "ast_hash": "30f4c65a4a3d35d9091f3bbb6bdb2bc4",
+    "mtime": 1790866262.7764795,
+    "seen": 1790866295.7683227,
+    "ast_hash": "70ff808b8194143869ba2b5b32437d87",
     "semantic_hash": ""
   },
   "core/capabilities/include/catro/capabilities/probe.hpp": {
@@ -2129,18 +2129,6 @@
     "ast_hash": "f77ba15b47b6e9fca46d1d4e2cf62d51",
     "semantic_hash": ""
   },
-  ".superpowers/sdd/2026-10-01-native-ui-stabilization/screenshots/default-printwindow.png": {
-    "mtime": 1790821267.629075,
-    "seen": 1790821662.815639,
-    "ast_hash": "73efa83d0027db3abd570a397bf031c2",
-    "semantic_hash": ""
-  },
-  ".superpowers/sdd/2026-10-01-native-ui-stabilization/screenshots/default.png": {
-    "mtime": 1790821151.16754,
-    "seen": 1790821662.815639,
-    "ast_hash": "a70d3a2c9c2a045324d3789840a0da7a",
-    "semantic_hash": ""
-  },
   "apps/windows/Catro/Assets/Catro150.png": {
     "mtime": 1790865468.094648,
     "seen": 1790865702.4392364,
@@ -2153,10 +2141,28 @@
     "ast_hash": "932f3b5ec287829fb3409c9c9fbe708c",
     "semantic_hash": ""
   },
-  ".superpowers/sdd/2026-10-01-native-ui-stabilization/review-diff.txt": {
-    "mtime": 1790821727.8922813,
-    "seen": 1790865702.4392364,
-    "ast_hash": "e187f425930b1398befaa601140cbe96",
+  "tests/macos/screen_capture_test.mm": {
+    "mtime": 1790866262.773975,
+    "seen": 1790866295.7673247,
+    "ast_hash": "dc6eae11a7c3d6ecbc47a1cfdb8ffdcf",
+    "semantic_hash": ""
+  },
+  "tests/macos/video_decoder_test.mm": {
+    "mtime": 1790866273.4011588,
+    "seen": 1790866295.7673247,
+    "ast_hash": "19ef7d69ee93f0b710e0d26db58fc665",
+    "semantic_hash": ""
+  },
+  "tests/macos/video_encoder_test.mm": {
+    "mtime": 1790866262.7749786,
+    "seen": 1790866295.7673247,
+    "ast_hash": "d564fdd008c770ef38577b6c17b5945f",
+    "semantic_hash": ""
+  },
+  "tests/macos/video_presenter_test.mm": {
+    "mtime": 1790866262.7759757,
+    "seen": 1790866295.7673247,
+    "ast_hash": "a9702c48077baa1feb50a9f1446b5659",
     "semantic_hash": ""
   }
 }

@@ -1,17 +1,17 @@
 # Graph Report - catro  (2026-10-01)
 
 ## Corpus Check
-- 326 files · ~340,256 words
+- 330 files · ~262,160 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 36 file(s) not represented in the graph (top: .log 14, (none) 5, .idl 5)
+- Unclassified: 22 file(s) not represented in the graph (top: (none) 5, .idl 5, .cmake 2)
 
 ## Summary
-- 6861 nodes · 12353 edges · 451 communities (398 shown, 42 thin omitted)
+- 6865 nodes · 12361 edges · 447 communities (394 shown, 42 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 492 edges (avg confidence: 0.84)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c999de0d`
+- Built from commit: `d77c6ccf`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -34,13 +34,13 @@
 - WindowsScreenShareRuntime::Impl
 - ServerView
 - TraceRecord
-- SpscRing
+- AudioEngine::Session
 - ValidationReport
 - Dimensions
 - policy_pathology_test.cpp
 - snapshot_diff_test.cpp
 - WindowsGraphicsCapture::Impl
-- MediaPlan
+- MediaDecisionRequest
 - DiagnosticsView
 - GpuCapability
 - CapturePathCapability
@@ -50,7 +50,7 @@
 - CpuCapability
 - EncoderCapability
 - Enumeration
-- StartingQuality
+- MediaPlan
 - engine.hpp
 - ScreenShareSnapshot
 - RuntimeState
@@ -71,11 +71,11 @@
 - EnumNames<caps::CaptureApi>
 - EnumNames<caps::CapturePermission>
 - EnumNames<caps::ChromaSubsampling>
-- gpu_display_probe.cpp
+- enumerate_adapters
 - EnumNames<caps::CodecProfile>
 - EnumNames<caps::ColorGamut>
 - EnumNames<caps::ColorRange>
-- collect_snapshot
+- probe_coordinator.cpp
 - EnumNames<caps::Consequence>
 - audio_probe.cpp
 - EnumNames<caps::DecisionCategory>
@@ -105,11 +105,11 @@
 - EnumNames<caps::ThermalPressure>
 - .post
 - EnumNames<caps::TranslationState>
-- Translator
+- ProbeIssue
 - report_cli_test.cpp
 - PageFor
 - DiagnosticsViewModel.cpp
-- operating_profile_test.cpp
+- ProfileDecision
 - .capability
 - Run
 - RuntimeProbeFacts
@@ -124,7 +124,7 @@
 - NativeGpu
 - GpuDisplayProbeFacts
 - NoticeBanner
-- AudioProbeFacts
+- DisplayCapability
 - DiagnosticsViewModel
 - UserControl
 - NativeAdapter
@@ -149,7 +149,7 @@
 - Schema<caps::TransferPathCapability>
 - directory
 - ServerView.Screen.cpp
-- process_probe_executor_test.cpp
+- SpscRing
 - RoomRuntime
 - 0001: Split native shells over a shared C++ core
 - 0002: Isolated, passive, budgeted probes
@@ -184,14 +184,14 @@
 - .websocket
 - wmain
 - testing.T
-- WorkspaceSnapshot
+- ActionState
 - ExternalAudioSession
 - JitterBuffer
 - VoiceRuntimeHost
 - DuplicationBundle
 - main
 - CatroVoiceRuntimeConfig
-- .run_stream_audio_receiver
+- StreamAudioCaptureBridge
 - .run_receiver
 - voice_runtime.cpp
 - ServerView::StartVoice
@@ -201,8 +201,8 @@
 - model.cpp
 - H264RtpConfig
 - D3D11CompositionVideoPresenter::Impl
-- activate_h264_encoder
-- FakePlatform
+- video_encoder.cpp
+- audio_test.cpp
 - room_mesh_transport.cpp
 - rtp_h264.cpp
 - H264DecoderStatistics
@@ -223,13 +223,13 @@
 - text_block
 - Windows/macOS production parity and distribution readiness — design
 - DirectoryClient
-- .start
+- .run_stream_audio_receiver
 - ShellState
 - RoomMeshTransport::Impl
 - jitter.cpp
 - VoicePipelineStatistics
 - Cross-platform releases and one-command installers — design
-- audio_test.cpp
+- ProbeSpec
 - Platform
 - pipeline_test.cpp
 - ServerView.Directory.cpp
@@ -255,7 +255,7 @@
 - PlayoutFrame
 - JitterStatistics
 - audio_bridge.cpp
-- ScreenCaptureError
+- .start_item
 - WindowsH264D3D11Decoder::Impl
 - macos/translation_test.cpp
 - VoicePeerOptions
@@ -266,7 +266,7 @@
 - H264DecoderError
 - HardwareEncoderConfig
 - StreamAudioError
-- parse
+- capture-check/main.cpp
 - milliseconds
 - AudioViewModel
 - CatroRoomRuntimeConfig
@@ -274,17 +274,17 @@
 - CaptureSink
 - Button
 - ServerView.xaml.cpp
-- ChannelBlueprint
+- room_voice_runtime.cpp
 - decode_local_state
 - UdpPeerSocket
 - RenderBridgeStatistics
-- write_packet_header
+- VoicePacketView
 - VoicePipeline::RemoteStream
 - Review Focus
 - InitializeComponent
 - StreamInfo
 - RoomMeshTransport
-- set_codec_uint32
+- MonitorPipe
 - Native UI stabilization and modular product-shell design
 - CachedInputView
 - AudioNotifications
@@ -292,13 +292,13 @@
 - StreamAudioStatistics
 - create_decoder_device
 - EncodeCheckOptions
-- realtime_bridge_test.cpp
-- UdpError
+- thread
+- PacketSendContext
 - Mode
 - WindowsScreenShareRuntime
 - PacketContext
 - run_audio_check
-- voice_peer_test.cpp
+- DirectoryError
 - CaptureBridgeStatistics
 - verify.sh script
 - ParsedBaseUrl
@@ -312,10 +312,10 @@
 - UpdateVoiceUi
 - LocalState
 - size_t
-- App
+- CatroApp
 - Review Focus
 - Audio Capture and Playback — Design
-- DirectoryError
+- load_or_create_credential_bytes
 - CapabilityService
 - .start
 - room_runtime_test.cpp
@@ -337,29 +337,29 @@
 - EncodedAccessUnit
 - VideoPresenterError
 - ProcessLoopbackAudioCapture::Impl
-- MainWindow.Directory.cpp
+- MainWindow.xaml.cpp
 - audio-check/main.cpp
-- AudioPlatform
+- external_session.cpp
 - Border
 - SettingsView
 - community/model.hpp
-- ProbeIssue
-- VoicePacketView
+- Decoder
+- operating_profile_test.cpp
 - RoomMeshConfig
 - 29. Additional Engineering Principles Added During Review
 - Strong domain objects
 - Voice + Stream Interaction Reference
 - Server Code discovery and approval-based join requests — implementation plan
-- packet.hpp
-- Encoder
-- display_id
+- WorkspaceSnapshot
+- string_view
+- LevelMeter
 - WasapiStreamAudioRenderer::Impl
 - SequenceEntropy
 - voice_test.cpp
 - SequenceEntropy
-- video-peer/main.cpp
+- video_peer.hpp
 - DiagnosticsRow
-- CodecError
+- codec.hpp
 - 13. Design 1/3 — Foundation Boundaries
 - 9. High-Level Media Research Conclusions
 - Windows H.264 hardware encode slice
@@ -367,13 +367,13 @@
 - video_presenter.cpp
 - diagnostics_test.cpp
 - directory_test.cpp
-- system_runtime_probe_test.cpp
+- NativeEncoder
 - macos-installer-test.sh
-- audio_platform_test.cpp
+- NativeGpuDisplay
 - rtc_room_transport_test.cpp
-- frame_period
+- NativeDisplayMode
 - fill_rtp_header
-- CatroDirectorySessionDelegate
+- directory_client.mm
 - Oracle Free production bundle
 - Windows screen capture slice
 - Building
@@ -385,8 +385,8 @@
 - parse_video_peer_arguments
 - ComPtr
 - Grid
-- CodecError
-- .stop
+- string_view
+- CatroAudioBridge.mm
 - Capability system
 - Personal identity and server state
 - Two-Client Low-Latency Voice — Implementation Plan
@@ -411,21 +411,18 @@
 - RefreshReason
 - presentation_state_test.cpp
 - TempStatePath
-- video_peer_test.cpp
 - LocalMemoryCloser
 - TempStatePath
 - screen_capture_test.cpp
 - screen_runtime_test.cpp
 - capability-report/main.cpp
-- View
+- .audioDevices
 - NavigationEntry
 - StackPanel
 - 16. Probe Behavior
 - 3. Business/Hosting Direction
 - Troubleshooting
-- Security
 - shell_model_test.cpp
-- encode_check_test.cpp
 - windows_keyboard_smoke.ps1
 - OnSelectionChanged
 - ChannelHeaderRow
@@ -440,7 +437,6 @@
 - 8. Distribution Requirements
 - name
 - SystemEntropy::fill
-- text.hpp
 - install-macos.sh
 - package-macos.sh
 - macos/voice_runtime_test.cpp
@@ -488,11 +484,11 @@
 - **Platform Abstraction Layer** — platform_windows_capability_service, platform_macos_capability_service, tools_capability_probe [EXTRACTED 0.90]
 - **Catro Core Architecture** — core_capabilities_catro_capabilities, core_reporting_catro_reporting, core_capabilities_model, core_capabilities_policy_engine [EXTRACTED 1.00]
 
-## Communities (451 total, 42 thin omitted)
+## Communities (447 total, 42 thin omitted)
 
 ### Community 0 - "capability_fixtures.cpp"
 Cohesion: 0.13
-Nodes (67): advertised(), apple_silicon_macbook(), audio_endpoints(), audio_states(), base_snapshot(), AudioEndpointId, CaptureApi, CapturePathId (+59 more)
+Nodes (66): advertised(), apple_silicon_macbook(), audio_endpoints(), audio_states(), base_snapshot(), AudioEndpointId, CaptureApi, CapturePathId (+58 more)
 
 ### Community 1 - "canonical_determinism_test.cpp"
 Cohesion: 0.14
@@ -519,8 +515,8 @@ Cohesion: 0.06
 Nodes (31): "a reference with the right value but wrong scope is dangling", "a timed-out family yields a valid partial snapshot", "absent or degraded evidence must state why", "an unset observation has no provenance and is rejected", "backends and capture APIs must belong to the snapshot platform", "battery power without a battery is contradictory", T, "device names are bounded, well-formed UTF-8" (+23 more)
 
 ### Community 7 - "Observed"
-Cohesion: 0.09
-Nodes (30): Confidence, EvidenceMethod, IssueCode, optional, string, T, Observed, provenance_ (+22 more)
+Cohesion: 0.10
+Nodes (24): Confidence, EvidenceMethod, IssueCode, optional, string, T, Observed, provenance_ (+16 more)
 
 ### Community 8 - "reporting_test.cpp"
 Cohesion: 0.13
@@ -528,11 +524,11 @@ Nodes (18): "canonical JSON has a fixed shape and declaration field order", size
 
 ### Community 9 - "candidate_ranking.cpp"
 Cohesion: 0.09
-Nodes (38): value, mode_key(), affinity_penalty(), codec_order(), consequences(), array, Codec, Consequence (+30 more)
+Nodes (36): mode_key(), affinity_penalty(), codec_order(), consequences(), array, Codec, Consequence, GpuId (+28 more)
 
 ### Community 10 - "EncoderModeCapability"
-Cohesion: 0.07
-Nodes (30): ChromaSubsampling, ColorRange, DimensionRange, maximum, minimum, EncoderModeCapability, bit_depth, chroma (+22 more)
+Cohesion: 0.08
+Nodes (28): ChromaSubsampling, ColorRange, DimensionRange, maximum, minimum, EncoderModeCapability, bit_depth, chroma (+20 more)
 
 ### Community 11 - "MediaCandidate"
 Cohesion: 0.09
@@ -547,8 +543,8 @@ Cohesion: 0.06
 Nodes (31): Confidence, LocalQualityEnvelope, bit_depth, confidence, frame_rate, hdr, reasons, resolution (+23 more)
 
 ### Community 14 - "policy_test.cpp"
-Cohesion: 0.11
-Nodes (19): "a coherent desktop selects its same-resource hardware path", "a same-adapter copy beats a cross-adapter copy", "a same-resource path beats a same-adapter copy", "Apple Silicon keeps unprovable encoder affinity explicit", contains(), EncoderId, ReasonCode, TransferKind (+11 more)
+Cohesion: 0.10
+Nodes (20): "a coherent desktop selects its same-resource hardware path", "a same-adapter copy beats a cross-adapter copy", "a same-resource path beats a same-adapter copy", "Apple Silicon keeps unprovable encoder affinity explicit", contains(), EncoderId, ReasonCode, TransferKind (+12 more)
 
 ### Community 15 - "WindowsScreenShareRuntime::Impl"
 Cohesion: 0.03
@@ -562,21 +558,21 @@ Nodes (79): CatroRoomRuntimeHandle, CatroVoiceRuntimeHandle, ComPtr, DispatcherQ
 Cohesion: 0.11
 Nodes (21): CandidateOutcome, CategoryTruncation, category, omitted, DecisionTrace, records, truncated, PolicyRule (+13 more)
 
-### Community 18 - "SpscRing"
-Cohesion: 0.05
-Nodes (39): atomic, uint32_t, uint64_t, MonitorPipe, high_water_, primed_, ring_, target_ (+31 more)
+### Community 18 - "AudioEngine::Session"
+Cohesion: 0.08
+Nodes (22): ToneGenerator, amplitude_, phase_, step_, AudioEngine::AudioEngine(), AudioEngine::fail(), AudioEngine::Session, capture (+14 more)
 
 ### Community 19 - "ValidationReport"
-Cohesion: 0.18
-Nodes (10): string, ValidationCode, vector, ValidationError, code, path, ValidationReport, errors (+2 more)
+Cohesion: 0.13
+Nodes (14): optional, SnapshotPublication, snapshot, validation, string, ValidationCode, vector, ValidationError (+6 more)
 
 ### Community 20 - "Dimensions"
 Cohesion: 0.09
-Nodes (33): Dimensions, height, width, better(), ceiling_for(), optional, ReasonCode, uint64_t (+25 more)
+Nodes (32): Dimensions, height, width, better(), optional, ReasonCode, uint64_t, even() (+24 more)
 
 ### Community 21 - "policy_pathology_test.cpp"
-Cohesion: 0.13
-Nodes (14): "a missing GPU driver rejects the hardware encoder and falls back to software explicitly", "a missing microphone does not change the video plan", "a partial probe failure reports no viable path with degraded confidence", DisplayId, "headless sessions report no viable local path", "invalid input is rejected before any planning", "large inventories truncate deterministically within the trace bounds", "mixed refresh displays keep exact rational rates" (+6 more)
+Cohesion: 0.12
+Nodes (15): "a missing GPU driver rejects the hardware encoder and falls back to software explicitly", "a missing microphone does not change the video plan", "a partial probe failure reports no viable path with degraded confidence", DisplayId, "headless sessions report no viable local path", "invalid input is rejected before any planning", "large inventories truncate deterministically within the trace bounds", "mixed refresh displays keep exact rational rates" (+7 more)
 
 ### Community 22 - "snapshot_diff_test.cpp"
 Cohesion: 0.12
@@ -586,9 +582,9 @@ Nodes (15): "a display mode change reports the affected display", "a thermal tra
 Cohesion: 0.04
 Nodes (54): Direct3D11CaptureFramePool, event_token, GraphicsCaptureSession, array, atomic, atomic_bool, DXGI_FORMAT, ID3D11Texture2D (+46 more)
 
-### Community 24 - "MediaPlan"
-Cohesion: 0.06
-Nodes (43): DisplayId, LatencyClass, OperatingPreference, SourceKind, MediaDecisionRequest, display, latency, preference (+35 more)
+### Community 24 - "MediaDecisionRequest"
+Cohesion: 0.09
+Nodes (27): DisplayId, LatencyClass, OperatingPreference, SourceKind, MediaDecisionRequest, display, latency, preference (+19 more)
 
 ### Community 25 - "DiagnosticsView"
 Cohesion: 0.13
@@ -596,15 +592,15 @@ Nodes (28): application_directory(), ExportFormat, IInspectable, path, RoutedEve
 
 ### Community 26 - "GpuCapability"
 Cohesion: 0.05
-Nodes (41): GpuCapability, dedicated_memory, device_id, graphics_apis, id, kind, name, preferred_for_high_performance (+33 more)
+Nodes (43): Bytes, value, GpuCapability, dedicated_memory, device_id, graphics_apis, id, kind (+35 more)
 
 ### Community 27 - "CapturePathCapability"
-Cohesion: 0.12
-Nodes (20): CapturePathCapability, api, frame_rates, gpu, hdr_output, id, output_formats, source (+12 more)
+Cohesion: 0.10
+Nodes (28): SupportFact, provenance, status, CapturePathCapability, api, frame_rates, gpu, hdr_output (+20 more)
 
 ### Community 28 - "Rational"
-Cohesion: 0.08
-Nodes (24): RequestedQuality, frame_rate, hdr, resolution, DisplayMode, logical, pixels, refresh_rate (+16 more)
+Cohesion: 0.15
+Nodes (12): RequestedQuality, frame_rate, hdr, resolution, RationalRange, maximum, minimum, uint32_t (+4 more)
 
 ### Community 29 - "WindowsH264D3D11Decoder"
 Cohesion: 0.20
@@ -619,16 +615,16 @@ Cohesion: 0.12
 Nodes (17): CpuCapability, efficiency_cores, logical_cores, native_architecture, performance_cores, physical_cores, process_architecture, simd (+9 more)
 
 ### Community 32 - "EncoderCapability"
-Cohesion: 0.05
-Nodes (44): Conversion, SupportFact, provenance, status, DeviceInventory, audio_endpoints, capture_paths, displays (+36 more)
+Cohesion: 0.07
+Nodes (31): Conversion, DeviceInventory, audio_endpoints, capture_paths, displays, encoders, gpus, transfer_paths (+23 more)
 
 ### Community 33 - "Enumeration"
 Cohesion: 0.08
 Nodes (34): Adapters, hardware, with_outputs, add_issue(), Codec, GUID, HRESULT, IDXGIAdapter1 (+26 more)
 
-### Community 34 - "StartingQuality"
-Cohesion: 0.17
-Nodes (12): Downgrade, profile, quality, trigger, OperatingProfile, uint8_t, StartingQuality, bit_depth (+4 more)
+### Community 34 - "MediaPlan"
+Cohesion: 0.08
+Nodes (26): Downgrade, profile, quality, trigger, OperatingProfile, uint8_t, MediaPlan, downgrades (+18 more)
 
 ### Community 35 - "engine.hpp"
 Cohesion: 0.11
@@ -636,15 +632,15 @@ Nodes (15): AudioEndpointIdTag, CapturePathIdTag, DisplayIdTag, EncoderIdTag, Gp
 
 ### Community 36 - "ScreenShareSnapshot"
 Cohesion: 0.04
-Nodes (50): ScreenShareState, uint64_t, ScreenShareSnapshot, backpressure_events, capture_contention_drops, encoded_height, encoded_width, encoder_input_failures (+42 more)
+Nodes (52): ScreenShareState, uint64_t, ScreenShareSnapshot, backpressure_events, capture_contention_drops, encoded_height, encoded_width, encoder_input_failures (+44 more)
 
 ### Community 37 - "RuntimeState"
-Cohesion: 0.07
-Nodes (30): AudioEndpointCapability, channels, direction, id, name, sample_formats, sample_rate_hz, AudioEndpointState (+22 more)
+Cohesion: 0.06
+Nodes (35): CapturePermission, AudioEndpointCapability, channels, direction, id, name, sample_formats, sample_rate_hz (+27 more)
 
 ### Community 38 - "string"
-Cohesion: 0.08
-Nodes (12): optional, string, vector, CatroAudioDevice, -initWithChoice, CatroDiagnosticsRow, -initWithRow, string_view (+4 more)
+Cohesion: 0.10
+Nodes (13): AudioLevel, fraction, text, optional, string, vector, string, string_view (+5 more)
 
 ### Community 39 - "NativeAudioEndpoint"
 Cohesion: 0.07
@@ -652,7 +648,7 @@ Nodes (33): NativeEndpointState, AudioDirection, AudioRole, Codec, optional, Pix
 
 ### Community 40 - "AudioStatistics"
 Cohesion: 0.05
-Nodes (44): AudioEngine, error_, fail, generation_, lifecycle_mutex_, mutex_, on_failure_, session_ (+36 more)
+Nodes (43): AudioEngine, error_, fail, generation_, lifecycle_mutex_, mutex_, on_failure_, session_ (+35 more)
 
 ### Community 41 - "Platform"
 Cohesion: 0.08
@@ -663,8 +659,8 @@ Cohesion: 0.25
 Nodes (8): catro_capabilities, Capability Domain Model, Policy Engine, catro_reporting, macOS Capability Service, Windows Capability Service, catro-capability-probe, catro-capability-report
 
 ### Community 43 - "directory_client.cpp"
-Cohesion: 0.17
-Nodes (45): DirectoryServiceConfig, allow_insecure_http, api_base_url, accept_directory_invite(), cancel_directory_join_request(), DirectoryErrorCode, DirectoryInviteResult, DirectoryJoinRequestResult (+37 more)
+Cohesion: 0.15
+Nodes (49): DirectoryServiceConfig, allow_insecure_http, api_base_url, accept_directory_invite(), cancel_directory_join_request(), DirectoryErrorCode, DirectoryInviteResult, DirectoryJoinRequestResult (+41 more)
 
 ### Community 44 - "FakeProbeExecutor"
 Cohesion: 0.12
@@ -676,19 +672,19 @@ Nodes (26): DiagnosticsModel, changes, detail, generation, headline, probes, sec
 
 ### Community 46 - "DirectoryServer"
 Cohesion: 0.05
-Nodes (44): DirectoryInvite, code, expires, server, DirectoryJoinRequest, created_at, expires_at, id (+36 more)
+Nodes (48): DirectoryInvite, code, expires, server, DirectoryJoinRequest, created_at, expires_at, id (+40 more)
 
 ### Community 47 - "ProbeFragment"
 Cohesion: 0.06
-Nodes (42): int64_t, microseconds, optional, ProbeDomain, ProbeFamily, ProbeOutcome, string, uint32_t (+34 more)
+Nodes (32): int64_t, microseconds, optional, ProbeOutcome, ProbeFragment, audio, duration, encoders (+24 more)
 
 ### Community 48 - "ProcessProbe"
-Cohesion: 0.10
-Nodes (22): atomic_bool, HANDLE, microseconds, ProbeOutcome, string, thread, time_point, unique_ptr (+14 more)
+Cohesion: 0.11
+Nodes (18): atomic_bool, HANDLE, string, thread, unique_ptr, ProcessProbe, buffer_, job_ (+10 more)
 
 ### Community 49 - "AudioView"
-Cohesion: 0.08
-Nodes (39): AudioDeviceChoice, id, label, AudioEndpointId, AudioView, engine_, InitializeComponent, inputs_ (+31 more)
+Cohesion: 0.07
+Nodes (42): AudioDeviceChoice, id, label, AudioEndpointId, AudioView, engine_, InitializeComponent, inputs_ (+34 more)
 
 ### Community 51 - "WindowsH264HardwareEncoder::Impl"
 Cohesion: 0.04
@@ -710,8 +706,8 @@ Nodes (3): EnumNames<caps::CapturePermission>, last, names
 Cohesion: 0.67
 Nodes (3): EnumNames<caps::ChromaSubsampling>, last, names
 
-### Community 56 - "gpu_display_probe.cpp"
-Cohesion: 0.15
+### Community 56 - "enumerate_adapters"
+Cohesion: 0.13
 Nodes (25): DISPLAYCONFIG_PATH_TARGET_INFO, DXGI_GPU_PREFERENCE, IDXGIFactory6, NativeCaptureApis, add_dxcore_properties(), add_issue(), int64_t, IssueCode (+17 more)
 
 ### Community 57 - "EnumNames<caps::CodecProfile>"
@@ -726,9 +722,9 @@ Nodes (3): EnumNames<caps::ColorGamut>, last, names
 Cohesion: 0.67
 Nodes (3): EnumNames<caps::ColorRange>, last, names
 
-### Community 60 - "collect_snapshot"
+### Community 60 - "probe_coordinator.cpp"
 Cohesion: 0.10
-Nodes (27): optional, SnapshotPublication, snapshot, validation, SystemProbeFacts, hardware, platform, add_issue() (+19 more)
+Nodes (40): add_issue(), budget_for(), build_snapshot(), clear_payload(), collect_snapshot(), IssueCode, microseconds, OperatingSystem (+32 more)
 
 ### Community 61 - "EnumNames<caps::Consequence>"
 Cohesion: 0.67
@@ -755,8 +751,8 @@ Cohesion: 0.67
 Nodes (3): EnumNames<caps::EvidenceMethod>, last, names
 
 ### Community 67 - "directory.cpp"
-Cohesion: 0.09
-Nodes (52): ascii_space(), DirectoryErrorCode, DirectoryInviteResult, DirectoryJoinRequestResult, DirectoryJoinRequestsResult, DirectoryMembersResult, DirectoryMessageResult, DirectoryMessagesResult (+44 more)
+Cohesion: 0.11
+Nodes (43): ascii_space(), DirectoryInviteResult, DirectoryJoinRequestResult, DirectoryJoinRequestsResult, DirectoryMembersResult, DirectoryMessageResult, DirectoryMessagesResult, DirectoryServerLookupResult (+35 more)
 
 ### Community 68 - "EnumNames<caps::IdentityScope>"
 Cohesion: 0.67
@@ -799,8 +795,8 @@ Cohesion: 0.67
 Nodes (3): EnumNames<caps::PixelFormat>, last, names
 
 ### Community 78 - "NativeDisplay"
-Cohesion: 0.08
-Nodes (27): ColorGamut, optional, uint32_t, uint8_t, vector, NativeCaptureApis, access_granted, screen_capture_kit (+19 more)
+Cohesion: 0.18
+Nodes (11): ColorGamut, uint8_t, NativeDisplay, active, bits_per_channel, gamut, gpu, hdr_supported (+3 more)
 
 ### Community 79 - "EnumNames<caps::PolicyRule>"
 Cohesion: 0.67
@@ -815,8 +811,8 @@ Cohesion: 0.12
 Nodes (15): ChangeSet, audio_endpoints, capture_paths, displays, domains, encoders, gpus, AudioEndpointId (+7 more)
 
 ### Community 82 - "array"
-Cohesion: 0.05
-Nodes (38): size_t, uint16_t, uint8_t, valid_direct_endpoints(), valid_media_bounds(), valid_share(), valid_transport(), atomic (+30 more)
+Cohesion: 0.07
+Nodes (27): size_t, uint16_t, uint8_t, valid_direct_endpoints(), valid_media_bounds(), valid_share(), valid_transport(), atomic (+19 more)
 
 ### Community 83 - "CatroCapabilitiesBridge"
 Cohesion: 0.10
@@ -846,9 +842,9 @@ Nodes (7): EDataFlow, ERole, LPCWSTR, DWORD, HRESULT, same_key(), PROPERTYKEY
 Cohesion: 0.67
 Nodes (3): EnumNames<caps::TranslationState>, last, names
 
-### Community 90 - "Translator"
-Cohesion: 0.12
-Nodes (32): bounded_text(), codec_name(), CaptureApi, Codec, DisplayId, EncoderId, GpuId, IssueCode (+24 more)
+### Community 90 - "ProbeIssue"
+Cohesion: 0.11
+Nodes (36): IssueCode, ProbeIssue, code, probe_id, bounded_text(), codec_name(), CaptureApi, Codec (+28 more)
 
 ### Community 91 - "report_cli_test.cpp"
 Cohesion: 0.07
@@ -862,17 +858,17 @@ Nodes (7): string_view, MainWindow::ActivateDirectoryServer(), AppDestination, U
 Cohesion: 0.24
 Nodes (15): build_diagnostics(), change_lines(), ExportFormat, microseconds, ProbeOutcome, string, string_view, Tone (+7 more)
 
-### Community 94 - "operating_profile_test.cpp"
-Cohesion: 0.10
-Nodes (21): ProfileDecision, profile, rule, OperatingPreference, optional, T, derive_operating_profile(), known_true() (+13 more)
+### Community 94 - "ProfileDecision"
+Cohesion: 0.23
+Nodes (11): ProfileDecision, profile, rule, OperatingPreference, optional, T, derive_operating_profile(), known_true() (+3 more)
 
 ### Community 95 - ".capability"
-Cohesion: 0.15
-Nodes (21): Codec, EncoderId, GpuId, IssueCode, NativeDisplay, NativeEncoder, NativeGpuDisplay, optional (+13 more)
+Cohesion: 0.12
+Nodes (36): EncoderProbeFacts, encoders, transfer_paths, bounded_text(), codec_name(), Codec, DisplayId, EncoderId (+28 more)
 
 ### Community 96 - "Run"
-Cohesion: 0.11
-Nodes (14): RunningProbe, terminate, wait_until, time_point, unique_ptr, Run, fragment, process (+6 more)
+Cohesion: 0.15
+Nodes (11): RunningProbe, terminate, wait_until, time_point, unique_ptr, Run, fragment, process (+3 more)
 
 ### Community 97 - "RuntimeProbeFacts"
 Cohesion: 0.18
@@ -900,7 +896,7 @@ Nodes (7): Dependencies, Platform frameworks, Source dependencies, Toolchains, W
 
 ### Community 103 - "CapabilitySnapshot"
 Cohesion: 0.11
-Nodes (21): CapabilitySnapshot, devices, hardware, header, issues, platform, probes, runtime (+13 more)
+Nodes (20): CapabilitySnapshot, devices, hardware, header, issues, platform, probes, runtime (+12 more)
 
 ### Community 104 - "EncoderConfig"
 Cohesion: 0.08
@@ -911,24 +907,24 @@ Cohesion: 0.20
 Nodes (10): "a cross-fragment dangling reference rejects the referencing fragment", "a fragment with duplicate IDs is rejected without poisoning publication", "all probe helpers start before the coordinator waits", complete_all(), ProbeFamily, "every terminal probe outcome produces one record", fragment_for(), "the global deadline publishes explicit unknowns for a blocked family" (+2 more)
 
 ### Community 106 - "NativeGpu"
-Cohesion: 0.11
-Nodes (19): Codec, string, uint64_t, NativeEncoder, codec, encoder_id, gpu, hardware (+11 more)
+Cohesion: 0.18
+Nodes (11): NativeGpu, device_id, low_power, name, registry_id, removable, unified_memory, vendor_id (+3 more)
 
 ### Community 107 - "GpuDisplayProbeFacts"
-Cohesion: 0.18
-Nodes (11): CapturePermission, CapturePermissionState, path, permission, CapturePathId, GpuDisplayProbeFacts, capture_paths, capture_permissions (+3 more)
+Cohesion: 0.20
+Nodes (10): AudioProbeFacts, endpoints, states, GpuDisplayProbeFacts, capture_paths, capture_permissions, display_states, displays (+2 more)
 
 ### Community 108 - "NoticeBanner"
-Cohesion: 0.20
-Nodes (14): Badge, .body, CatroFactState, .marker, CatroTone, .color, .name, NoticeBanner (+6 more)
+Cohesion: 0.14
+Nodes (23): Badge, .body, CatroFactState, .marker, CatroTone, .color, .name, .detail (+15 more)
 
-### Community 109 - "AudioProbeFacts"
-Cohesion: 0.29
-Nodes (7): AudioProbeFacts, endpoints, states, EncoderProbeFacts, encoders, transfer_paths, vector
+### Community 109 - "DisplayCapability"
+Cohesion: 0.10
+Nodes (22): DisplayCapability, bits_per_channel, gamut, gpu, hdr, id, modes, DisplayMode (+14 more)
 
 ### Community 110 - "DiagnosticsViewModel"
-Cohesion: 0.26
-Nodes (9): .body, DiagnosticsView, .body, DiagnosticsViewModel, Notice, String, Button, CatroExportFormat (+1 more)
+Cohesion: 0.23
+Nodes (10): .body, DiagnosticsView, .body, DiagnosticsViewModel, Notice, String, Button, CatroExportFormat (+2 more)
 
 ### Community 111 - "UserControl"
 Cohesion: 0.13
@@ -963,8 +959,8 @@ Cohesion: 0.67
 Nodes (3): EnumNames<caps::TransferKind>, last, names
 
 ### Community 119 - "canonical_json.cpp"
-Cohesion: 0.14
-Nodes (35): Bytes, check_plan_bounds(), E, I, Json, microseconds, optional, ReportErrorCode (+27 more)
+Cohesion: 0.15
+Nodes (34): check_plan_bounds(), E, I, Json, microseconds, optional, ReportErrorCode, size_t (+26 more)
 
 ### Community 122 - "FakeRenderStream"
 Cohesion: 0.08
@@ -987,8 +983,8 @@ Cohesion: 0.18
 Nodes (11): AudioDirection, SampleFormat, NativeAudioDevice, alive, channels, direction, is_default, name (+3 more)
 
 ### Community 127 - "LevelRow"
-Cohesion: 0.17
-Nodes (9): AppKit, LevelRow, .body, String, CatroApp, Double, Scene, SwiftUI (+1 more)
+Cohesion: 0.22
+Nodes (7): AppKit, LevelRow, .body, String, Double, SwiftUI, UniformTypeIdentifiers
 
 ### Community 128 - "Window"
 Cohesion: 0.13
@@ -999,12 +995,12 @@ Cohesion: 0.23
 Nodes (10): net/http.Request, net/http.ResponseWriter, credentialHash(), decodeJSON(), parseBearer(), validBoundedText(), writeAPIError(), writeAPIJSON() (+2 more)
 
 ### Community 133 - "ServerView.Screen.cpp"
-Cohesion: 0.10
-Nodes (31): catro_voice_runtime_destroy(), IInspectable, RoutedEventArgs, uint32_t, fit_viewport(), ServerView::LocalStreamId(), ServerView::OnFullScreenStream(), ServerView::OnLeaveStream() (+23 more)
+Cohesion: 0.08
+Nodes (37): capture_source_label(), chromium_window(), fire_and_forget, IInspectable, RoutedEventArgs, uint32_t, wstring, fit_viewport() (+29 more)
 
-### Community 134 - "process_probe_executor_test.cpp"
-Cohesion: 0.33
-Nodes (5): "a timed-out helper and its descendants are terminated by the job", DWORD, optional, path, read_pid()
+### Community 134 - "SpscRing"
+Cohesion: 0.28
+Nodes (9): size_t, span, T, vector, SpscRing, buffer_, head_, mask_ (+1 more)
 
 ### Community 135 - "RoomRuntime"
 Cohesion: 0.07
@@ -1023,8 +1019,8 @@ Cohesion: 0.40
 Nodes (3): CapabilityService::CapabilityService(), CapabilityService::stop(), path
 
 ### Community 139 - "ProbeSchedule"
-Cohesion: 0.09
-Nodes (30): OperatingSystem, ProbeFamily, RefreshReason, uint32_t, uint64_t, UtcTimestamp, vector, ProbeSchedule (+22 more)
+Cohesion: 0.12
+Nodes (17): OperatingSystem, ProbeFamily, RefreshReason, uint32_t, uint64_t, UtcTimestamp, vector, ProbeSchedule (+9 more)
 
 ### Community 140 - "ScreenShareConfig"
 Cohesion: 0.08
@@ -1059,8 +1055,8 @@ Cohesion: 0.67
 Nodes (3): EnumNames<caps::SourceKind>, last, names
 
 ### Community 170 - "ScreenCaptureStatistics"
-Cohesion: 0.07
-Nodes (34): Direct3D11CaptureFrame, GpuCaptureFrame, format, height, lease, sequence, texture, width (+26 more)
+Cohesion: 0.08
+Nodes (27): Direct3D11CaptureFrame, GpuCaptureFrame, format, height, lease, sequence, texture, width (+19 more)
 
 ### Community 171 - "UdpEndpoint"
 Cohesion: 0.10
@@ -1072,15 +1068,15 @@ Nodes (16): sync/atomic.Int64, sync/atomic.Uint64, sync.Mutex, sync.RWMutex, roo
 
 ### Community 173 - "wmain"
 Cohesion: 0.08
-Nodes (30): unique_ptr, WindowsGraphicsCapture, impl_, start_primary_display, start_source, statistics, stop, wait_for_latest (+22 more)
+Nodes (31): unique_ptr, WindowsGraphicsCapture, impl_, start_primary_display, start_source, statistics, stop, wait_for_latest (+23 more)
 
 ### Community 174 - "testing.T"
 Cohesion: 0.23
 Nodes (29): directory, testing.T, canonicalServerCode(), ephemeralICEServers(), messageKey(), openDirectory(), authenticatedRequest(), registerTestUser() (+21 more)
 
-### Community 175 - "WorkspaceSnapshot"
-Cohesion: 0.11
-Nodes (29): ActionState, availability, available, begin, disable, enable, fail, ready (+21 more)
+### Community 175 - "ActionState"
+Cohesion: 0.17
+Nodes (19): ActionState, availability, available, begin, disable, enable, fail, ready (+11 more)
 
 ### Community 176 - "ExternalAudioSession"
 Cohesion: 0.07
@@ -1092,11 +1088,11 @@ Nodes (35): atomic, atomic_bool, JitterBuffer, accepted_, advance_playout, buffe
 
 ### Community 178 - "VoiceRuntimeHost"
 Cohesion: 0.07
-Nodes (31): DirectPeerRunner, int32_t, string, RoomVoiceApi, VoiceRuntimeHost, control_, direct_, error_ (+23 more)
+Nodes (26): DirectPeerRunner, int32_t, string, RoomVoiceApi, VoiceRuntimeHost, control_, error_, error_mutex_ (+18 more)
 
 ### Community 179 - "DuplicationBundle"
-Cohesion: 0.09
-Nodes (29): D3D11_BOX, IDirect3DDevice, IDXGIOutput1, IDXGIOutputDuplication, capture_client_rect(), ComPtr, D3D11_TEXTURE2D_DESC, ID3D11Device (+21 more)
+Cohesion: 0.10
+Nodes (25): D3D11_BOX, IDirect3DDevice, IDXGIOutput1, IDXGIOutputDuplication, capture_client_rect(), ComPtr, D3D11_TEXTURE2D_DESC, ID3D11Device (+17 more)
 
 ### Community 180 - "main"
 Cohesion: 0.13
@@ -1106,37 +1102,37 @@ Nodes (22): net/http.HandlerFunc, net.IP, time.Duration, time.Time, main(), runH
 Cohesion: 0.07
 Nodes (27): CatroVoiceRuntimeConfig, bind_address, bind_port, bitrate, input_endpoint, jitter_packets, output_endpoint, peer_address (+19 more)
 
-### Community 182 - ".run_stream_audio_receiver"
-Cohesion: 0.08
-Nodes (21): atomic, atomic_bool, int64_t, span, uint64_t, extended_rtp_to_100ns(), steady_now_ns(), StreamAudioCaptureBridge (+13 more)
+### Community 182 - "StreamAudioCaptureBridge"
+Cohesion: 0.10
+Nodes (14): atomic, atomic_bool, span, uint64_t, StreamAudioCaptureBridge, resync_events_, resync_requested_, ring_ (+6 more)
 
 ### Community 183 - ".run_receiver"
-Cohesion: 0.14
-Nodes (15): ScreenShareErrorCode, string, string_view, trace_event(), udp_error_text(), WindowsScreenShareRuntime::stop(), WindowsScreenShareRuntime::WindowsScreenShareRuntime(), encode (+7 more)
+Cohesion: 0.13
+Nodes (19): int64_t, nanoseconds, ScreenShareErrorCode, string, string_view, time_point, uint32_t, extended_rtp_to_100ns() (+11 more)
 
 ### Community 184 - "voice_runtime.cpp"
 Cohesion: 0.11
-Nodes (19): catro_voice_runtime_create(), catro_voice_runtime_set_deafened(), catro_voice_runtime_set_muted(), catro_voice_runtime_snapshot(), catro_voice_runtime_start(), catro_voice_runtime_stop(), CatroVoiceRuntimeHandle, int32_t (+11 more)
+Nodes (20): catro_voice_runtime_create(), catro_voice_runtime_destroy(), catro_voice_runtime_set_deafened(), catro_voice_runtime_set_muted(), catro_voice_runtime_snapshot(), catro_voice_runtime_start(), catro_voice_runtime_stop(), CatroVoiceRuntimeHandle (+12 more)
 
 ### Community 185 - "ServerView::StartVoice"
-Cohesion: 0.11
-Nodes (26): direct_video_config(), direct_voice_config(), DirectVideoConfig, bind, peer, DirectVoiceConfig, bind, peer (+18 more)
+Cohesion: 0.17
+Nodes (19): direct_video_config(), direct_voice_config(), DirectVideoConfig, bind, peer, DirectVoiceConfig, bind, peer (+11 more)
 
 ### Community 186 - "PersonalServer"
-Cohesion: 0.09
-Nodes (27): can_manage_server(), Channel, id, kind, name, ChannelId, ServerId, ServerRole (+19 more)
+Cohesion: 0.08
+Nodes (29): can_manage_server(), Channel, id, kind, name, ChannelBlueprint, kind, name (+21 more)
 
 ### Community 187 - "local_state.cpp"
 Cohesion: 0.20
 Nodes (23): LocalStateError, bounded_codec_detail(), CodecError, LocalStateErrorCode, optional, path, string, string_view (+15 more)
 
 ### Community 188 - "AudioError"
-Cohesion: 0.09
-Nodes (20): AudioError, code, native_code, int64_t, AudioEngine::fail(), uint64_t, atomic_bool, condition_variable (+12 more)
+Cohesion: 0.10
+Nodes (18): AudioError, code, native_code, int64_t, condition_variable, mutex, size_t, vector (+10 more)
 
 ### Community 189 - "model.cpp"
 Cohesion: 0.15
-Nodes (24): InviteCode, bytes, channel_id_from_hex(), ChannelId, optional, ServerId, size_t, string (+16 more)
+Nodes (25): InviteCode, bytes, channel_id_from_hex(), ChannelId, optional, ServerId, size_t, string (+17 more)
 
 ### Community 190 - "H264RtpConfig"
 Cohesion: 0.09
@@ -1146,13 +1142,13 @@ Nodes (26): H264PacketizeResult, error, keyframe, next_sequence, packet_count, H
 Cohesion: 0.08
 Nodes (26): IDXGISwapChain3, kInputViewCache, array, ID3D11DeviceContext, ID3D11VideoContext, ID3D11VideoContext1, ID3D11VideoDevice, ID3D11VideoProcessor (+18 more)
 
-### Community 192 - "activate_h264_encoder"
-Cohesion: 0.22
-Nodes (13): activate_h264_encoder(), IMFActivate, IMFTransform, LUID, string, time_point, uint64_t, variant (+5 more)
+### Community 192 - "video_encoder.cpp"
+Cohesion: 0.12
+Nodes (22): activate_h264_encoder(), GUID, ICodecAPI, IMFActivate, IMFSample, IMFTransform, LUID, string (+14 more)
 
-### Community 193 - "FakePlatform"
-Cohesion: 0.15
-Nodes (19): AudioEndpointId, OpenResult, optional, StreamFailure, string, endpoint(), FakePlatform, capture_failure (+11 more)
+### Community 193 - "audio_test.cpp"
+Cohesion: 0.06
+Nodes (45): "a concurrent stop waits for an in-flight start and leaves no stream running", "a meter session opens only the capture stream", "a monitor session carries capture to render and estimates latency", "a monitor session starts render before capture", "a stream failure fails the session once and stale failures are ignored", "a tone session renders the test tone on the default output", BlockingPlatform, capture_opened (+37 more)
 
 ### Community 194 - "room_mesh_transport.cpp"
 Cohesion: 0.15
@@ -1167,8 +1163,8 @@ Cohesion: 0.08
 Nodes (25): H264DecoderStatistics, adapter_luid, compressed_bytes, d3d11_aware, decode_max_us, decode_total_us, decoder_name, frames_decoded (+17 more)
 
 ### Community 197 - "run_voice_peer"
-Cohesion: 0.20
-Nodes (22): audio_info(), audio_mode(), CodecError, ExternalSessionMode, Integer, optional, ostream, span (+14 more)
+Cohesion: 0.18
+Nodes (24): audio_info(), audio_mode(), CodecError, ExternalSessionMode, int64_t, Integer, optional, ostream (+16 more)
 
 ### Community 198 - "EntropySource"
 Cohesion: 0.09
@@ -1176,11 +1172,11 @@ Nodes (19): EntropySource, fill, SystemEntropy, fill, "bootstrap creates stable 
 
 ### Community 199 - "RenderBridge"
 Cohesion: 0.08
-Nodes (23): size_t, RenderBridge, callbacks_, deafened_samples_rendered_, frames_enqueued_, on_render, pcm_samples_rendered_, peak_buffered_samples_ (+15 more)
+Nodes (22): RenderBridge, callbacks_, deafened_samples_rendered_, frames_enqueued_, on_render, pcm_samples_rendered_, peak_buffered_samples_, primed_ (+14 more)
 
 ### Community 200 - "screen_capture.cpp"
-Cohesion: 0.16
-Nodes (22): GraphicsCaptureItem, HMONITOR, LONG, capture_item_for_monitor(), capture_item_for_source(), capture_item_for_window(), condition_variable, DWORD (+14 more)
+Cohesion: 0.11
+Nodes (32): GraphicsCaptureItem, HMONITOR, LONG, int64_t, name(), ScreenCaptureError, code, native_code (+24 more)
 
 ### Community 201 - "~Impl"
 Cohesion: 0.11
@@ -1188,7 +1184,7 @@ Nodes (18): unique_ptr, ProcessLoopbackAudioCapture, impl_, start, statistics, s
 
 ### Community 202 - "HardwareEncoderStatistics"
 Cohesion: 0.08
-Nodes (25): HardwareEncoderStatistics, adapter_luid, asynchronous, conversion_failures, conversion_max_us, conversion_total_us, d3d11_aware, encode_max_us (+17 more)
+Nodes (24): HardwareEncoderStatistics, adapter_luid, asynchronous, conversion_failures, conversion_max_us, conversion_total_us, d3d11_aware, encode_max_us (+16 more)
 
 ### Community 203 - "windows/translation_test.cpp"
 Cohesion: 0.10
@@ -1203,8 +1199,8 @@ Cohesion: 0.15
 Nodes (22): bool_constant<!Record<T>>, IsOptional, IsOptional<std::optional<T>>, IsVector, IsVector<std::vector<T>>, OneLine, OneLine<caps::CandidateRef>, OneLine<caps::DimensionRange> (+14 more)
 
 ### Community 206 - "CaptureBridge"
-Cohesion: 0.09
-Nodes (23): CaptureBridge, alignment_samples_pending_, callbacks_, captured_samples_, dropped_callbacks_, dropped_samples_, frames_dequeued_, on_captured (+15 more)
+Cohesion: 0.08
+Nodes (24): CaptureBridge, alignment_samples_pending_, callbacks_, captured_samples_, dropped_callbacks_, dropped_samples_, frames_dequeued_, on_captured (+16 more)
 
 ### Community 207 - "Server Code discovery and approval-based join requests — design"
 Cohesion: 0.09
@@ -1234,9 +1230,9 @@ Nodes (20): 10. Automated verification, 11. Real-machine E2E matrix, 12. Distrib
 Cohesion: 0.10
 Nodes (20): DirectoryClient, accept_invite, cancel_join_request, create_invite, create_join_request, decide_join_request, list_members, list_messages (+12 more)
 
-### Community 214 - ".start"
-Cohesion: 0.18
-Nodes (11): int64_t, ScreenShareErrorCode, string, ScreenShareError, code, message, native_code, optional (+3 more)
+### Community 214 - ".run_stream_audio_receiver"
+Cohesion: 0.13
+Nodes (16): int64_t, ScreenShareErrorCode, string, ScreenShareError, code, message, native_code, optional (+8 more)
 
 ### Community 215 - "ShellState"
 Cohesion: 0.14
@@ -1251,16 +1247,16 @@ Cohesion: 0.13
 Nodes (17): index_for, resynchronize, unwrap_near, int64_t, JitterPushResult, size_t, uint16_t, JitterBuffer::copy_payload() (+9 more)
 
 ### Community 218 - "VoicePipelineStatistics"
-Cohesion: 0.11
-Nodes (18): uint64_t, VoicePipelineStatistics, capture, decode_errors, decoded_frames, encode_errors, encoded_frames, jitter (+10 more)
+Cohesion: 0.10
+Nodes (20): uint64_t, aggregate_jitter_statistics, VoicePipelineStatistics, capture, decode_errors, decoded_frames, encode_errors, encoded_frames (+12 more)
 
 ### Community 219 - "Cross-platform releases and one-command installers — design"
 Cohesion: 0.10
 Nodes (19): 10. Security and failure behavior, 11. Release readiness gates, 12. Performance claims, 13. Non-goals, 14. Follow-up milestone, 1. Goal, 2. Existing baseline, 3. User-visible contract (+11 more)
 
-### Community 220 - "audio_test.cpp"
-Cohesion: 0.11
-Nodes (19): "a concurrent stop waits for an in-flight start and leaves no stream running", "a meter session opens only the capture stream", "a monitor session carries capture to render and estimates latency", "a monitor session starts render before capture", "a stream failure fails the session once and stale failures are ignored", "a tone session renders the test tone on the default output", BlockingPlatform, capture_opened (+11 more)
+### Community 220 - "ProbeSpec"
+Cohesion: 0.12
+Nodes (17): ProbeDomain, ProbeFamily, string, uint32_t, ProbeSpec, access, family, hard_budget (+9 more)
 
 ### Community 221 - "Platform"
 Cohesion: 0.14
@@ -1271,20 +1267,20 @@ Cohesion: 0.11
 Nodes (19): "capture overflow creates a packet-clock gap instead of time-compressing speech", "capture to Opus packet path increments sequence and timestamp across wrap", PcmFrame, span, "decoded audio never grows memory and reports bounded render backpressure", "decoder rejects an empty Opus packet deterministically", encode(), finite_nonzero() (+11 more)
 
 ### Community 223 - "ServerView.Directory.cpp"
-Cohesion: 0.10
-Nodes (23): fire_and_forget, int64_t, string, vector, wstring, message_time(), ServerView::AppendMessage(), ServerView::AppendMessages() (+15 more)
+Cohesion: 0.16
+Nodes (14): fire_and_forget, int64_t, string, wstring, message_time(), ServerView::AppendMessage(), ServerView::BeginInvite(), ServerView::BeginJoinRequestDecision() (+6 more)
 
 ### Community 224 - "VoicePipelineConfig"
 Cohesion: 0.11
-Nodes (18): array, byte, size_t, span, uint16_t, uint32_t, OutboundDatagram, bytes (+10 more)
+Nodes (18): Encoder, create, encode, impl_, reset, unique_ptr, uint16_t, uint32_t (+10 more)
 
 ### Community 225 - "udp_transport_test.cpp"
-Cohesion: 0.22
-Nodes (9): "actual UDP loopback carries Opus packets into the jitter decoder", connect_pair(), "connected UDP sockets exchange one bounded datagram on loopback", "connected UDP sockets send scatter gather segments as one datagram", PcmFrame, encode(), frame(), "oversized UDP datagrams are rejected instead of silently truncated" (+1 more)
+Cohesion: 0.12
+Nodes (17): array, byte, size_t, span, OutboundDatagram, bytes, size, kMaxVoiceDatagramBytes (+9 more)
 
 ### Community 226 - "HardwareEncoderError"
-Cohesion: 0.24
-Nodes (10): HardwareEncoderErrorCode, HardwareEncoderError, code, native_code, name(), ID3D11Texture2D, IMFSample, optional (+2 more)
+Cohesion: 0.27
+Nodes (9): HardwareEncoderErrorCode, HardwareEncoderError, code, native_code, name(), ID3D11Texture2D, optional, WindowsH264HardwareEncoder::encode() (+1 more)
 
 ### Community 227 - "system_probe.cpp"
 Cohesion: 0.22
@@ -1311,8 +1307,8 @@ Cohesion: 0.11
 Nodes (19): seconds, size_t, uint16_t, uint32_t, uint8_t, VideoPeerOptions, bind, bitrate (+11 more)
 
 ### Community 233 - "NetworkStatistics"
-Cohesion: 0.11
-Nodes (19): duration, int64_t, uint64_t, NetworkStatistics, oversized_packets, peer_unreachable_events, received_bytes, received_packets (+11 more)
+Cohesion: 0.12
+Nodes (17): duration, uint64_t, NetworkStatistics, oversized_packets, peer_unreachable_events, received_bytes, received_packets, send_backpressure_drops (+9 more)
 
 ### Community 234 - "byte"
 Cohesion: 0.31
@@ -1323,8 +1319,8 @@ Cohesion: 0.11
 Nodes (18): CatroRoomRuntimeHandle, string, run_room_voice(), VoiceRuntimeHost::set_error(), start, stop, atomic, atomic_bool (+10 more)
 
 ### Community 236 - "DirectoryMessage"
-Cohesion: 0.17
-Nodes (13): DirectoryMessage, author_display_name, author_id, channel_id, content, created_at, id, sequence (+5 more)
+Cohesion: 0.12
+Nodes (17): vector, ServerView::AppendMessages(), ServerView::ApplyMemberRoster(), AppendMessage, DirectoryMessage, author_display_name, author_id, channel_id (+9 more)
 
 ### Community 237 - "ActivationHandler"
 Cohesion: 0.16
@@ -1355,24 +1351,24 @@ Cohesion: 0.08
 Nodes (26): array, byte, int64_t, JitterPushResult, PlayoutKind, span, string_view, uint16_t (+18 more)
 
 ### Community 244 - "JitterStatistics"
-Cohesion: 0.07
-Nodes (32): size_t, uint64_t, JitterStatistics, accepted, buffered, duplicates, fec, late (+24 more)
+Cohesion: 0.12
+Nodes (17): size_t, uint64_t, JitterStatistics, accepted, buffered, duplicates, fec, late (+9 more)
 
 ### Community 245 - "audio_bridge.cpp"
 Cohesion: 0.13
-Nodes (20): finish_alignment_discard, resynchronize_if_needed, CaptureBridge::CaptureBridge(), CaptureBridge::on_captured(), CaptureBridge::statistics(), CaptureBridge::trim_backlog(), CaptureBridge::try_pop(), CaptureBridge::update_peak() (+12 more)
+Nodes (19): finish_alignment_discard, resynchronize_if_needed, CaptureBridge::CaptureBridge(), CaptureBridge::on_captured(), CaptureBridge::trim_backlog(), CaptureBridge::try_pop(), CaptureBridge::update_peak(), atomic (+11 more)
 
-### Community 246 - "ScreenCaptureError"
-Cohesion: 0.24
-Nodes (9): int64_t, name(), ScreenCaptureError, code, native_code, optional, WindowsGraphicsCapture::start_primary_display(), WindowsGraphicsCapture::start_source() (+1 more)
+### Community 246 - ".start_item"
+Cohesion: 0.21
+Nodes (10): optional, ScreenCaptureBackend, uint64_t, ScreenCaptureConfig, adapter_luid, backend, borderless, optional (+2 more)
 
 ### Community 247 - "WindowsH264D3D11Decoder::Impl"
 Cohesion: 0.12
 Nodes (16): IMFDXGIDeviceManager, IMFMediaBuffer, IMFSample, size_t, WindowsH264D3D11Decoder::Impl, apartment_initialized_, config_, device_ (+8 more)
 
 ### Community 248 - "macos/translation_test.cpp"
-Cohesion: 0.11
-Nodes (19): "a display's GPU is claimed only when an enumerated Metal device drives it", apple_gpu(), "audio endpoints keep one default per direction as inferred roles", "CoreGraphics refresh rates become exact rationals", IssueCode, T, uint32_t, vector (+11 more)
+Cohesion: 0.12
+Nodes (16): "a display's GPU is claimed only when an enumerated Metal device drives it", "audio endpoints keep one default per direction as inferred roles", "CoreGraphics refresh rates become exact rationals", IssueCode, T, vector, "device names are bounded on a UTF-8 boundary", "encoder GPUs and transfers are claimed only on proof" (+8 more)
 
 ### Community 249 - "VoicePeerOptions"
 Cohesion: 0.12
@@ -1406,8 +1402,8 @@ Nodes (16): IMFMediaType, HardwareEncoderConfig, adapter_luid, bitrate, frame_ra
 Cohesion: 0.18
 Nodes (14): int64_t, StreamAudioError, code, native_code, mutex, promise, StreamAudioErrorCode, error_from_hresult() (+6 more)
 
-### Community 257 - "parse"
-Cohesion: 0.14
+### Community 257 - "capture-check/main.cpp"
+Cohesion: 0.13
 Nodes (13): "capture-check accepts seconds once and rejects ambiguous arguments", "capture-check defaults to a short bounded validation run", optional, string_view, vector, parse(), CaptureCheckOptions, duration (+5 more)
 
 ### Community 258 - "milliseconds"
@@ -1415,8 +1411,8 @@ Cohesion: 0.29
 Nodes (12): add(), add_stream(), audio_choices(), audio_level(), AudioDirection, string, uint32_t, vector (+4 more)
 
 ### Community 259 - "AudioViewModel"
-Cohesion: 0.19
-Nodes (9): AudioView, .body, CatroAudioDevice, Color, AudioViewModel, String, Foundation, ObservableObject (+1 more)
+Cohesion: 0.21
+Nodes (8): AudioView, .body, CatroAudioDevice, Color, AudioViewModel, String, Foundation, Timer
 
 ### Community 260 - "CatroRoomRuntimeConfig"
 Cohesion: 0.13
@@ -1435,12 +1431,12 @@ Cohesion: 0.13
 Nodes (15): AccessButton, DeafenVoiceButton, FullScreenStreamButton, InviteButton, JoinVoiceButton, LeaveStreamButton, MuteVoiceButton, PopOutStreamButton (+7 more)
 
 ### Community 264 - "ServerView.xaml.cpp"
-Cohesion: 0.21
-Nodes (16): IInspectable, RoutedEventArgs, string_view, BeginInvite, BeginSendMessage, OnAccess, OnComposerKeyDown, OnInvite (+8 more)
+Cohesion: 0.28
+Nodes (12): IInspectable, RoutedEventArgs, BeginInvite, BeginSendMessage, OnAccess, OnComposerKeyDown, OnInvite, OnSendMessage (+4 more)
 
-### Community 265 - "ChannelBlueprint"
-Cohesion: 0.40
-Nodes (5): ChannelBlueprint, kind, name, ChannelKind, string_view
+### Community 265 - "room_voice_runtime.cpp"
+Cohesion: 0.16
+Nodes (11): direct_, set_error, stop_locked, AudioEndpointId, int32_t, optional, endpoint(), valid_media() (+3 more)
 
 ### Community 266 - "decode_local_state"
 Cohesion: 0.27
@@ -1454,21 +1450,21 @@ Nodes (17): unique_ptr, UdpPeerSocket, bind, connect_peer, impl_, local_port, re
 Cohesion: 0.13
 Nodes (15): RenderBridgeStatistics, buffered_samples, callbacks, deafened_samples_rendered, frames_enqueued, pcm_samples_rendered, peak_buffered_samples, push_rejections (+7 more)
 
-### Community 269 - "write_packet_header"
-Cohesion: 0.42
-Nodes (14): byte, PacketError, size_t, span, uint16_t, uint32_t, variant, get_u16() (+6 more)
+### Community 269 - "VoicePacketView"
+Cohesion: 0.20
+Nodes (23): byte, span, uint16_t, uint32_t, VoicePacketView, payload, sequence, stream_id (+15 more)
 
 ### Community 270 - "VoicePipeline::RemoteStream"
 Cohesion: 0.09
-Nodes (25): Decoder, conceal, create, decode, impl_, reset, find_remote, byte (+17 more)
+Nodes (27): next_playout_kind, accumulate_jitter(), CodecError, optional, PcmFrame, PlayoutKind, RemoteStream, uint16_t (+19 more)
 
 ### Community 271 - "Review Focus"
 Cohesion: 0.13
 Nodes (14): Global Constraints, Review Focus, Task 10: Run fresh Oracle and real-machine acceptance, Task 11: Rehearse final distribution and freeze, Task 1: Make RTC and room runtime portable, Task 2: Add shared directory values and macOS production session, Task 3: Extract portable production voice runtime, Task 4: Add macOS capture, H.264 codec, and presentation primitives (+6 more)
 
 ### Community 272 - "InitializeComponent"
-Cohesion: 0.29
-Nodes (10): ServerView::SetDirectorySession(), BeginJoinRequestRefresh, BeginMemberRefresh, BeginMessageRefresh, InitializeComponent, ResetAccessRequests, ResetMembers, ResetMessages (+2 more)
+Cohesion: 0.18
+Nodes (16): ServerView::BeginSendMessage(), ServerView::SetDirectorySession(), string_view, BeginJoinRequestRefresh, BeginMemberRefresh, BeginMessageRefresh, InitializeComponent, ResetAccessRequests (+8 more)
 
 ### Community 273 - "StreamInfo"
 Cohesion: 0.15
@@ -1478,9 +1474,9 @@ Nodes (10): uint32_t, StreamInfo, device, device_channels, device_latency_frames
 Cohesion: 0.14
 Nodes (13): unique_ptr, RoomMeshTransport, claim_screen, impl_, peer_count, release_screen, screen_owner, send_stream_audio (+5 more)
 
-### Community 275 - "set_codec_uint32"
-Cohesion: 0.50
-Nodes (5): GUID, ICodecAPI, uint32_t, set_codec_bool(), set_codec_uint32()
+### Community 275 - "MonitorPipe"
+Cohesion: 0.18
+Nodes (8): atomic, uint32_t, uint64_t, MonitorPipe, high_water_, primed_, ring_, target_
 
 ### Community 276 - "Native UI stabilization and modular product-shell design"
 Cohesion: 0.14
@@ -1510,13 +1506,13 @@ Nodes (14): ComPtr, HRESULT, ID3D11Device, IDXGIAdapter1, LUID, uint64_t, create
 Cohesion: 0.16
 Nodes (14): optional, string_view, vector, parse(), Integer, optional, span, string_view (+6 more)
 
-### Community 283 - "realtime_bridge_test.cpp"
-Cohesion: 0.14
-Nodes (13): "capture backlog trimming drops only complete oldest codec frames", "capture backlog trimming preserves partial native callback phase", "capture bridge assembles arbitrary callback blocks into exact codec frames", "capture bridge preserves frame order under sustained two-thread load", "capture overflow aligns the post-gap PCM to the 20 ms packet clock", "capture overload resynchronizes instead of splicing stale and fresh PCM", "real-time bridge memory is clamped to a small fixed ceiling", "render bridge deafen outputs silence while draining live PCM" (+5 more)
+### Community 283 - "thread"
+Cohesion: 0.05
+Nodes (30): mutex, thread, "external duplex session starts render before capture and exposes native stream info", "external session failure requests both streams to stop and ignores stale failures", "external session leaves no running stream when opening or starting fails", "external session opens only the requested direction", "external session stop waits for an in-flight start and leaves no native stream running", "capture backlog trimming drops only complete oldest codec frames" (+22 more)
 
-### Community 284 - "UdpError"
-Cohesion: 0.10
-Nodes (19): string_view, name(), UdpError, code, native_code, uint64_t, PacketSendContext, fatal_error (+11 more)
+### Community 284 - "PacketSendContext"
+Cohesion: 0.14
+Nodes (13): uint64_t, PacketSendContext, fatal_error, socket, soft_drop, stats, SendStatistics, backpressure_events (+5 more)
 
 ### Community 285 - "Mode"
 Cohesion: 0.15
@@ -1527,28 +1523,28 @@ Cohesion: 0.15
 Nodes (12): unique_ptr, WindowsScreenShareRuntime, impl_, preview_swap_chain, remote_swap_chain, set_local_preview_enabled, set_remote_viewing_enabled, snapshot (+4 more)
 
 ### Community 287 - "PacketContext"
-Cohesion: 0.29
-Nodes (7): PacketContext, fatal_error, owner, room_failed, room_runtime, socket, soft_drop
+Cohesion: 0.15
+Nodes (13): PacketContext, fatal_error, owner, room_failed, room_runtime, socket, soft_drop, string_view (+5 more)
 
 ### Community 288 - "run_audio_check"
 Cohesion: 0.31
 Nodes (12): AudioCheckWait, optional, ostream, span, string, string_view, dbfs(), describe() (+4 more)
 
-### Community 289 - "voice_peer_test.cpp"
-Cohesion: 0.40
-Nodes (4): "voice peer parser accepts explicit localhost duplex settings", "voice peer parser keeps conservative defaults", "voice peer parser rejects missing repeated and unsafe ranges", "voice peer parser supports one-way engineering modes"
+### Community 289 - "DirectoryError"
+Cohesion: 0.16
+Nodes (15): DirectoryError, code, http_status, message, native_code, DirectoryErrorCode, DirectoryErrorCode, Result (+7 more)
 
 ### Community 290 - "CaptureBridgeStatistics"
-Cohesion: 0.15
-Nodes (13): CaptureBridgeStatistics, buffered_samples, callbacks, captured_samples, dropped_callbacks, dropped_samples, frames_dequeued, peak_buffered_samples (+5 more)
+Cohesion: 0.14
+Nodes (14): CaptureBridgeStatistics, buffered_samples, callbacks, captured_samples, dropped_callbacks, dropped_samples, frames_dequeued, peak_buffered_samples (+6 more)
 
 ### Community 291 - "verify.sh script"
 Cohesion: 0.22
 Nodes (9): backup.sh script, fail(), install.sh script, fail(), rollback(), update.sh script, fail(), verify.sh script (+1 more)
 
 ### Community 292 - "ParsedBaseUrl"
-Cohesion: 0.15
-Nodes (13): DirectoryConfigResult, INTERNET_PORT, channel_of_kind(), ChannelKind, optional, wstring, environment(), load_directory_service_config() (+5 more)
+Cohesion: 0.18
+Nodes (11): DirectoryConfigResult, INTERNET_PORT, optional, wstring, environment(), load_directory_service_config(), ParsedBaseUrl, base_path (+3 more)
 
 ### Community 293 - "Bounded persistent text channels — design"
 Cohesion: 0.15
@@ -1571,28 +1567,28 @@ Cohesion: 0.18
 Nodes (12): activate_h264_d3d11_decoder(), activation_name(), ActivationArray, count, data, IMFActivate, IMFTransform, string (+4 more)
 
 ### Community 298 - "GpuShape"
-Cohesion: 0.09
-Nodes (26): absent(), EvidenceMethod, GpuKind, IssueCode, ProbeFamily, string, uint64_t, GpuShape (+18 more)
+Cohesion: 0.10
+Nodes (23): absent(), EvidenceMethod, GpuKind, IssueCode, ProbeFamily, string, uint64_t, GpuShape (+15 more)
 
 ### Community 299 - "voice-peer/main.cpp"
-Cohesion: 0.21
+Cohesion: 0.16
 Nodes (11): console_control_handler(), BOOL, DWORD, string, vector, wchar_t, wstring_view, main() (+3 more)
 
 ### Community 300 - "UpdateVoiceUi"
-Cohesion: 0.24
-Nodes (12): fire_and_forget, IInspectable, RoutedEventArgs, ServerView::BeginVoiceJoin(), ServerView::OnDeafenVoice(), ServerView::OnJoinVoice(), ServerView::OnMuteVoice(), ServerView::StopVoice() (+4 more)
+Cohesion: 0.27
+Nodes (11): fire_and_forget, IInspectable, RoutedEventArgs, ServerView::BeginVoiceJoin(), ServerView::OnDeafenVoice(), ServerView::OnJoinVoice(), ServerView::OnMuteVoice(), ServerView::StopVoice() (+3 more)
 
 ### Community 301 - "LocalState"
-Cohesion: 0.23
-Nodes (12): LocalState, identity, personal_server, StateError, code, detail, bootstrap_personal_state(), variant (+4 more)
+Cohesion: 0.14
+Nodes (16): ServerId, Invite, code, creator_id, server_id, LocalState, identity, personal_server (+8 more)
 
 ### Community 302 - "size_t"
 Cohesion: 0.45
 Nodes (7): byte, size_t, span, RoomMeshTransport::peer_count(), RoomMeshTransport::send_stream_audio(), RoomMeshTransport::send_video(), RoomMeshTransport::send_voice()
 
-### Community 303 - "App"
+### Community 303 - "CatroApp"
 Cohesion: 0.20
-Nodes (6): App, App, OnLaunched, window_, AppT, LaunchActivatedEventArgs
+Nodes (8): App, CatroApp, App, OnLaunched, window_, AppT, LaunchActivatedEventArgs, Scene
 
 ### Community 304 - "Review Focus"
 Cohesion: 0.17
@@ -1602,9 +1598,9 @@ Nodes (11): Global Constraints, Oracle Free Production Rooms Implementation Plan
 Cohesion: 0.17
 Nodes (11): 10. Definition of done, 1. Purpose, 2. Scope, 3. Canonical format, 4. Real-time rules, 5. Core components (`core/audio`), 6. Latency statistics, 7. Platform backends (+3 more)
 
-### Community 306 - "DirectoryError"
-Cohesion: 0.12
-Nodes (22): DirectoryError, code, http_status, message, native_code, DirectoryErrorCode, kCredentialBytes, base64url() (+14 more)
+### Community 306 - "load_or_create_credential_bytes"
+Cohesion: 0.24
+Nodes (12): kCredentialBytes, base64url(), array, byte, DirectoryStringResult, path, span, string (+4 more)
 
 ### Community 307 - "CapabilityService"
 Cohesion: 0.17
@@ -1619,8 +1615,8 @@ Cohesion: 0.18
 Nodes (9): CatroRoomRuntimeHandle, "room runtime C ABI rejects invalid arguments", "room runtime can restart after stop", "room runtime keeps insecure signaling and no-TURN opt-ins strict", "room runtime stop wakes blocked receivers and is idempotent", "room runtime validates required configuration and peer bounds", Runtime, handle_ (+1 more)
 
 ### Community 310 - "AudioSessionView"
-Cohesion: 0.10
-Nodes (20): AudioLevel, fraction, text, AudioSessionView, input, output, rows, running (+12 more)
+Cohesion: 0.11
+Nodes (17): AudioSessionView, input, output, rows, running, status, tone, Tone (+9 more)
 
 ### Community 311 - "H264ReassemblyResult"
 Cohesion: 0.18
@@ -1651,8 +1647,8 @@ Cohesion: 0.18
 Nodes (11): DXGI_FORMAT, uint64_t, VideoPresenterStatistics, frames_dropped, frames_presented, output_height, output_width, reconfigurations (+3 more)
 
 ### Community 318 - "runtime_probe.cpp"
-Cohesion: 0.38
-Nodes (10): absent(), add_issue(), IssueCode, string_view, T, vector, known(), measured() (+2 more)
+Cohesion: 0.29
+Nodes (11): run_passive_probe(), absent(), add_issue(), IssueCode, string_view, T, vector, known() (+3 more)
 
 ### Community 319 - "video_decoder.cpp"
 Cohesion: 0.25
@@ -1690,17 +1686,17 @@ Nodes (8): int64_t, name(), VideoPresenterError, code, native_code, D3D11_TEXTUR
 Cohesion: 0.20
 Nodes (9): ProcessLoopbackAudioCapture::Impl, callbacks_, error_, error_mutex_, frames_, glitches_, running_, stop_event_ (+1 more)
 
-### Community 328 - "MainWindow.Directory.cpp"
-Cohesion: 0.26
+### Community 328 - "MainWindow.xaml.cpp"
+Cohesion: 0.15
 Nodes (12): fire_and_forget, string, MainWindow::BeginDirectoryBootstrap(), MainWindow::BeginDirectoryServerRefresh(), MainWindow::BeginInviteJoin(), MainWindow::BeginJoinServer(), MainWindow::BeginOutgoingJoinRequestRefresh(), MainWindow::BeginServerCodeLookup() (+4 more)
 
 ### Community 329 - "audio-check/main.cpp"
 Cohesion: 0.29
 Nodes (8): string, vector, wchar_t, wstring_view, main(), run(), utf8(), wmain()
 
-### Community 330 - "AudioPlatform"
-Cohesion: 0.08
-Nodes (20): AudioPlatform, open_capture, open_render, AudioEngine::AudioEngine(), FailureHandler, FailureHandler, uint64_t, unique_ptr (+12 more)
+### Community 330 - "external_session.cpp"
+Cohesion: 0.18
+Nodes (9): FailureHandler, uint64_t, unique_ptr, ExternalAudioSession::ExternalAudioSession(), ExternalAudioSession::fail(), ExternalAudioSession::Session, capture, render (+1 more)
 
 ### Community 331 - "Border"
 Cohesion: 0.22
@@ -1714,13 +1710,13 @@ Nodes (5): SettingsView, UserControl, SettingsView, InitializeComponent, Setting
 Cohesion: 0.22
 Nodes (7): ChannelIdTag, byte, Id, bytes, ServerIdTag, UserIdTag, kIdBytes
 
-### Community 334 - "ProbeIssue"
-Cohesion: 0.28
-Nodes (13): IssueCode, ProbeIssue, code, probe_id, bounded_text(), codec_name(), string_view, vector (+5 more)
+### Community 334 - "Decoder"
+Cohesion: 0.18
+Nodes (11): Decoder, conceal, create, decode, impl_, reset, find_remote, byte (+3 more)
 
-### Community 335 - "VoicePacketView"
-Cohesion: 0.22
-Nodes (9): byte, span, uint16_t, uint32_t, VoicePacketView, payload, sequence, stream_id (+1 more)
+### Community 335 - "operating_profile_test.cpp"
+Cohesion: 0.18
+Nodes (10): "an unknown power source yields the safe local envelope", "battery alone derives efficiency under automatic preference", "battery plus low-power mode derives efficiency", "critical thermal pressure constrains every preference", "explicit preference outranks power source", "fair thermal pressure tempers performance to balanced", "headless, remote, and critical-memory sessions use the safe local envelope", "mains power derives performance only for a known desktop role" (+2 more)
 
 ### Community 336 - "RoomMeshConfig"
 Cohesion: 0.17
@@ -1742,17 +1738,17 @@ Nodes (8): Broadcaster contract, Catro implementation state after this iteration
 Cohesion: 0.22
 Nodes (8): Server Code discovery and approval-based join requests — implementation plan, Task 1 — Public Server Code and persisted request model, Task 2 — Lookup and join-request API, Task 3 — Windows network boundary, Task 4 — Add Server flow, Task 5 — Owner Access surface, Task 6 — Documentation and acceptance, Verification
 
-### Community 341 - "packet.hpp"
-Cohesion: 0.50
-Nodes (3): PacketError, string_view, name()
+### Community 341 - "WorkspaceSnapshot"
+Cohesion: 0.20
+Nodes (10): WorkspaceSnapshot, connection, connection_message, join_server, join_voice, open_settings, open_system, send_message (+2 more)
 
-### Community 342 - "Encoder"
-Cohesion: 0.25
-Nodes (8): Encoder, create, encode, impl_, reset, unique_ptr, CreateResult, VoicePipeline::create()
+### Community 342 - "string_view"
+Cohesion: 0.33
+Nodes (10): absent(), add_issue(), IssueCode, string_view, T, vector, inferred(), known() (+2 more)
 
-### Community 343 - "display_id"
-Cohesion: 0.67
-Nodes (3): DisplayId, uint32_t, display_id()
+### Community 343 - "LevelMeter"
+Cohesion: 0.22
+Nodes (5): atomic, Index, padding, value, LevelMeter
 
 ### Community 344 - "WasapiStreamAudioRenderer::Impl"
 Cohesion: 0.22
@@ -1770,15 +1766,15 @@ Nodes (8): "opus audio codec preserves stereo 20 ms frames", "opus voice codec e
 Cohesion: 0.28
 Nodes (6): byte, span, uint8_t, FailingEntropy, SequenceEntropy, next_
 
-### Community 348 - "video-peer/main.cpp"
-Cohesion: 0.25
+### Community 348 - "video_peer.hpp"
+Cohesion: 0.22
 Nodes (8): console_control_handler(), BOOL, DWORD, string, wchar_t, wstring_view, utf8(), wmain()
 
 ### Community 349 - "DiagnosticsRow"
 Cohesion: 0.25
 Nodes (8): DiagnosticsRow, depth, label, list_item, state, value, FactState, uint32_t
 
-### Community 350 - "CodecError"
+### Community 350 - "codec.hpp"
 Cohesion: 0.33
 Nodes (6): CodecError, code, native_code, CodecErrorCode, string_view, name()
 
@@ -1810,33 +1806,33 @@ Nodes (7): "an oversized section is bounded on screen and complete in the export
 Cohesion: 0.25
 Nodes (7): "directory HTTP errors keep actionable server status and messages", "directory invite token and RTC payloads are strictly bounded", "directory lookup and join requests enforce codes roles bounds and uniqueness", "directory member rosters require one first owner and unique bounded members", "directory messages enforce content ordering identity and cursor bounds", "directory server payloads enforce every field and list uniqueness", "production directory URLs reject secret-bearing and local endpoints"
 
-### Community 358 - "system_runtime_probe_test.cpp"
-Cohesion: 0.33
-Nodes (5): runtime_spec(), system_spec(), "the Windows capability service publishes generations and stops cleanly", "the Windows runtime probe reports power and session facts without inventing state", "the Windows system probe reports measured topology and explicit uncertainty"
+### Community 358 - "NativeEncoder"
+Cohesion: 0.22
+Nodes (9): Codec, string, uint64_t, NativeEncoder, codec, encoder_id, gpu, hardware (+1 more)
 
 ### Community 359 - "macos-installer-test.sh"
 Cohesion: 0.50
 Nodes (6): assert_eq(), assert_file(), assert_installed_version(), make_release(), run_installer(), macos-installer-test.sh script
 
-### Community 360 - "audio_platform_test.cpp"
-Cohesion: 0.25
-Nodes (7): "a monitor session runs capture into render", optional, "process loopback stream audio rejects a zero process id", require_or_skip(), "the default capture endpoint delivers frames", "the default render endpoint plays the test tone", "unknown and wrong-direction endpoints are not found"
+### Community 360 - "NativeGpuDisplay"
+Cohesion: 0.22
+Nodes (9): optional, vector, NativeCaptureApis, access_granted, screen_capture_kit, NativeGpuDisplay, capture, displays (+1 more)
 
 ### Community 361 - "rtc_room_transport_test.cpp"
 Cohesion: 0.22
 Nodes (7): string_view, screen_media_allowed(), "RTC room screen claim requires a joined signaling socket", "RTC room screen media accepts only the current owner", "RTC room transport bounds remote peers to four", "RTC room transport rejects insecure production configuration", "RTC room transport requires TURN unless explicitly in engineering mode"
 
-### Community 362 - "frame_period"
-Cohesion: 0.40
-Nodes (5): nanoseconds, time_point, uint32_t, frame_period(), monotonic_rtp_timestamp()
+### Community 362 - "NativeDisplayMode"
+Cohesion: 0.22
+Nodes (9): uint32_t, NativeDisplayMode, pixel_height, pixel_width, point_height, point_width, refresh_hz, uint32_t (+1 more)
 
 ### Community 363 - "fill_rtp_header"
 Cohesion: 0.38
 Nodes (7): uint16_t, uint32_t, uint64_t, fill_rtp_header(), rtp_timestamp_90khz(), write_be16(), write_be32()
 
-### Community 364 - "CatroDirectorySessionDelegate"
-Cohesion: 0.50
-Nodes (4): NSURLSessionTaskDelegate, CatroDirectorySessionDelegate, -URLSessiontaskwillPerformHTTPRedirectionnewRequestcompletionHandler, NSObject
+### Community 364 - "directory_client.mm"
+Cohesion: 0.17
+Nodes (8): NSURLSessionTaskDelegate, CatroDirectorySessionDelegate, -URLSessiontaskwillPerformHTTPRedirectionnewRequestcompletionHandler, NSObject, Privacy, Reporting a vulnerability, Security, Trust boundaries
 
 ### Community 365 - "Oracle Free production bundle"
 Cohesion: 0.29
@@ -1863,7 +1859,7 @@ Cohesion: 0.29
 Nodes (6): Architecture, Controls, Next media slice, Real-machine validation, Temporary direct-peer validation, Voice channel runtime
 
 ### Community 371 - "LocalStateError"
-Cohesion: 0.29
+Cohesion: 0.25
 Nodes (7): int32_t, LocalStateErrorCode, string, LocalStateError, code, detail, native_code
 
 ### Community 372 - "arguments"
@@ -1882,9 +1878,13 @@ Nodes (4): ComPtr, IDXGISwapChain1, WindowsScreenShareRuntime::preview_swap_chai
 Cohesion: 0.33
 Nodes (6): RemoteShareHost, ServerLayout, SharePreviewHost, TextPanel, VoicePanel, Grid
 
-### Community 376 - "CodecError"
-Cohesion: 0.33
-Nodes (5): CodecError, code, detail, CodecErrorCode, string
+### Community 376 - "string_view"
+Cohesion: 0.06
+Nodes (22): string_view, CodecError, code, detail, CodecErrorCode, string, PacketError, string_view (+14 more)
+
+### Community 377 - "CatroAudioBridge.mm"
+Cohesion: 0.40
+Nodes (4): CatroAudioDevice, -initWithChoice, CatroDiagnosticsRow, -initWithRow
 
 ### Community 378 - "Capability system"
 Cohesion: 0.33
@@ -1972,10 +1972,6 @@ Nodes (4): "busy action rejects duplicates and can recover", "connecting and syn
 Cohesion: 0.40
 Nodes (4): path, TempStatePath, directory, state
 
-### Community 402 - "video_peer_test.cpp"
-Cohesion: 0.40
-Nodes (4): "video peer parser accepts a bounded sender configuration", "video peer parser keeps a nonzero sender default and receiver auto-lock", "video peer parser keeps conservative media defaults", "video peer parser rejects unsafe or incomplete settings"
-
 ### Community 404 - "TempStatePath"
 Cohesion: 0.40
 Nodes (4): path, TempStatePath, directory, state
@@ -1991,10 +1987,6 @@ Nodes (4): "screen transport equality includes bounded media parameters", "Windo
 ### Community 407 - "capability-report/main.cpp"
 Cohesion: 0.27
 Nodes (9): collect_report(), optional, path, string, wchar_t, wstring_view, executable_directory(), utf8() (+1 more)
-
-### Community 408 - "View"
-Cohesion: 0.20
-Nodes (11): .detail, FactRow, .body, OverviewView, .body, SectionView, .body, Bool (+3 more)
 
 ### Community 409 - "NavigationEntry"
 Cohesion: 0.50
@@ -2016,17 +2008,9 @@ Nodes (4): 3. Business/Hosting Direction, Future optional direction, Initial bac
 Cohesion: 0.50
 Nodes (4): Build, Collecting a report for a bug, Runtime, Troubleshooting
 
-### Community 415 - "Security"
-Cohesion: 0.50
-Nodes (4): Privacy, Reporting a vulnerability, Security, Trust boundaries
-
 ### Community 416 - "shell_model_test.cpp"
 Cohesion: 0.50
 Nodes (3): "first-run server has exactly one text and one voice channel", "shell defaults come from the community personal-server contract", "shell opens personal server and switches channels without invalid state"
-
-### Community 417 - "encode_check_test.cpp"
-Cohesion: 0.50
-Nodes (3): "encode-check accepts bounded explicit video settings", "encode-check defaults to conservative same-adapter H264 validation", "encode-check rejects malformed duplicate or unsafe ranges"
 
 ### Community 418 - "windows_keyboard_smoke.ps1"
 Cohesion: 0.83
@@ -2080,26 +2064,22 @@ Nodes (3): StreamAudioErrorCode, string_view, name()
 Cohesion: 0.67
 Nodes (3): byte, span, SystemEntropy::fill()
 
-### Community 435 - "text.hpp"
-Cohesion: 0.29
-Nodes (6): string, string_view, wstring, wstring_view, utf8(), wide()
-
 ## Knowledge Gaps
 - **2749 isolated node(s):** `id`, `label`, `fraction`, `text`, `status` (+2744 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3699 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3701 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **42 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `ServerView` connect `ServerView` to `Window`, `ServerView.Screen.cpp`, `string`, `ServerView.xaml.cpp`, `directory_client.cpp`, `UpdateVoiceUi`, `LocalState`, `DiagnosticsViewModel`, `WorkspaceSnapshot`, `InitializeComponent`, `DirectoryServer`, `ShellState`, `ServerView::StartVoice`, `WindowsScreenShareRuntime`, `ServerView.Directory.cpp`?**
-  _High betweenness centrality (0.048) - this node is a cross-community bridge._
-- **Why does `WindowsScreenShareRuntime::Impl` connect `WindowsScreenShareRuntime::Impl` to `frame_period`, `UdpPeerSocket`, `ScreenShareConfig`, `array`, `ComPtr`, `.start`, `.run_stream_audio_receiver`, `.run_receiver`, `PacketContext`?**
-  _High betweenness centrality (0.031) - this node is a cross-community bridge._
+- **Why does `ServerView` connect `ServerView` to `Window`, `ServerView.Screen.cpp`, `MainWindow.xaml.cpp`, `ServerView.xaml.cpp`, `directory_client.cpp`, `DirectoryMessage`, `UpdateVoiceUi`, `DiagnosticsViewModel`, `DirectoryServer`, `InitializeComponent`, `LocalState`, `WorkspaceSnapshot`, `ShellState`, `WindowsScreenShareRuntime`, `ServerView.Directory.cpp`?**
+  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+- **Why does `WindowsScreenShareRuntime::Impl` connect `WindowsScreenShareRuntime::Impl` to `ScreenShareSnapshot`, `UdpPeerSocket`, `ScreenShareConfig`, `array`, `ComPtr`, `StreamAudioCaptureBridge`, `.run_stream_audio_receiver`, `.run_receiver`, `PacketContext`?**
+  _High betweenness centrality (0.030) - this node is a cross-community bridge._
 - **What connects `id`, `label`, `fraction` to the rest of the system?**
   _2749 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `capability_fixtures.cpp` be split into smaller, more focused modules?**
-  _Cohesion score 0.13169446883230904 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.13251922207146088 - nodes in this community are weakly interconnected._
 - **Should `canonical_determinism_test.cpp` be split into smaller, more focused modules?**
   _Cohesion score 0.1368421052631579 - nodes in this community are weakly interconnected._
 - **Should `Validator` be split into smaller, more focused modules?**
