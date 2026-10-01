@@ -47,8 +47,18 @@ and the native `IUIAutomation` client. It reproduces with a window that holds on
 `TextBlock`, so it is not caused by Catro's views. Removing the custom title bar, Mica, or
 `XamlControlsResources` does not help, and neither does removing the app's `.pri`. The build here
 is unpackaged, self-contained Windows App SDK 2.5.1 (WinUI 2.3.9), without the Visual Studio Windows
-app workload. Other WinUI 3 apps on the same machine walk cleanly. Until this is resolved, the
-Windows shell is not usable with a screen reader.
+app workload.
+
+On October 1, 2026, Catro reproduced `0xc000027b` with WER signature
+`8001010e` (`RPC_E_WRONG_THREAD`). The earlier reproduction named `Microsoft.UI.Xaml.dll`; later
+reproductions surfaced `combase.dll` while preserving the same wrong-thread signature. This matches
+the open Windows App SDK/WinUI failure tracked in
+[microsoft-ui-xaml#11139](https://github.com/microsoft/microsoft-ui-xaml/issues/11139). Do not catch
+or hide this at the application layer, downgrade random packages, or claim that the presentation
+refactor fixes assistive technology. Until a supported Microsoft servicing update passes external
+Narrator/UIA validation—or the Windows shell migrates to a supported UI stack with a stable
+accessibility tree—the Windows shell is not screen-reader ready. Use
+`tests/ui/windows_keyboard_smoke.ps1` only for the non-UIA keyboard/screenshot gate.
 
 **`microphone access denied`** Windows blocks desktop apps from the microphone. Turn on
 *Settings > Privacy & security > Microphone > Let desktop apps access your microphone*.

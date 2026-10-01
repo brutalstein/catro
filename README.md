@@ -42,7 +42,11 @@ The Windows app opens directly into the user's personal server: one real bounded
 direct-invite and approval-based Server Code join flows, and voice-local screen share controls. Shared-server members can join the same provisioned RTC room, publish a window or
 display, opt into remote viewing, pop the stream out or use full screen, and optionally include the
 selected window's process audio. The shell is native WinUI 3 and intentionally avoids
-blur/backdrop/animation costs. See [`docs/ui-foundation.md`](docs/ui-foundation.md).
+blur/backdrop/animation costs. Its code-behind is split by directory, voice, screen, and
+presentation-state responsibility; online actions publish visible connecting, busy, unavailable,
+and failed reasons instead of relying on disabled controls or tooltips alone. See
+[`docs/ui-foundation.md`](docs/ui-foundation.md) and the
+[`native UI stabilization record`](docs/validation/native-ui-stabilization.md).
 
 ## Quick start
 
@@ -73,7 +77,7 @@ The scripts check prerequisites and never install tools or change system setting
 
 | Platform | Status |
 | --- | --- |
-| Windows 11 x64 | Release build, 44-test local gate, capability report, and WinUI startup pass locally. Voice/screen product integration, Server Code discovery with owner-reviewed join requests, authoritative shared-server member rosters, bounded persistent text messaging, and the Oracle single-VM deployment bundle are implemented; real-network forced-TURN, five-client, text exchange, restart, latency, and resource acceptance remains manual and is explicitly NOT VALIDATED. The shell still has a known UI Automation issue (see troubleshooting). |
+| Windows 11 x64 | Native Debug/Release builds, local test gates, capability reporting, and the voice/screen/text product path are implemented. Server Code discovery, owner-reviewed join requests, authoritative member rosters, bounded persistent text messaging, and the Oracle single-VM deployment bundle are present; real-network forced-TURN, five-client, restart, latency, resource, keyboard-smoke, and visual acceptance remain explicit gates. External UI Automation currently crashes in the Windows App SDK path, so Narrator/screen-reader readiness is blocked; see troubleshooting and the stabilization record. |
 | macOS 13+ Apple Silicon | Debug build, tests, and capability-report generation pass on the `macos-15` CI runner. Windows product voice/screen/text parity is not claimed. |
 | macOS 13+ Intel | Debug build, tests, and capability-report generation pass on the `macos-15-intel` CI runner. Windows product voice/screen/text parity is not claimed. |
 
@@ -86,5 +90,6 @@ not hardware evidence.
 - [Capability system architecture](docs/architecture/capability-system.md)
 - [Oracle production operations](docs/operations/oracle-free-production.md)
 - [Oracle production acceptance record](docs/validation/oracle-free-production-acceptance.md)
+- [Native UI stabilization record](docs/validation/native-ui-stabilization.md)
 - [Decision records](docs/architecture/decisions)
 - [Dependencies](DEPENDENCIES.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
