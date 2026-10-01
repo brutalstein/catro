@@ -2,6 +2,7 @@
 
 #include "ServerView.g.h"
 
+#include <PresentationState.hpp>
 #include <ShellModel.hpp>
 
 #include <catro/community/model.hpp>
@@ -79,6 +80,7 @@ private:
     ClaimScreenOwnership();
     void StopScreenShare();
     void UpdateScreenShareUi();
+    void UpdateOnlineStatus();
     void OpenStreamWindow(bool fullscreen);
     void CloseStreamWindow() noexcept;
     void UpdateStreamWindowLayout();
@@ -89,6 +91,7 @@ private:
     [[nodiscard]] std::uint32_t LocalStreamId() const noexcept;
 
     catro::app::ShellState state_;
+    catro::app::WorkspaceSnapshot workspace_state_;
     std::optional<catro::community::LocalState> local_state_;
     std::optional<
         catro::platform::windows::DirectoryServiceConfig>
@@ -130,6 +133,8 @@ private:
     std::uint64_t message_generation_ = 1;
     std::uint64_t message_refresh_generation_ = 0;
     std::uint64_t message_send_generation_ = 0;
+    std::uint64_t voice_join_generation_ = 0;
+    std::uint64_t invite_generation_ = 0;
     bool page_loaded_ = false;
     bool member_refresh_pending_ = false;
     bool access_refresh_pending_ = false;

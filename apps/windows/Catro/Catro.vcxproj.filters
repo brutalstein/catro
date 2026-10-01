@@ -41,9 +41,14 @@
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="$(GeneratedFilesDir)module.g.cpp" />
     <ClCompile Include="MainWindow.xaml.cpp" />
+    <ClCompile Include="MainWindow.Directory.cpp" />
     <ClCompile Include="Diagnostics\DiagnosticsView.xaml.cpp"><Filter>Diagnostics</Filter></ClCompile>
     <ClCompile Include="Audio\AudioView.xaml.cpp"><Filter>Audio</Filter></ClCompile>
     <ClCompile Include="Server\ServerView.xaml.cpp"><Filter>Server</Filter></ClCompile>
+    <ClCompile Include="Server\ServerView.Directory.cpp"><Filter>Server</Filter></ClCompile>
+    <ClCompile Include="Server\ServerView.Screen.cpp"><Filter>Server</Filter></ClCompile>
+    <ClCompile Include="Server\ServerView.State.cpp"><Filter>Server</Filter></ClCompile>
+    <ClCompile Include="Server\ServerView.Voice.cpp"><Filter>Server</Filter></ClCompile>
     <ClCompile Include="Settings\SettingsView.xaml.cpp"><Filter>Settings</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -52,6 +57,7 @@
     <ClInclude Include="Diagnostics\DiagnosticsView.xaml.h"><Filter>Diagnostics</Filter></ClInclude>
     <ClInclude Include="Audio\AudioView.xaml.h"><Filter>Audio</Filter></ClInclude>
     <ClInclude Include="Server\ServerView.xaml.h"><Filter>Server</Filter></ClInclude>
+    <ClInclude Include="Server\ServerView.RuntimeConfig.hpp"><Filter>Server</Filter></ClInclude>
     <ClInclude Include="Settings\SettingsView.xaml.h"><Filter>Settings</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>

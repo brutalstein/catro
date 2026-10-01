@@ -2,6 +2,7 @@
 
 #include "MainWindow.g.h"
 
+#include <PresentationState.hpp>
 #include <ShellModel.hpp>
 
 #include <catro/community/model.hpp>
@@ -38,8 +39,11 @@ private:
     void RefreshDirectoryRail();
     void ApplyDirectoryServerToPage();
     void UpdateRail();
+    void UpdateConnectionUi();
 
     catro::app::ShellState shell_state_;
+    catro::app::WorkspaceSnapshot workspace_state_ =
+        catro::app::WorkspaceSnapshot::connecting();
     Microsoft::UI::Xaml::UIElement server_page_{nullptr};
     Microsoft::UI::Xaml::UIElement diagnostics_page_{nullptr};
     Microsoft::UI::Xaml::UIElement settings_page_{nullptr};

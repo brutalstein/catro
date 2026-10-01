@@ -120,6 +120,7 @@
     <ClInclude Include="Server\ServerView.xaml.h">
       <DependentUpon>Server\ServerView.xaml</DependentUpon>
     </ClInclude>
+    <ClInclude Include="Server\ServerView.RuntimeConfig.hpp" />
     <ClInclude Include="Settings\SettingsView.xaml.h">
       <DependentUpon>Settings\SettingsView.xaml</DependentUpon>
     </ClInclude>
@@ -142,6 +143,9 @@
     <ClCompile Include="MainWindow.xaml.cpp">
       <DependentUpon>MainWindow.xaml</DependentUpon>
     </ClCompile>
+    <ClCompile Include="MainWindow.Directory.cpp">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </ClCompile>
     <ClCompile Include="Diagnostics\DiagnosticsView.xaml.cpp">
       <DependentUpon>Diagnostics\DiagnosticsView.xaml</DependentUpon>
     </ClCompile>
@@ -149,6 +153,18 @@
       <DependentUpon>Audio\AudioView.xaml</DependentUpon>
     </ClCompile>
     <ClCompile Include="Server\ServerView.xaml.cpp">
+      <DependentUpon>Server\ServerView.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="Server\ServerView.Directory.cpp">
+      <DependentUpon>Server\ServerView.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="Server\ServerView.Screen.cpp">
+      <DependentUpon>Server\ServerView.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="Server\ServerView.State.cpp">
+      <DependentUpon>Server\ServerView.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="Server\ServerView.Voice.cpp">
       <DependentUpon>Server\ServerView.xaml</DependentUpon>
     </ClCompile>
     <ClCompile Include="Settings\SettingsView.xaml.cpp">

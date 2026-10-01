@@ -48,8 +48,8 @@
                     </StackPanel>
                     <Button x:Name="AccessButton"
                             Grid.Column="1"
-                            Width="34"
-                            Height="30"
+                            Width="36"
+                            Height="36"
                             Padding="0"
                             Margin="0,0,2,0"
                             Background="Transparent"
@@ -81,8 +81,8 @@
                     </Button>
                     <Button x:Name="InviteButton"
                             Grid.Column="2"
-                            Width="30"
-                            Height="30"
+                            Width="36"
+                            Height="36"
                             Padding="0"
                             Background="Transparent"
                             BorderThickness="0"
@@ -195,19 +195,21 @@
                                 Spacing="0"
                                 VerticalAlignment="Center">
                         <Button x:Name="ProfileMuteButton"
-                                Width="28" Height="28" Padding="0"
+                                Width="36" Height="36" Padding="0"
                                 Background="Transparent" BorderThickness="0"
                                 IsEnabled="False"
                                 Click="OnMuteVoice"
-                                ToolTipService.ToolTip="Mute">
+                                ToolTipService.ToolTip="Mute"
+                                AutomationProperties.Name="Profile mute microphone">
                             <FontIcon Glyph="&#xE720;" FontSize="12" />
                         </Button>
                         <Button x:Name="ProfileDeafenButton"
-                                Width="28" Height="28" Padding="0"
+                                Width="36" Height="36" Padding="0"
                                 Background="Transparent" BorderThickness="0"
                                 IsEnabled="False"
                                 Click="OnDeafenVoice"
-                                ToolTipService.ToolTip="Deafen">
+                                ToolTipService.ToolTip="Deafen"
+                                AutomationProperties.Name="Profile deafen audio">
                             <FontIcon Glyph="&#xE7F6;" FontSize="12" />
                         </Button>
                     </StackPanel>
@@ -218,7 +220,7 @@
         <!-- Active channel -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
-                <RowDefinition x:Name="ChannelHeaderRow" Height="48" />
+                <RowDefinition x:Name="ChannelHeaderRow" Height="56" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -246,13 +248,21 @@
                               VerticalAlignment="Center"
                               Visibility="Collapsed" />
                 </Grid>
-                <TextBlock x:Name="ChannelTitle"
-                           Grid.Column="1"
-                           Text="general"
-                           Margin="8,0,0,0"
-                           FontWeight="SemiBold"
-                           Foreground="{ThemeResource CatroTextBrush}"
-                           VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1"
+                            Margin="8,0,10,0"
+                            Spacing="1"
+                            VerticalAlignment="Center">
+                    <TextBlock x:Name="ChannelTitle"
+                               Text="general"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource CatroTextBrush}" />
+                    <TextBlock x:Name="OnlineStatusText"
+                               Text="Online services are not configured. Local mode remains available."
+                               FontSize="10"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{ThemeResource CatroTextTertiaryBrush}"
+                               AutomationProperties.LiveSetting="Polite" />
+                </StackPanel>
 
                 <StackPanel x:Name="VoiceToolbar"
                             Grid.Column="2"
@@ -588,7 +598,8 @@
                                     IsEnabled="False"
                                     Click="OnMuteVoice"
                                     Style="{StaticResource CatroSecondaryButtonStyle}"
-                                    ToolTipService.ToolTip="Mute">
+                                    ToolTipService.ToolTip="Mute"
+                                    AutomationProperties.Name="Mute microphone">
                                 <FontIcon Glyph="&#xE720;" FontSize="14" />
                             </Button>
                             <Button x:Name="DeafenVoiceButton"
@@ -596,7 +607,8 @@
                                     IsEnabled="False"
                                     Click="OnDeafenVoice"
                                     Style="{StaticResource CatroSecondaryButtonStyle}"
-                                    ToolTipService.ToolTip="Deafen">
+                                    ToolTipService.ToolTip="Deafen"
+                                    AutomationProperties.Name="Deafen audio">
                                 <FontIcon Glyph="&#xE7F6;" FontSize="14" />
                             </Button>
                             <Button x:Name="ShareScreenIconButton"
@@ -604,7 +616,8 @@
                                     IsEnabled="False"
                                     Click="OnShareScreen"
                                     Style="{StaticResource CatroSecondaryButtonStyle}"
-                                    ToolTipService.ToolTip="Share screen">
+                                    ToolTipService.ToolTip="Share screen"
+                                    AutomationProperties.Name="Share screen">
                                 <FontIcon Glyph="&#xE7F4;" FontSize="14" />
                             </Button>
                         </StackPanel>

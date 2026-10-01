@@ -7,6 +7,7 @@
     <Grid Background="{ThemeResource CatroBackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="38" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -32,7 +33,20 @@
                        VerticalAlignment="Center" />
         </Grid>
 
-        <Grid Grid.Row="1">
+        <Border Grid.Row="1"
+                Padding="12,6"
+                Background="{ThemeResource CatroSurfaceAltBrush}"
+                BorderBrush="{ThemeResource CatroStrokeBrush}"
+                BorderThickness="0,0,0,1">
+            <TextBlock x:Name="ShellStatusText"
+                       Text="Connecting to online services…"
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       Foreground="{ThemeResource CatroTextSecondaryBrush}"
+                       AutomationProperties.LiveSetting="Polite" />
+        </Border>
+
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="64" />
                 <ColumnDefinition Width="*" />
@@ -82,7 +96,6 @@
                                 CornerRadius="14"
                                 Background="{ThemeResource CatroSurfaceAltBrush}"
                                 BorderThickness="0"
-                                IsEnabled="False"
                                 Click="OnJoinServer"
                                 ToolTipService.ToolTip="Add server"
                                 AutomationProperties.Name="Add server">
@@ -129,8 +142,8 @@
                             </Button>
                         </Grid>
 
-                        <!-- Lightweight vector mascot: no bitmap decode, no extra asset I/O, and the
-                             animation is driven by the Windows compositor rather than the UI thread. -->
+                        <!-- Static vector mascot: no bitmap decode, extra asset I/O, or continuous
+                             motion, so reduced-motion behavior is deterministic. -->
                         <StackPanel Margin="0,7,0,1"
                                     HorizontalAlignment="Center"
                                     Spacing="1"
