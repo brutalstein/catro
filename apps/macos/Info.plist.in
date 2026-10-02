@@ -23,7 +23,7 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Catro uses the microphone only while you run an audio test: the level meter or the live monitor.</string>
+    <string>Catro uses the microphone while you are in a voice channel and during audio tests.</string>
     <key>NSScreenCaptureUsageDescription</key>
     <string>Catro uses Screen Recording only when you choose a display or window to share.</string>
 </dict>

@@ -1,0 +1,69 @@
+name: release-macos
+
+# Builds the production macOS packages on both architectures and uploads them as one workflow
+# artifact. It never creates a tag or a GitHub Release; a maintainer attaches the verified assets.
+on:
+  workflow_dispatch:
+    inputs:
+      service_url:
+        description: Production Catro service (HTTPS origin)
+        required: true
+        default: https://51-170-186-61.sslip.io
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    env:
+      CATRO_SERVICE_URL: ${{ inputs.service_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prerequisites
+        run: scripts/bootstrap.sh
+      - name: Build and test
+        run: |
+          scripts/build.sh Release
+          scripts/test.sh Release
+      - name: Package
+        run: scripts/package-macos.sh Release
+      - name: Test installer and package
+        env:
+          CATRO_TEST_BUILT_APP: out/build/macos-clang/Release/Catro.app
+        run: tests/installers/macos-installer-test.sh
+      - name: Launch and quit the packaged app
+        run: |
+          set -eu
+          app_root=$(mktemp -d)
+          ditto -x -k out/dist/Catro-macos-*.zip "$app_root"
+          started=$(date +%s)
+          open -n "$app_root/Catro.app"
+          sleep 20
+          pgrep -x Catro >/dev/null || { echo 'Catro exited during startup.' >&2; exit 1; }
+          osascript -e 'tell application id "dev.catro.Catro" to quit'
+          for _ in $(seq 1 20); do
+            pgrep -x Catro >/dev/null || break
+            sleep 1
+          done
+          if pgrep -x Catro >/dev/null; then echo 'Catro did not quit.' >&2; exit 1; fi
+          for report in "$HOME"/Library/Logs/DiagnosticReports/Catro*; do
+            [ -e "$report" ] || continue
+            if [ "$(stat -f %m "$report")" -ge "$started" ]; then
+              echo "Catro crashed: $report" >&2
+              head -60 "$report" >&2
+              exit 1
+            fi
+          done
+          echo 'macOS lifecycle smoke passed.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: catro-${{ matrix.runner }}
+          path: |
+            out/dist/Catro-macos-*.zip
+            out/dist/Catro-macos-*.zip.sha256
+          if-no-files-found: error

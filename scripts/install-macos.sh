@@ -29,7 +29,7 @@ case "$release_base" in
         ;;
 esac
 
-asset_name="Catro-macos-$asset_arch-preview.zip"
+asset_name="Catro-macos-$asset_arch.zip"
 checksum_name="$asset_name.sha256"
 if [ -n "$requested_version" ]; then
     selector="download/$requested_version"

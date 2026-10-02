@@ -21,8 +21,22 @@ case "$(uname -m)" in
 esac
 
 dist_root="$root/out/dist"
-staging="$dist_root/Catro-macos-$asset_arch-preview"
-archive="$dist_root/Catro-macos-$asset_arch-preview.zip"
+staging="$dist_root/Catro-macos-$asset_arch"
+archive="$dist_root/Catro-macos-$asset_arch.zip"
+# Production packages name their Catro service; without it the app runs in local mode.
+service_url=${CATRO_SERVICE_URL:-}
+case "$service_url" in
+    '') ;;
+    https://localhost*|https://127.*|https://\[::1\]*|*\?*|*\#*|*@*)
+        echo "Catro service URL must be a public HTTPS origin without credentials or query: $service_url" >&2
+        exit 1
+        ;;
+    https://*) service_url=${service_url%/} ;;
+    *)
+        echo "Catro service URL must use HTTPS: $service_url" >&2
+        exit 1
+        ;;
+esac
 checksum="$archive.sha256"
 source_app="$root/out/build/$preset/$configuration/Catro.app"
 staged_app="$staging/Catro.app"
@@ -52,14 +66,24 @@ rm -rf "$staging"
 mkdir -p "$staging"
 ditto "$source_app" "$staged_app"
 
-cat >"$staging/README.txt" <<'EOF'
-Catro for macOS — preview
+if [ -n "$service_url" ]; then
+    printf '{\n  "api_base_url": "%s",\n  "allow_insecure_http": false\n}\n' "$service_url" \
+        >"$staged_app/Contents/Resources/catro-network.json"
+fi
 
-This is a diagnostics and local audio-only preview for macOS 13.0 or newer.
-It does not provide production voice communication and does not provide screen sharing.
+cat >"$staging/README.txt" <<'EOF'
+Catro for macOS
+
+Move Catro.app to Applications and open it. Requires macOS 13.0 or newer.
+
+Voice channels, screen and window sharing, and the #general text channel work with friends on
+Windows and macOS. macOS asks for Microphone access when you first join voice and for Screen
+Recording access when you first share. Sharing app audio from a Mac is not available yet; your
+stream shares video and your voice still works.
 
 The app is ad-hoc signed, not notarized. Gatekeeper may require you to confirm that you
-trust the downloaded app. This package does not disable or bypass Gatekeeper.
+trust the downloaded app: Control-click Catro.app, choose Open, then Open again. This package
+does not disable or bypass Gatekeeper.
 EOF
 
 codesign --force --deep --sign - "$staged_app"
@@ -77,5 +101,5 @@ digest=$(shasum -a 256 "$archive" | awk '{print tolower($1)}')
 printf '%s  %s\n' "$digest" "$(basename "$archive")" >"$checksum"
 
 complete=1
-echo "[catro] macOS preview package: $archive"
+echo "[catro] macOS package: $archive"
 echo "[catro] SHA-256: $digest"

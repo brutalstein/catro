@@ -48,7 +48,7 @@ make_release() {
     release_dir="$fixture_root/download/$version"
     stage="$test_root/stage-$version-$asset_arch"
     app="$stage/Catro.app"
-    archive="$release_dir/Catro-macos-$asset_arch-preview.zip"
+    archive="$release_dir/Catro-macos-$asset_arch.zip"
 
     mkdir -p "$release_dir" "$app/Contents/MacOS" "$app/Contents/Resources"
     if [ "$executable" = present ]; then
@@ -174,10 +174,10 @@ if [ -n "${CATRO_TEST_BUILT_APP:-}" ]; then
         *) echo "Unsupported package test architecture: $host_arch" >&2; exit 1 ;;
     esac
 
-    archive="$root/out/dist/Catro-macos-$asset_arch-preview.zip"
+    archive="$root/out/dist/Catro-macos-$asset_arch.zip"
     checksum_file="$archive.sha256"
-    assert_file "$archive" 'Expected macOS preview archive is missing.'
-    assert_file "$checksum_file" 'Expected macOS preview checksum is missing.'
+    assert_file "$archive" 'Expected macOS archive is missing.'
+    assert_file "$checksum_file" 'Expected macOS checksum is missing.'
 
     expected_digest=$(awk 'NF == 2 && $1 ~ /^[0-9a-f]{64}$/ { print $1 }' "$checksum_file")
     actual_digest=$(shasum -a 256 "$archive" | awk '{print $1}')
@@ -192,12 +192,18 @@ if [ -n "${CATRO_TEST_BUILT_APP:-}" ]; then
 
     archived_arch=$(lipo -archs "$package_check/Catro.app/Contents/MacOS/Catro")
     assert_eq "$host_arch" "$archived_arch" 'Archive executable architecture is wrong.'
-    grep -qi 'diagnostics' "$package_check/README.txt"
-    grep -qi 'local audio' "$package_check/README.txt"
     grep -q 'macOS 13.0' "$package_check/README.txt"
     grep -qi 'Gatekeeper' "$package_check/README.txt"
-    grep -qi 'does not.*production voice' "$package_check/README.txt"
-    grep -qi 'does not.*screen' "$package_check/README.txt"
+    grep -qi 'voice channels' "$package_check/README.txt"
+    grep -qi 'screen' "$package_check/README.txt"
+    grep -qi 'app audio from a Mac is not available' "$package_check/README.txt"
+    # CI packages without a service URL; only release packages carry the network config.
+    if [ -n "${CATRO_SERVICE_URL:-}" ]; then
+        grep -q "\"api_base_url\": \"${CATRO_SERVICE_URL%/}\"" \
+            "$package_check/Catro.app/Contents/Resources/catro-network.json"
+    else
+        [ ! -e "$package_check/Catro.app/Contents/Resources/catro-network.json" ]
+    fi
 fi
 
 echo 'macOS installer and package tests passed.'
