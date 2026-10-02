@@ -104,7 +104,9 @@ try {
     }
     New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
-    Copy-Item -Path (Join-Path $source '*') -Destination $staging -Recurse -Force
+    # Linker by-products and symbols are build outputs, not runtime files.
+    Copy-Item -Path (Join-Path $source '*') -Destination $staging -Recurse -Force `
+        -Exclude '*.pdb', '*.ilk', '*.exp', '*.lib'
 
     if (-not $Engineering) {
         $networkConfig = [ordered]@{
