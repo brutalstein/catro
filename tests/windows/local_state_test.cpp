@@ -75,6 +75,7 @@ TEST_CASE("Windows local state is created once and survives entropy becoming una
     REQUIRE(std::holds_alternative<community::LocalState>(created));
     const auto first = std::get<community::LocalState>(created);
     CHECK(std::filesystem::exists(path.state));
+    CHECK(first.identity.display_name == "Player-" + community::to_hex(first.identity.id).substr(0, 8));
 
     FailingEntropy unavailable;
     const auto reopened = platform::windows::load_or_create_local_state(path.state, unavailable);

@@ -2,6 +2,7 @@
 
 #include "MainWindow.xaml.h"
 #include "Server/ServerView.xaml.h"
+#include <winrt/Windows.ApplicationModel.DataTransfer.h>
 
 #include <algorithm>
 #include <string>
@@ -22,6 +23,26 @@ std::string trim_ascii(std::string value) {
     }
     const auto last = value.find_last_not_of(" \t\r\n");
     return value.substr(first, last - first + 1);
+}
+
+winrt::fire_and_forget paste_invite(controls::TextBox invite_box) {
+    UiThread ui_thread;
+    hstring text;
+    bool failed = false;
+    try {
+        const auto clipboard = Windows::ApplicationModel::DataTransfer::Clipboard::GetContent();
+        if (clipboard.Contains(Windows::ApplicationModel::DataTransfer::StandardDataFormats::Text())) {
+            text = co_await clipboard.GetTextAsync();
+        }
+    } catch (winrt::hresult_error const&) {
+        failed = true;
+    }
+    co_await ui_thread;
+    if (failed) {
+        invite_box.PlaceholderText(L"Clipboard unavailable. Paste with Ctrl+V.");
+    } else if (!text.empty()) {
+        invite_box.Text(text);
+    }
 }
 
 } // namespace
@@ -215,7 +236,7 @@ MainWindow::BeginDirectoryBootstrap() {
                     hstring{
                         L"Add server"}));
         if (lifetime->join_request_timer_) {
-            lifetime->join_request_timer_.Start();
+            lifetime->UpdateWindowActivity();
         }
         lifetime->BeginOutgoingJoinRequestRefresh();
         lifetime->
@@ -281,6 +302,7 @@ MainWindow::BeginJoinServer() {
         box_value(hstring{L"Server Code"}));
     server_code_box.PlaceholderText(
         L"CAT-XXXX-XXXX-XXXX-XXXX-XXXX");
+    server_code_box.MaxLength(28);
     content.Children().Append(server_code_box);
 
     controls::TextBox invite_box;
@@ -288,7 +310,24 @@ MainWindow::BeginJoinServer() {
         box_value(hstring{L"Invite Code"}));
     invite_box.PlaceholderText(
         L"Paste an owner-provided invite code");
+    invite_box.MaxLength(128);
     content.Children().Append(invite_box);
+    controls::Button paste;
+    paste.Content(box_value(hstring{L"Paste invite from clipboard"}));
+    paste.Click([invite_box](auto&&, auto&&) { paste_invite(invite_box); });
+    content.Children().Append(paste);
+    dialog.IsPrimaryButtonEnabled(false);
+    dialog.IsSecondaryButtonEnabled(false);
+    server_code_box.TextChanged([weak = make_weak(dialog)](IInspectable const& sender, auto&&) {
+        if (const auto owner = weak.get()) {
+            owner.IsPrimaryButtonEnabled(!trim_ascii(to_string(sender.as<controls::TextBox>().Text())).empty());
+        }
+    });
+    invite_box.TextChanged([weak = make_weak(dialog)](IInspectable const& sender, auto&&) {
+        if (const auto owner = weak.get()) {
+            owner.IsSecondaryButtonEnabled(!trim_ascii(to_string(sender.as<controls::TextBox>().Text())).empty());
+        }
+    });
     dialog.Content(content);
 
     const auto result = co_await dialog.ShowAsync();

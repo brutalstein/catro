@@ -270,7 +270,9 @@ std::variant<LocalState, LocalStateError> load_or_create_local_state(
         return LocalStateError{LocalStateErrorCode::entropy_failure, error->detail, 0};
     }
 
-    const auto& state = std::get<LocalState>(created);
+    auto state = std::get<LocalState>(created);
+    // A friendly first-run label, not an authentication identifier. Existing names are untouched.
+    state.identity.display_name = "Player-" + community::to_hex(state.identity.id).substr(0, 8);
     if (const auto error = save_local_state_atomic(path, state)) {
         return *error;
     }

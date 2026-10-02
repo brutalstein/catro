@@ -102,6 +102,10 @@ catro_add_test(presentation_state apps/presentation_state_test.cpp)
 target_link_libraries(catro_presentation_state_test PRIVATE Catro::Shell)
 
 catro_add_test(ui_policy apps/ui_policy_test.cpp)
+catro_add_test(windows_ui_activity apps/windows_ui_activity_test.cpp)
+target_include_directories(catro_windows_ui_activity_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/windows/Catro
+)
 target_compile_definitions(catro_ui_policy_test PRIVATE
     CATRO_WINDOWS_XAML_DIR="${CMAKE_SOURCE_DIR}/apps/windows/Catro"
     CATRO_MACOS_UI_DIR="${CMAKE_SOURCE_DIR}/apps/macos/Catro"
@@ -170,6 +174,8 @@ if(WIN32 AND MSVC)
 
     catro_add_test(windows_local_state windows/local_state_test.cpp)
     target_link_libraries(catro_windows_local_state_test PRIVATE Catro::Windows)
+    catro_add_test(windows_directory_config windows/directory_config_test.cpp)
+    target_link_libraries(catro_windows_directory_config_test PRIVATE Catro::Windows)
 
     catro_add_test(windows_voice_runtime windows/voice_runtime_test.cpp)
     target_link_libraries(catro_windows_voice_runtime_test PRIVATE catro_voice_runtime)

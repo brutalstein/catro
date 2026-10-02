@@ -12,6 +12,12 @@
             <ResourceDictionary>
                 <ResourceDictionary.ThemeDictionaries>
                     <ResourceDictionary x:Key="Light">
+                        <SolidColorBrush x:Key="AccentButtonBackground" Color="#A6512D" />
+                        <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#94472A" />
+                        <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#A6512D" />
+                        <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+                        <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+                        <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
                         <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
                         <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent" />
                         <SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="#EBDDD0" />
@@ -19,6 +25,12 @@
                         <SolidColorBrush x:Key="AccentButtonBorderBrushDisabled" Color="Transparent" />
                     </ResourceDictionary>
                     <ResourceDictionary x:Key="Dark">
+                        <SolidColorBrush x:Key="AccentButtonBackground" Color="#E0906B" />
+                        <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#E9A07D" />
+                        <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#E0906B" />
+                        <SolidColorBrush x:Key="AccentButtonForeground" Color="#1B1410" />
+                        <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#1B1410" />
+                        <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#1B1410" />
                         <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
                         <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent" />
                         <SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="#3A2E26" />
@@ -29,7 +41,7 @@
             </ResourceDictionary>
         </Grid.Resources>
         <Grid.RowDefinitions>
-            <RowDefinition Height="38" />
+            <RowDefinition Height="44" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
@@ -40,9 +52,10 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="CATRO"
-                       FontSize="11"
+                       FontSize="13"
                        FontWeight="SemiBold"
                        CharacterSpacing="120"
                        Foreground="{ThemeResource CatroTextSecondaryBrush}"
@@ -54,6 +67,14 @@
                        FontSize="12"
                        Foreground="{ThemeResource CatroTextTertiaryBrush}"
                        VerticalAlignment="Center" />
+            <Border Grid.Column="2" Padding="8,3" Margin="12,0"
+                    VerticalAlignment="Center" CornerRadius="6"
+                    Background="{ThemeResource CatroSageSoftBrush}"
+                    ToolTipService.ToolTip="Automatic efficiency: less UI work in the background; presentation polling sleeps when minimized. Voice stays connected.">
+                <TextBlock x:Name="ActivityLabel" Text="AUTO · FOCUSED"
+                           FontSize="11" FontWeight="SemiBold" CharacterSpacing="60"
+                           Foreground="{ThemeResource CatroSageBrush}" />
+            </Border>
         </Grid>
 
         <!-- Shown only while online services need attention; collapsed once synchronized. -->
@@ -73,7 +94,7 @@
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="64" />
+                <ColumnDefinition Width="76" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
@@ -115,8 +136,8 @@
                                     Spacing="8" />
 
                         <Button x:Name="JoinServerButton"
-                                Width="40"
-                                Height="40"
+                                Width="44"
+                                Height="44"
                                 Padding="0"
                                 CornerRadius="14"
                                 Background="{ThemeResource CatroSurfaceAltBrush}"
@@ -131,14 +152,20 @@
                     <StackPanel Grid.Row="1"
                                 HorizontalAlignment="Center"
                                 Spacing="7">
-                        <Grid Width="40" Height="40">
+                        <Button Click="OnProfile" Width="44" Height="44" Padding="0" CornerRadius="13"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTipService.ToolTip="Profile" AutomationProperties.Name="Profile">
+                            <FontIcon Glyph="&#xE77B;" FontSize="16" />
+                        </Button>
+
+                        <Grid Width="44" Height="44">
                             <Border x:Name="DiagnosticsSelection"
                                     CornerRadius="13"
                                     Background="{ThemeResource CatroAccentSoftBrush}"
                                     Visibility="Collapsed" />
                             <Button Click="OnDiagnostics"
-                                    Width="40"
-                                    Height="40"
+                                    Width="44"
+                                    Height="44"
                                     Padding="0"
                                     CornerRadius="13"
                                     Background="Transparent"
@@ -149,14 +176,14 @@
                             </Button>
                         </Grid>
 
-                        <Grid Width="40" Height="40">
+                        <Grid Width="44" Height="44">
                             <Border x:Name="SettingsSelection"
                                     CornerRadius="13"
                                     Background="{ThemeResource CatroAccentSoftBrush}"
                                     Visibility="Collapsed" />
                             <Button Click="OnSettings"
-                                    Width="40"
-                                    Height="40"
+                                    Width="44"
+                                    Height="44"
                                     Padding="0"
                                     CornerRadius="13"
                                     Background="Transparent"
@@ -167,79 +194,21 @@
                             </Button>
                         </Grid>
 
-                        <!-- Static vector mascot: no bitmap decode, extra asset I/O, or continuous
-                             motion, so reduced-motion behavior is deterministic. -->
-                        <StackPanel Margin="0,7,0,1"
-                                    HorizontalAlignment="Center"
-                                    Spacing="1"
-                                    IsHitTestVisible="False"
-                                    AutomationProperties.AccessibilityView="Raw">
-                            <Grid x:Name="CatroMascot"
-                                  Width="44"
-                                  Height="42"
-                                  RenderTransformOrigin="0.5,0.5">
-                                <Canvas Width="44" Height="42">
-                                    <!-- ears -->
-                                    <Polygon Points="10,18 14,7 20,17"
-                                             Fill="{ThemeResource CatroAccentSoftBrush}" />
-                                    <Polygon Points="24,17 30,7 34,18"
-                                             Fill="{ThemeResource CatroAccentSoftBrush}" />
-
-                                    <!-- face -->
-                                    <Ellipse Canvas.Left="9"
-                                             Canvas.Top="13"
-                                             Width="26"
-                                             Height="25"
-                                             Fill="{ThemeResource CatroSurfaceAltBrush}"
-                                             Stroke="{ThemeResource CatroStrokeBrush}"
-                                             StrokeThickness="1" />
-
-                                    <!-- headphones -->
-                                    <Path Data="M 8,25 C 8,13 14,8 22,8 C 30,8 36,13 36,25"
-                                          Stroke="{ThemeResource CatroAccentBrush}"
-                                          StrokeThickness="3"
-                                          StrokeStartLineCap="Round"
-                                          StrokeEndLineCap="Round" />
-                                    <Border Canvas.Left="5"
-                                            Canvas.Top="22"
-                                            Width="7"
-                                            Height="13"
-                                            CornerRadius="3.5"
-                                            Background="{ThemeResource CatroAccentBrush}" />
-                                    <Border Canvas.Left="32"
-                                            Canvas.Top="22"
-                                            Width="7"
-                                            Height="13"
-                                            CornerRadius="3.5"
-                                            Background="{ThemeResource CatroAccentBrush}" />
-
-                                    <!-- expression -->
-                                    <Ellipse Canvas.Left="15"
-                                             Canvas.Top="23"
-                                             Width="3"
-                                             Height="3"
-                                             Fill="{ThemeResource CatroTextBrush}" />
-                                    <Ellipse Canvas.Left="26"
-                                             Canvas.Top="23"
-                                             Width="3"
-                                             Height="3"
-                                             Fill="{ThemeResource CatroTextBrush}" />
-                                    <Path Data="M 19,30 C 21,32 23,32 25,30"
-                                          Stroke="{ThemeResource CatroTextSecondaryBrush}"
-                                          StrokeThickness="1.3"
-                                          StrokeStartLineCap="Round"
-                                          StrokeEndLineCap="Round" />
-                                </Canvas>
-                            </Grid>
-                        </StackPanel>
+                        <ContentControl ContentTemplate="{StaticResource CatroMascotTemplate}"
+                                        Margin="0,12,0,4" IsTabStop="False"
+                                        IsHitTestVisible="False"
+                                        AutomationProperties.AccessibilityView="Raw" />
                     </StackPanel>
                 </Grid>
             </Border>
 
-            <ContentControl x:Name="WorkspaceHost"
-                            Grid.Column="1"
-                            HorizontalContentAlignment="Stretch"
-                            VerticalContentAlignment="Stretch" />
+            <Border Grid.Column="1" Margin="0,4,12,12" CornerRadius="16"
+                    Background="{ThemeResource CatroSurfaceBrush}"
+                    BorderBrush="{ThemeResource CatroStrokeBrush}" BorderThickness="1">
+                <ContentControl x:Name="WorkspaceHost"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch" />
+            </Border>
         </Grid>
     </Grid>
 </Window>

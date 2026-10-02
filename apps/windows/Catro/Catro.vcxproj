@@ -122,6 +122,9 @@
     </ClInclude>
     <ClInclude Include="Server\ServerView.RuntimeConfig.hpp" />
     <ClInclude Include="Settings\Appearance.hpp" />
+    <ClInclude Include="Settings\Profile.hpp" />
+    <ClInclude Include="Settings\Performance.hpp" />
+    <ClInclude Include="UiActivityPolicy.hpp" />
     <ClInclude Include="Settings\SettingsView.xaml.h">
       <DependentUpon>Settings\SettingsView.xaml</DependentUpon>
     </ClInclude>
@@ -129,6 +132,9 @@
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml" />
     <Page Include="MainWindow.xaml" />
+    <Page Include="Themes\Palette.xaml" />
+    <Page Include="Themes\Controls.xaml" />
+    <Page Include="Server\ServerTemplates.xaml" />
     <Page Include="Diagnostics\DiagnosticsView.xaml" />
     <Page Include="Audio\AudioView.xaml" />
     <Page Include="Server\ServerView.xaml" />
@@ -165,6 +171,8 @@
     <ClCompile Include="Server\ServerView.State.cpp">
       <DependentUpon>Server\ServerView.xaml</DependentUpon>
     </ClCompile>
+    <ClCompile Include="Server\ServerView.Activity.cpp" />
+    <ClCompile Include="Settings\SettingsView.Profile.cpp" />
     <ClCompile Include="Server\ServerView.Voice.cpp">
       <DependentUpon>Server\ServerView.xaml</DependentUpon>
     </ClCompile>

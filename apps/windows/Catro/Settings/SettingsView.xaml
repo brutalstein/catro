@@ -4,81 +4,117 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid Background="{ThemeResource CatroBackgroundBrush}">
-        <StackPanel MaxWidth="620"
-                    Padding="28"
-                    Spacing="14"
-                    HorizontalAlignment="Stretch">
-            <TextBlock Text="Settings"
-                       FontSize="24"
-                       FontWeight="SemiBold"
-                       Foreground="{ThemeResource CatroTextBrush}"
-                       AutomationProperties.HeadingLevel="Level1" />
-
-            <Border Style="{StaticResource CatroCardStyle}">
-                <StackPanel>
-                    <Grid Padding="16,14">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Appearance"
-                                   VerticalAlignment="Center"
-                                   Foreground="{ThemeResource CatroTextBrush}" />
-                        <ComboBox x:Name="AppearanceBox"
-                                  Grid.Column="1"
-                                  MinWidth="140"
-                                  SelectionChanged="OnAppearanceChanged"
-                                  AutomationProperties.Name="Appearance">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled"
+                      HorizontalContentAlignment="Stretch" VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="680" Padding="32" Spacing="24" HorizontalAlignment="Stretch">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="YOUR WORKSPACE" Style="{StaticResource CatroEyebrowTextStyle}" />
+                    <TextBlock Text="Settings" Style="{StaticResource CatroPageTitleTextStyle}"
+                               AutomationProperties.HeadingLevel="Level1" />
+                    <TextBlock Text="Quiet by design. Personal by choice."
+                               Style="{StaticResource CatroSecondaryTextStyle}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ToggleButton x:Name="ProfileTab" Content="Profile" Click="OnProfileTab"
+                                  Padding="18,9" CornerRadius="10" />
+                    <ToggleButton x:Name="AppearanceTab" Content="Appearance &amp; performance"
+                                  Click="OnAppearanceTab" IsChecked="True" Padding="18,9" CornerRadius="10" />
+                </StackPanel>
+                <StackPanel x:Name="ProfilePanel" Visibility="Collapsed" Spacing="20">
+                    <Border Style="{StaticResource CatroCardStyle}" Padding="24">
+                        <StackPanel Spacing="18">
+                            <Border Width="64" Height="64" CornerRadius="20" HorizontalAlignment="Left"
+                                    Background="{ThemeResource CatroAccentSoftBrush}">
+                                <FontIcon Glyph="&#xE77B;" FontSize="28" Foreground="{ThemeResource CatroAccentBrush}" />
+                            </Border>
+                            <TextBlock Text="Your profile" Style="{StaticResource CatroSectionTitleTextStyle}" />
+                            <TextBlock Text="Choose the name people see in chat and voice. Names don't have to be unique — your permanent User ID identifies you."
+                                       Style="{StaticResource CatroSecondaryTextStyle}" />
+                            <TextBox x:Name="UsernameBox" Header="Username" MaxLength="64"
+                                     PlaceholderText="What should people call you?" AutomationProperties.Name="Username" />
+                            <Button x:Name="SaveProfileButton" Content="Save profile" Click="OnSaveProfile"
+                                    Style="{StaticResource CatroPrimaryButtonStyle}" />
+                            <TextBlock x:Name="ProfileStatus" Text="Changing your name does not change your ID or server memberships."
+                                       TextWrapping="Wrap" Foreground="{ThemeResource CatroTextSecondaryBrush}"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource CatroCardStyle}" Padding="24">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="Permanent identity" Style="{StaticResource CatroSectionTitleTextStyle}" />
+                            <TextBox x:Name="IdentityBox" Header="User ID" IsReadOnly="True"
+                                     TextWrapping="Wrap" FontFamily="Consolas" AutomationProperties.Name="User ID" />
+                            <Button Content="Copy User ID" Click="OnCopyIdentity"
+                                    Style="{StaticResource CatroSecondaryButtonStyle}" />
+                            <TextBlock Text="To invite someone, use your server's Invite or Server access button. Your User ID is not an invite code."
+                                       Style="{StaticResource CatroSecondaryTextStyle}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+                <StackPanel x:Name="AppearancePanel" Spacing="24">
+                <Border Style="{StaticResource CatroCardStyle}" Padding="20">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="Appearance" Style="{StaticResource CatroSectionTitleTextStyle}" />
+                        <TextBlock Text="Warm ivory, deep espresso, or your Windows preference. No distracting effects."
+                                   Style="{StaticResource CatroSecondaryTextStyle}" />
+                        <ComboBox x:Name="AppearanceBox" HorizontalAlignment="Stretch"
+                                  SelectionChanged="OnAppearanceChanged" AutomationProperties.Name="Appearance">
                             <ComboBoxItem Content="Ivory" />
                             <ComboBoxItem Content="Dark" />
                             <ComboBoxItem Content="System" />
                         </ComboBox>
-                    </Grid>
-                    <Border Height="1" Background="{ThemeResource CatroStrokeBrush}" />
-                    <Grid Padding="16,14">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Microphone"
-                                   Foreground="{ThemeResource CatroTextBrush}" />
-                        <TextBlock Grid.Column="1"
-                                   Text="Default"
-                                   Foreground="{ThemeResource CatroTextSecondaryBrush}" />
-                    </Grid>
-                    <Border Height="1" Background="{ThemeResource CatroStrokeBrush}" />
-                    <Grid Padding="16,14">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Output"
-                                   Foreground="{ThemeResource CatroTextBrush}" />
-                        <TextBlock Grid.Column="1"
-                                   Text="Default"
-                                   Foreground="{ThemeResource CatroTextSecondaryBrush}" />
-                    </Grid>
-                    <Border Height="1" Background="{ThemeResource CatroStrokeBrush}" />
-                    <Grid Padding="16,14">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="Performance"
-                                   Foreground="{ThemeResource CatroTextBrush}" />
-                        <Border Grid.Column="1"
-                                Padding="8,3"
-                                CornerRadius="8"
-                                Background="{ThemeResource CatroSageSoftBrush}">
-                            <TextBlock Text="BALANCED"
-                                       FontSize="11"
-                                       FontWeight="SemiBold"
-                                       CharacterSpacing="60"
-                                       Foreground="{ThemeResource CatroSageBrush}" />
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource CatroCardStyle}" Padding="20">
+                    <StackPanel Spacing="16">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon Glyph="&#xE945;" FontSize="18" Foreground="{ThemeResource CatroSageBrush}" />
+                            <TextBlock Text="Automatic efficiency" Style="{StaticResource CatroSectionTitleTextStyle}" />
+                        </StackPanel>
+                        <TextBlock Text="No switch to remember. Catro reduces interface work when you move to your game."
+                                   Style="{StaticResource CatroSecondaryTextStyle}" />
+                        <Border Background="{ThemeResource CatroSurfaceAltBrush}" Padding="16" CornerRadius="10">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="In the background · less frequent chat and member refreshes."
+                                           Style="{StaticResource CatroBodyTextStyle}" />
+                                <TextBlock Text="Minimized · workspace polling and self-preview sleep."
+                                           Style="{StaticResource CatroBodyTextStyle}" />
+                                <TextBlock Text="Voice and intentional streams stay connected."
+                                           Style="{StaticResource CatroBodyTextStyle}" />
+                            </StackPanel>
                         </Border>
-                    </Grid>
+                        <ToggleSwitch x:Name="LocalPreviewToggle" Header="Show my own screen-share preview"
+                                      OnContent="Preview on" OffContent="Preview off · less GPU work"
+                                      Toggled="OnPreviewChanged" AutomationProperties.Name="Local screen preview" />
+                        <TextBlock Text="Your friends still receive your stream at the selected quality. This only changes the preview on your computer."
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                        <TextBlock Text="Active voice, streaming and pop-out playback still use system resources."
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource CatroCardStyle}" Padding="20">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="Audio" Style="{StaticResource CatroSectionTitleTextStyle}" />
+                        <Grid ColumnSpacing="20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="Microphone" Style="{StaticResource CatroBodyTextStyle}" />
+                            <TextBlock Grid.Column="1" Text="Default" Style="{StaticResource CatroSecondaryTextStyle}" />
+                            <TextBlock Grid.Row="1" Text="Output" Margin="0,12,0,0" Style="{StaticResource CatroBodyTextStyle}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="Default" Margin="0,12,0,0" Style="{StaticResource CatroSecondaryTextStyle}" />
+                        </Grid>
+                        <TextBlock Text="Uses your Windows default devices. Device diagnostics are available in System."
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                    </StackPanel>
+                </Border>
                 </StackPanel>
-            </Border>
-        </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </UserControl>

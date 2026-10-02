@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DataTemplate x:Key="CatroMessageTemplate">
+        <StackPanel Margin="8,7" Spacing="2">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock FontWeight="SemiBold"
+                           Foreground="{ThemeResource CatroTextBrush}" />
+                <TextBlock FontSize="11"
+                           VerticalAlignment="Center"
+                           Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+            </StackPanel>
+            <TextBlock FontSize="14"
+                       TextWrapping="Wrap"
+                       IsTextSelectionEnabled="True"
+                       Foreground="{ThemeResource CatroTextBrush}" />
+        </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="CatroMemberTemplate">
+        <StackPanel Margin="0,5" Orientation="Horizontal" Spacing="10">
+            <Border Width="32"
+                    Height="32"
+                    CornerRadius="16"
+                    Background="{ThemeResource CatroAccentSoftBrush}">
+                <TextBlock FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="{ThemeResource CatroAccentBrush}" />
+            </Border>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock FontSize="13"
+                           FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{ThemeResource CatroTextBrush}" />
+                <TextBlock FontSize="11"
+                           Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+            </StackPanel>
+        </StackPanel>
+    </DataTemplate>
+</ResourceDictionary>

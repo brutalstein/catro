@@ -60,12 +60,24 @@ void ServerView::OnMessageContainerChanging(
         return;
     }
     const auto row = unbox_value<hstring>(args.Item());
-    const auto [author, rest] = split_line(row);
+    const auto [author_id, content] = split_line(row);
+    const auto [author, rest] = split_line(content);
     const auto [time, body] = split_line(rest);
     const auto header = root.Children().GetAt(0).as<controls::StackPanel>();
     text_at(header, 0).Text(hstring{author});
+    constexpr wchar_t const* colors[] = {L"CatroChatCopperStyle", L"CatroChatSageStyle", L"CatroChatRoseStyle"};
+    const auto color = author_id.empty() ? 0U : static_cast<unsigned>(author_id.back()) % 3U;
+    text_at(header, 0).Style(xaml::Application::Current().Resources().Lookup(
+        box_value(hstring{colors[color]})).as<xaml::Style>());
     text_at(header, 1).Text(hstring{time});
     text_at(root, 1).Text(hstring{body});
+    // The row's internal author ID chooses a stable colour; Narrator reads the useful content only.
+    std::wstring announcement{author};
+    announcement += L" ";
+    announcement += time;
+    announcement += L" ";
+    announcement += body;
+    xaml::Automation::AutomationProperties::SetName(args.ItemContainer(), hstring{announcement});
     args.Handled(true);
 }
 
@@ -112,8 +124,6 @@ void ServerView::ShowLocalMemberFallback() {
 void ServerView::ApplyMemberRoster(
     const std::vector<
         catro::platform::windows::DirectoryMember>& members) {
-    MemberList().Items().Clear();
-
     std::string local_id;
     if (local_state_) {
         local_id =
@@ -121,6 +131,8 @@ void ServerView::ApplyMemberRoster(
                 local_state_->identity.id);
     }
 
+    auto items = MemberList().Items();
+    uint32_t index = 0;
     for (const auto& member : members) {
         std::wstring row = to_hstring(member.display_name).c_str();
         row += L"\n";
@@ -131,8 +143,16 @@ void ServerView::ApplyMemberRoster(
             member.user_id == local_id) {
             row += L" · You";
         }
-        MemberList().Items().Append(
-            box_value(hstring{row}));
+        const hstring value{row};
+        if (index >= items.Size()) {
+            items.Append(box_value(value));
+        } else if (unbox_value<hstring>(items.GetAt(index)) != value) {
+            items.SetAt(index, box_value(value));
+        }
+        ++index;
+    }
+    while (items.Size() > index) {
+        items.RemoveAtEnd();
     }
 
     std::wstring count = L"MEMBERS — ";
@@ -143,7 +163,7 @@ void ServerView::ApplyMemberRoster(
 winrt::fire_and_forget
 ServerView::BeginMemberRefresh() {
     auto lifetime = get_strong();
-    if (!page_loaded_ ||
+    if (!page_loaded_ || window_activity_ == catro::shell::WindowActivity::hidden ||
         !directory_service_ ||
         directory_access_token_.empty() ||
         !directory_server_) {
@@ -216,7 +236,7 @@ void ServerView::ResetAccessRequests() {
 winrt::fire_and_forget
 ServerView::BeginJoinRequestRefresh() {
     auto lifetime = get_strong();
-    if (!page_loaded_ ||
+    if (!page_loaded_ || window_activity_ == catro::shell::WindowActivity::hidden ||
         access_refresh_pending_ ||
         !directory_service_ ||
         directory_access_token_.empty() ||
@@ -511,8 +531,9 @@ void ServerView::AppendMessage(
         return;
     }
 
-    std::wstring display =
-        to_hstring(message.author_display_name).c_str();
+    std::wstring display = to_hstring(message.author_id).c_str();
+    display += L"\n";
+    display += to_hstring(message.author_display_name).c_str();
     const auto timestamp =
         message_time(message.created_at);
     display += L"\n";
@@ -548,7 +569,7 @@ void ServerView::AppendMessages(
 winrt::fire_and_forget
 ServerView::BeginMessageRefresh() {
     auto lifetime = get_strong();
-    if (!page_loaded_ ||
+    if (!page_loaded_ || window_activity_ == catro::shell::WindowActivity::hidden ||
         state_.active_channel_kind() !=
             catro::community::ChannelKind::text ||
         !directory_service_ ||
@@ -928,9 +949,7 @@ void ServerView::SetDirectorySession(
 
     ShowChannel(state_.channel_id());
     UpdateMessageUi();
-    if (page_loaded_ && member_timer_) {
-        member_timer_.Start();
-    }
+    ApplyActivityPolicy();
     BeginMemberRefresh();
     BeginJoinRequestRefresh();
     BeginMessageRefresh();

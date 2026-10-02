@@ -123,7 +123,7 @@ void ServerView::OnWatchStream(
     }
     screen_runtime_->set_remote_viewing_enabled(true);
     if (screen_timer_) {
-        screen_timer_.Start();
+        ApplyActivityPolicy();
     }
     UpdateScreenShareUi();
 }
@@ -154,7 +154,9 @@ void ServerView::OnSizeChanged(IInspectable const&, xaml::SizeChangedEventArgs c
     const bool show_members = width >= 920.0;
     MembersColumn().Width(xaml::GridLengthHelper::FromPixels(show_members ? 216.0 : 0.0));
     MembersPane().Visibility(show_members ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
-    ChannelsColumn().Width(xaml::GridLengthHelper::FromPixels(width >= 760.0 ? 232.0 : 196.0));
+    ChannelsColumn().Width(xaml::GridLengthHelper::FromPixels(width >= 760.0 ? 240.0 : 196.0));
+    // The same action remains available in the voice control bar on compact windows.
+    ShareScreenButton().Visibility(width >= 760.0 ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
     UpdateScreenShareUi();
 }
 
@@ -608,7 +610,7 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         workspace_state_.share_screen.enable();
         SharePreviewHost().Visibility(xaml::Visibility::Visible);
         VoiceIdentityPanel().Visibility(xaml::Visibility::Collapsed);
-        screen_timer_.Start();
+        ApplyActivityPolicy();
         UpdateScreenShareUi();
         UpdateVoiceUi();
     } catch (const winrt::hresult_error& failure) {
@@ -786,6 +788,7 @@ void ServerView::OpenStreamWindow(bool fullscreen) {
                 stream_window_fullscreen_ = false;
                 stream_window_topmost_ = false;
                 UpdateScreenShareUi();
+                ApplyActivityPolicy();
             });
 
         stream_window_.Content(stream_window_root_);
@@ -1217,9 +1220,11 @@ void ServerView::UpdateScreenShareUi() {
 
     if (local_active) {
         SharePreviewHost().Visibility(xaml::Visibility::Visible);
+        LocalShareViewport().Visibility(local_preview_enabled_ ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
+        LocalPreviewPausedHint().Visibility(local_preview_enabled_ ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
 
         const auto local_swap =
-            screen_runtime_->preview_swap_chain();
+            local_preview_enabled_ ? screen_runtime_->preview_swap_chain() : nullptr;
         if (local_swap &&
             attached_preview_swap_chain_.Get() !=
                 local_swap.Get()) {

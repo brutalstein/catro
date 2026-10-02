@@ -30,6 +30,7 @@ std::string read_server_sources(const std::filesystem::path& root) {
            read(root / "Server/ServerView.Directory.cpp") +
            read(root / "Server/ServerView.Screen.cpp") +
            read(root / "Server/ServerView.State.cpp") +
+           read(root / "Server/ServerView.Activity.cpp") +
            read(root / "Server/ServerView.Voice.cpp");
 }
 
@@ -39,6 +40,9 @@ TEST_CASE("product shell XAML stays on the low-cost composition path") {
     const std::filesystem::path root = CATRO_WINDOWS_XAML_DIR;
     const std::array files{
         "App.xaml",
+        "Themes/Palette.xaml",
+        "Themes/Controls.xaml",
+        "Server/ServerTemplates.xaml",
         "MainWindow.xaml",
         "Server/ServerView.xaml",
         "Settings/SettingsView.xaml",
@@ -67,7 +71,7 @@ TEST_CASE("product shell XAML stays on the low-cost composition path") {
 }
 
 TEST_CASE("product shell palette does not regress to a blue accent") {
-    const auto app = read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) / "App.xaml");
+    const auto app = read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) / "Themes/Palette.xaml");
     CHECK(app.find("CatroAccentBrush") != std::string::npos);
     CHECK(app.find("#0078D4") == std::string::npos);
     CHECK(app.find("#0067C0") == std::string::npos);
@@ -270,8 +274,8 @@ TEST_CASE("text channel timeline remains virtualized and bounded") {
         read_server_sources(std::filesystem::path(CATRO_WINDOWS_XAML_DIR));
 
     CHECK(xaml.find("<ListView x:Name=\"MessageList\"") != std::string::npos);
-    CHECK(xaml.find("<ListView.ItemTemplate>") != std::string::npos);
-    CHECK(xaml.find("<DataTemplate>") != std::string::npos);
+    CHECK(xaml.find("CatroMessageTemplate") != std::string::npos);
+    CHECK(read(std::filesystem::path(CATRO_WINDOWS_XAML_DIR) / "Server/ServerTemplates.xaml").find("<DataTemplate") != std::string::npos);
     CHECK(source.find("message_timer_.Interval(1s)") != std::string::npos);
     CHECK(source.find("MessageList().Items().Size() > 512") != std::string::npos);
     CHECK(source.find("winrt::resume_background()") != std::string::npos);
@@ -287,7 +291,7 @@ TEST_CASE("member rail is virtualized and refreshes from bounded snapshots") {
         read_server_sources(std::filesystem::path(CATRO_WINDOWS_XAML_DIR));
 
     CHECK(xaml.find("<ListView x:Name=\"MemberList\"") != std::string::npos);
-    CHECK(xaml.find("<ListView.ItemTemplate>") != std::string::npos);
+    CHECK(xaml.find("CatroMemberTemplate") != std::string::npos);
     CHECK(source.find("member_timer_.Interval(5s)") != std::string::npos);
     CHECK(source.find("member_refresh_pending_") != std::string::npos);
     CHECK(source.find("member_generation_") != std::string::npos);
@@ -409,7 +413,7 @@ TEST_CASE("Windows shell coroutines return to the UI thread through its Dispatch
 
 TEST_CASE("Windows shell defaults to the accessible ivory theme with a persisted appearance choice") {
     const auto root = std::filesystem::path(CATRO_WINDOWS_XAML_DIR);
-    const auto app = read(root / "App.xaml");
+    const auto app = read(root / "Themes/Palette.xaml") + read(root / "Themes/Controls.xaml");
     // Ivory canvas, and WinUI's own accent consumers (NavigationView, accent buttons) follow Catro.
     CHECK(app.find("Color=\"#FBF8F1\"") != std::string::npos);
     CHECK(app.find("x:Key=\"SystemAccentColor\"") != std::string::npos);
@@ -448,4 +452,30 @@ TEST_CASE("Windows message and member rows render through recycled containers") 
     CHECK(xaml.find("ContainerContentChanging=\"OnMemberContainerChanging\"") != std::string::npos);
     // Rows must not fall back to one flat string with a single style.
     CHECK(xaml.find("<TextBlock Text=\"{Binding}\"") == std::string::npos);
+}
+
+TEST_CASE("Windows efficiency policy is wired to real window and page lifecycle") {
+    const auto root = std::filesystem::path(CATRO_WINDOWS_XAML_DIR);
+    const auto main = read_main_sources(root);
+    const auto activity = read(root / "Server/ServerView.Activity.cpp");
+    CHECK(main.find("IsIconic(hwnd)") != std::string::npos);
+    CHECK(main.find("VisibilityChanged(") != std::string::npos);
+    CHECK(main.find("AppWindow().Changed(") != std::string::npos);
+    CHECK(main.find("SetWindowActivity(window_activity_)") != std::string::npos);
+    CHECK(activity.find("ui_refresh_policy(") != std::string::npos);
+    CHECK(activity.find("timer.Stop()") != std::string::npos);
+    // Presentation pacing must not disconnect media.
+    CHECK(activity.find("catro_voice_runtime_stop") == std::string::npos);
+    CHECK(activity.find("catro_room_runtime_leave") == std::string::npos);
+    CHECK(activity.find("screen_runtime_->stop()") == std::string::npos);
+    CHECK(activity.find("set_remote_viewing_enabled(false)") == std::string::npos);
+}
+
+TEST_CASE("Windows resources are modular and settings explain automatic efficiency") {
+    const auto root = std::filesystem::path(CATRO_WINDOWS_XAML_DIR);
+    CHECK(line_count(read(root / "App.xaml")) < 30U);
+    CHECK(line_count(read(root / "MainWindow.xaml")) < 240U);
+    const auto settings = read(root / "Settings/SettingsView.xaml");
+    CHECK(settings.find("<ScrollViewer") != std::string::npos);
+    CHECK(settings.find("Automatic efficiency") != std::string::npos);
 }

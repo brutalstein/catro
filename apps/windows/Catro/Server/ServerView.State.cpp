@@ -57,13 +57,7 @@ void ServerView::UpdateAccessUi() {
             box_value(hstring{tooltip}));
     }
 
-    if (access_timer_) {
-        if (page_loaded_ && owner) {
-            access_timer_.Start();
-        } else {
-            access_timer_.Stop();
-        }
-    }
+    ApplyActivityPolicy();
 }
 
 void ServerView::UpdateMessageUi() {
@@ -81,16 +75,12 @@ void ServerView::UpdateMessageUi() {
 
     Composer().IsEnabled(
         text_active && configured && !sending);
-    SendMessageButton().IsEnabled(
-        text_active && configured && !sending);
+    const auto draft = Composer().Text();
+    const bool has_text = std::wstring_view{draft}.find_first_not_of(L" \t\r\n") !=
+                          std::wstring_view::npos;
+    SendMessageButton().IsEnabled(text_active && configured && !sending && has_text);
 
-    if (message_timer_) {
-        if (page_loaded_ && text_active && configured) {
-            message_timer_.Start();
-        } else {
-            message_timer_.Stop();
-        }
-    }
+    ApplyActivityPolicy();
 
     // The shell status bar already shows the connection message; repeat only other reasons.
     const bool own_reason =

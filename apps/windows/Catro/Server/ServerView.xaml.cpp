@@ -1,7 +1,6 @@
 #include "pch.h"
 
 #include "Server/ServerView.xaml.h"
-#include "Server/ServerView.RuntimeConfig.hpp"
 #if __has_include("ServerView.g.cpp")
 #include "ServerView.g.cpp"
 #endif
@@ -16,7 +15,6 @@ namespace winrt::Catro::implementation {
 
 namespace xaml = Microsoft::UI::Xaml;
 using namespace std::chrono_literals;
-using server_view_detail::environment;
 
 ServerView::~ServerView() {
     CloseStreamWindow();
@@ -56,7 +54,7 @@ void ServerView::InitializeComponent() {
         std::make_unique<catro::screen::WindowsScreenShareRuntime>();
 
     screen_timer_ = DispatcherQueue().CreateTimer();
-    screen_timer_.Interval(100ms);
+    screen_timer_.Interval(250ms);
     screen_timer_.Tick(
         [this](auto&&, auto&&) { UpdateScreenShareUi(); });
 
@@ -81,33 +79,9 @@ void ServerView::InitializeComponent() {
 
     Loaded([this](auto&&, auto&&) {
         page_loaded_ = true;
-        if (voice_runtime_ != nullptr) {
-            const auto snapshot = catro_voice_runtime_snapshot(voice_runtime_);
-            if (snapshot.state == CATRO_VOICE_STARTING || snapshot.state == CATRO_VOICE_JOINED) {
-                voice_timer_.Start();
-            }
-        }
-        if (screen_runtime_) {
-            const bool local_preview_enabled =
-                environment("CATRO_LOCAL_PREVIEW").value_or("1") != "0";
-            screen_runtime_->set_local_preview_enabled(local_preview_enabled);
-            const auto share = screen_runtime_->snapshot();
-            if (share.state != catro::screen::ScreenShareState::idle) {
-                screen_timer_.Start();
-            }
-        }
         UpdateVoiceUi();
         UpdateScreenShareUi();
         UpdateMessageUi();
-        if (directory_service_ &&
-            !directory_access_token_.empty() &&
-            directory_server_) {
-            member_timer_.Start();
-            if (directory_server_->role == "owner" &&
-                access_timer_) {
-                access_timer_.Start();
-            }
-        }
         BeginMemberRefresh();
         BeginJoinRequestRefresh();
         BeginMessageRefresh();
@@ -153,6 +127,11 @@ void ServerView::SetLocalState(const catro::community::LocalState& state) {
     ServerName().Text(to_hstring(state.personal_server.name));
     ProfileName().Text(to_hstring(state.identity.display_name));
     VoiceLocalName().Text(to_hstring(state.identity.display_name));
+    // Same monogram rule as the member rail: the first character of the display name.
+    const auto name = to_hstring(state.identity.display_name);
+    const hstring initial = name.empty() ? hstring{L"?"} : hstring{std::wstring_view{name}.substr(0, 1)};
+    ProfileInitial().Text(initial);
+    VoiceLocalInitial().Text(initial);
     if (!directory_server_) {
         ShowLocalMemberFallback();
     }
@@ -195,6 +174,13 @@ void ServerView::OnSendMessage(
     IInspectable const&,
     xaml::RoutedEventArgs const&) {
     BeginSendMessage();
+}
+
+void ServerView::OnComposerChanged(
+    IInspectable const&, Microsoft::UI::Xaml::Controls::TextChangedEventArgs const&) {
+    if (SendMessageButton()) {
+        UpdateMessageUi();
+    }
 }
 
 void ServerView::OnInvite(

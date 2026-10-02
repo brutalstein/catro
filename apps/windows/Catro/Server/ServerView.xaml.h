@@ -4,6 +4,7 @@
 
 #include <PresentationState.hpp>
 #include <ShellModel.hpp>
+#include "UiActivityPolicy.hpp"
 
 #include <catro/community/model.hpp>
 #include <catro/platform/windows/directory_client.hpp>
@@ -29,6 +30,7 @@ struct ServerView : ServerViewT<ServerView> {
         IInspectable const&,
         Microsoft::UI::Xaml::Input::KeyRoutedEventArgs const&);
     void OnSendMessage(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnComposerChanged(IInspectable const&, Microsoft::UI::Xaml::Controls::TextChangedEventArgs const&);
     void OnJoinVoice(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnInvite(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnAccess(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
@@ -47,12 +49,14 @@ struct ServerView : ServerViewT<ServerView> {
         Microsoft::UI::Xaml::Controls::ListViewBase const&,
         Microsoft::UI::Xaml::Controls::ContainerContentChangingEventArgs const&);
     void SetLocalState(const catro::community::LocalState& state);
+    void SetWindowActivity(catro::shell::WindowActivity activity);
     void SetDirectorySession(
         const catro::platform::windows::DirectoryServiceConfig& service,
         std::string access_token,
         const catro::platform::windows::DirectoryServer& server);
 
 private:
+    void ApplyActivityPolicy();
     void ShowChannel(std::string_view id);
     void ResetMembers();
     void ShowLocalMemberFallback();
@@ -142,6 +146,8 @@ private:
     std::uint64_t voice_join_generation_ = 0;
     std::uint64_t invite_generation_ = 0;
     bool page_loaded_ = false;
+    bool local_preview_enabled_ = false;
+    catro::shell::WindowActivity window_activity_ = catro::shell::WindowActivity::foreground;
     bool member_refresh_pending_ = false;
     bool access_refresh_pending_ = false;
     bool access_decision_pending_ = false;

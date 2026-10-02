@@ -4,6 +4,7 @@
 
 #include <PresentationState.hpp>
 #include <ShellModel.hpp>
+#include "UiActivityPolicy.hpp"
 
 #include <catro/community/model.hpp>
 #include <catro/platform/windows/directory_client.hpp>
@@ -25,6 +26,7 @@ struct MainWindow : MainWindowT<MainWindow> {
     void OnJoinServer(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnDiagnostics(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnSettings(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnProfile(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
 
 private:
     Microsoft::UI::Xaml::UIElement PageFor(catro::app::AppDestination destination);
@@ -41,6 +43,7 @@ private:
     void UpdateRail();
     void UpdateConnectionUi();
     void UpdateCaptionButtons();
+    void UpdateWindowActivity();
 
     catro::app::ShellState shell_state_;
     catro::app::WorkspaceSnapshot workspace_state_ =
@@ -66,6 +69,10 @@ private:
     std::unordered_set<std::string> approved_join_requests_waiting_refresh_;
     bool join_request_refresh_pending_ = false;
     bool directory_server_refresh_pending_ = false;
+    bool window_active_ = true;
+    // A closed WinUI window throws from Visible()/AppWindow(); late events must not query it.
+    bool window_closed_ = false;
+    catro::shell::WindowActivity window_activity_ = catro::shell::WindowActivity::foreground;
 };
 
 } // namespace winrt::Catro::implementation

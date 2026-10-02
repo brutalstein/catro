@@ -839,7 +839,7 @@ load_directory_service_config() noexcept {
                     "catro-network.json is not configured");
             }
 
-            std::ifstream input(path);
+            std::ifstream input(path, std::ios::binary);
             std::string raw(
                 static_cast<std::size_t>(
                     size),

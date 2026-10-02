@@ -93,6 +93,11 @@ void MainWindow::InitializeComponent() {
 
     const auto scale = GetDpiForWindow(hwnd) / 96.0;
     AppWindow().Resize({static_cast<int32_t>(1280 * scale), static_cast<int32_t>(820 * scale)});
+    if (const auto presenter =
+            AppWindow().Presenter().try_as<Microsoft::UI::Windowing::OverlappedPresenter>()) {
+        presenter.PreferredMinimumWidth(static_cast<int32_t>(700 * scale));
+        presenter.PreferredMinimumHeight(static_cast<int32_t>(480 * scale));
+    }
 
     join_request_timer_ = DispatcherQueue().CreateTimer();
     join_request_timer_.Interval(std::chrono::seconds{5});
@@ -100,6 +105,16 @@ void MainWindow::InitializeComponent() {
         [this](auto&&, auto&&) {
             BeginOutgoingJoinRequestRefresh();
         });
+    Activated([this](auto&&, xaml::WindowActivatedEventArgs const& args) {
+        window_active_ = args.WindowActivationState() != xaml::WindowActivationState::Deactivated;
+        UpdateWindowActivity();
+    });
+    Closed([this](auto&&, auto&&) {
+        window_closed_ = true;
+        join_request_timer_.Stop();
+    });
+    VisibilityChanged([this](auto&&, auto&&) { UpdateWindowActivity(); });
+    AppWindow().Changed([this](auto&&, auto&&) { UpdateWindowActivity(); });
 
     const auto local = catro::platform::windows::load_or_create_default_local_state();
     if (const auto* state = std::get_if<catro::community::LocalState>(&local)) {
@@ -145,6 +160,14 @@ void MainWindow::OnDiagnostics(IInspectable const&, xaml::RoutedEventArgs const&
 
 void MainWindow::OnSettings(IInspectable const&, xaml::RoutedEventArgs const&) {
     Activate(catro::app::AppDestination::settings);
+    get_self<winrt::Catro::implementation::SettingsView>(
+        settings_page_.as<Catro::SettingsView>())->ShowProfile(false);
+}
+
+void MainWindow::OnProfile(IInspectable const&, xaml::RoutedEventArgs const&) {
+    Activate(catro::app::AppDestination::settings);
+    get_self<winrt::Catro::implementation::SettingsView>(
+        settings_page_.as<Catro::SettingsView>())->ShowProfile(true);
 }
 
 xaml::UIElement MainWindow::PageFor(catro::app::AppDestination destination) {
@@ -156,6 +179,7 @@ xaml::UIElement MainWindow::PageFor(catro::app::AppDestination destination) {
                 get_self<winrt::Catro::implementation::ServerView>(page)->SetLocalState(*local_state_);
             }
             server_page_ = page;
+            get_self<winrt::Catro::implementation::ServerView>(page)->SetWindowActivity(window_activity_);
             ApplyDirectoryServerToPage();
         }
         return server_page_;
@@ -166,7 +190,20 @@ xaml::UIElement MainWindow::PageFor(catro::app::AppDestination destination) {
         return diagnostics_page_;
     case catro::app::AppDestination::settings:
         if (!settings_page_) {
-            settings_page_ = Catro::SettingsView{};
+            auto page = Catro::SettingsView{};
+            if (local_state_) {
+                get_self<winrt::Catro::implementation::SettingsView>(page)->SetProfile(
+                    *local_state_, [weak = get_weak()](catro::community::LocalState const& state) {
+                        if (const auto self = weak.get()) {
+                            self->local_state_ = state;
+                            if (self->server_page_) {
+                                get_self<winrt::Catro::implementation::ServerView>(
+                                    self->server_page_.as<Catro::ServerView>())->SetLocalState(state);
+                            }
+                        }
+                    });
+            }
+            settings_page_ = page;
         }
         return settings_page_;
     }
@@ -211,6 +248,37 @@ void MainWindow::Activate(catro::app::AppDestination destination) {
     }
 
     UpdateRail();
+}
+
+void MainWindow::UpdateWindowActivity() {
+    if (window_closed_) {
+        return;
+    }
+    const auto hwnd = Microsoft::UI::GetWindowFromWindowId(AppWindow().Id());
+    window_activity_ = !Visible() || (hwnd && IsIconic(hwnd))
+        ? catro::shell::WindowActivity::hidden
+        : window_active_ ? catro::shell::WindowActivity::foreground
+                         : catro::shell::WindowActivity::background;
+    ActivityLabel().Text(window_activity_ == catro::shell::WindowActivity::foreground
+                            ? L"AUTO · FOCUSED" : L"AUTO · ECO");
+    const auto policy = catro::shell::ui_refresh_policy(window_activity_, true, false);
+    if (join_request_timer_) {
+        if (policy.roster.count() == 0 || !directory_service_ || directory_access_token_.empty()) {
+            join_request_timer_.Stop();
+        } else {
+            if (join_request_timer_.Interval() != policy.roster) {
+                join_request_timer_.Interval(policy.roster);
+            }
+            if (!join_request_timer_.IsRunning()) {
+                join_request_timer_.Start();
+                BeginOutgoingJoinRequestRefresh();
+            }
+        }
+    }
+    if (server_page_) {
+        get_self<winrt::Catro::implementation::ServerView>(
+            server_page_.as<Catro::ServerView>())->SetWindowActivity(window_activity_);
+    }
 }
 
 void MainWindow::UpdateConnectionUi() {

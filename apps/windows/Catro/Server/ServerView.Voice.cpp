@@ -321,7 +321,7 @@ void ServerView::StartVoice(
     if (catro_voice_runtime_start(
             voice_runtime_,
             &config) == 0) {
-        voice_timer_.Start();
+        ApplyActivityPolicy();
 
         if (screen_runtime_) {
             const auto video =
@@ -356,7 +356,7 @@ void ServerView::StartVoice(
                                 failure->
                                     message)));
             } else {
-                screen_timer_.Start();
+                ApplyActivityPolicy();
             }
         }
     } else if (room_mode_active_ &&

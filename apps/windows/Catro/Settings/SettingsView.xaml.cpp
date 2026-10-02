@@ -2,6 +2,7 @@
 
 #include "Settings/SettingsView.xaml.h"
 #include "Settings/Appearance.hpp"
+#include "Settings/Performance.hpp"
 #if __has_include("SettingsView.g.cpp")
 #include "SettingsView.g.cpp"
 #endif
@@ -13,6 +14,17 @@ void SettingsView::InitializeComponent() {
     SettingsViewT<SettingsView>::InitializeComponent();
     AppearanceBox().SelectedIndex(
         static_cast<int32_t>(catro::shell::load_appearance()));
+    LocalPreviewToggle().IsOn(catro::shell::local_preview_preference());
+}
+
+void SettingsView::OnPreviewChanged(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&) {
+    if (!XamlRoot()) {
+        return;
+    }
+    const bool enabled = LocalPreviewToggle().IsOn();
+    if (!catro::shell::save_local_preview(enabled)) {
+        LocalPreviewToggle().IsOn(catro::shell::local_preview_preference());
+    }
 }
 
 void SettingsView::OnAppearanceChanged(
