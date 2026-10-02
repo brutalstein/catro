@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 400" width="1280" height="400" role="img" aria-label="Catro — native voice, screen sharing, and chat for small groups">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1B1411"/>
+      <stop offset="1" stop-color="#271D18"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.2" cy="0.5" r="0.55">
+      <stop offset="0" stop-color="#E08A5C" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#E08A5C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bars" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#E08A5C" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#E08A5C" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#E08A5C" stop-opacity=".08"/>
+    </linearGradient>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A2B23"/>
+      <stop offset="1" stop-color="#1F1713"/>
+    </linearGradient>
+    <linearGradient id="copper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F0A273"/>
+      <stop offset="1" stop-color="#C96E43"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBF1E4"/>
+      <stop offset="1" stop-color="#EAD9C3"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="400" rx="28" fill="url(#bg)"/>
+  <rect width="1280" height="400" rx="28" fill="url(#glow)"/>
+  <g fill="url(#bars)">
+    <rect x="1060" y="160" width="9" height="80" rx="4.5"/>
+    <rect x="1082" y="128" width="9" height="144" rx="4.5"/>
+    <rect x="1104" y="150" width="9" height="100" rx="4.5"/>
+    <rect x="1126" y="104" width="9" height="192" rx="4.5"/>
+    <rect x="1148" y="140" width="9" height="120" rx="4.5"/>
+    <rect x="1170" y="120" width="9" height="160" rx="4.5"/>
+    <rect x="1192" y="166" width="9" height="68" rx="4.5"/>
+    <rect x="1214" y="146" width="9" height="108" rx="4.5"/>
+    <rect x="1236" y="176" width="9" height="48" rx="4.5"/>
+  </g>
+  <svg x="96" y="80" width="240" height="240" viewBox="0 0 512 512">
+    <rect width="512" height="512" rx="116" fill="url(#tile)"/>
+    <rect x="1.5" y="1.5" width="509" height="509" rx="114.5" fill="none" stroke="#FFFFFF" stroke-opacity=".08" stroke-width="3"/>
+    <path d="M150 250 L172 124 Q176 108 190 116 L248 196 Z" fill="url(#face)"/>
+    <path d="M362 250 L340 124 Q336 108 322 116 L264 196 Z" fill="url(#face)"/>
+    <path d="M172 222 L184 150 L224 202 Z" fill="#E9A47C" opacity=".75"/>
+    <path d="M340 222 L328 150 L288 202 Z" fill="#E9A47C" opacity=".75"/>
+    <ellipse cx="256" cy="300" rx="124" ry="108" fill="url(#face)"/>
+    <path d="M124 268 C124 148 192 92 256 92 C320 92 388 148 388 268" fill="none" stroke="url(#copper)" stroke-width="24" stroke-linecap="round"/>
+    <rect x="96" y="236" width="56" height="112" rx="26" fill="url(#copper)"/>
+    <rect x="360" y="236" width="56" height="112" rx="26" fill="url(#copper)"/>
+    <rect x="134" y="252" width="14" height="80" rx="7" fill="#9A4F2E" opacity=".55"/>
+    <rect x="364" y="252" width="14" height="80" rx="7" fill="#9A4F2E" opacity=".55"/>
+    <path d="M196 292 Q220 314 244 292" fill="none" stroke="#2A1F1A" stroke-width="10" stroke-linecap="round"/>
+    <path d="M268 292 Q292 314 316 292" fill="none" stroke="#2A1F1A" stroke-width="10" stroke-linecap="round"/>
+    <ellipse cx="190" cy="338" rx="20" ry="11" fill="#E9A47C" opacity=".45"/>
+    <ellipse cx="322" cy="338" rx="20" ry="11" fill="#E9A47C" opacity=".45"/>
+    <path d="M243 326 H269 L256 340 Z" fill="#C96E43" stroke="#C96E43" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M256 342 Q248 356 236 352 M256 342 Q264 356 276 352" fill="none" stroke="#2A1F1A" stroke-width="6" stroke-linecap="round"/>
+  </svg>
+  <g font-family="'Segoe UI Variable Display','Segoe UI',Inter,'Helvetica Neue',Arial,sans-serif">
+    <text x="384" y="200" font-size="112" font-weight="700" fill="#F6EBDD" letter-spacing="-3">Catro</text>
+    <text x="388" y="254" font-size="27" font-weight="400" fill="#CDBBA8">Native voice, screen sharing, and chat for small groups.</text>
+    <text x="390" y="308" font-size="18" font-weight="600" fill="#E08A5C" letter-spacing="3">WINDOWS  ·  C++20  ·  WINUI 3  ·  WEBRTC</text>
+  </g>
+</svg>

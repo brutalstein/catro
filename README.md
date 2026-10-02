@@ -1,95 +1,179 @@
-# Catro
+<p align="center">
+  <img src="docs/assets/catro-banner.svg" alt="Catro — native voice, screen sharing, and chat for small groups" width="100%">
+</p>
 
-Catro is a native desktop application for Windows and macOS. The repository includes a portable
-C++20 capability core, isolated passive hardware probes, low-latency native audio, bounded Opus
-voice, persistent personal/shared-server state, privacy-bounded Server Code join requests,
-authenticated member rosters, bounded persistent text channels, a production signaling/directory service, and native desktop shells (WinUI 3 on Windows, SwiftUI on macOS).
+<p align="center">
+  <a href="https://github.com/brutalstein/catro/releases/latest/download/Catro-windows-x64.zip"><img alt="Download for Windows" src="https://img.shields.io/badge/Download_for_Windows-x64-E08A5C?style=for-the-badge&logo=windows11&logoColor=white&labelColor=2A1F1A"></a>
+</p>
 
-The Windows product path now provisions authenticated WebRTC rooms for voice, hardware-encoded
-H.264 screen sharing, native D3D11 decode/presentation, and selected-window application audio.
-There is no Electron, Qt, or browser runtime. The connected-UDP voice/video peers remain deliberately
-unencrypted localhost/private-LAN engineering harnesses; they are not the normal product transport
-or a public-Internet security boundary.
+<p align="center">
+  <a href="https://github.com/brutalstein/catro/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/brutalstein/catro?style=flat-square&label=release&color=E08A5C&labelColor=2A1F1A"></a>
+  <img alt="Windows 10 2004+ and Windows 11" src="https://img.shields.io/badge/Windows-10_2004%2B_%C2%B7_11-F6EBDD?style=flat-square&labelColor=2A1F1A">
+  <img alt="Native C++20 and WinUI 3" src="https://img.shields.io/badge/native-C%2B%2B20_%C2%B7_WinUI_3-F6EBDD?style=flat-square&labelColor=2A1F1A">
+  <a href="https://github.com/brutalstein/catro/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/brutalstein/catro/ci.yml?branch=main&style=flat-square&label=CI&labelColor=2A1F1A"></a>
+</p>
 
-## Layout
+<p align="center">
+  <b>A small, fast home for your people.</b><br>
+  Talk, share your screen with game audio, and keep a running chat —<br>
+  in a native Windows app that starts instantly and stays out of your GPU's way.
+</p>
 
-| Path | Contents |
+<p align="center">
+  <img src="docs/assets/catro-windows.png" alt="Catro on Windows: a server with a #general text channel, a Voice channel, and the member list" width="92%">
+</p>
+
+---
+
+## Why Catro
+
+Most chat apps ship a web browser in disguise. Catro doesn't. It is written in C++20 with a
+native WinUI 3 interface, uses your graphics card's hardware video encoder for screen sharing,
+and is built for the way friends actually hang out: a handful of people in voice and one person
+streaming.
+
+|  |  |
 | --- | --- |
-| `core/capabilities` | Capability model, validation, snapshot diffing, deterministic media policy. Standard library only. |
-| `core/reporting` | Canonical JSON and human reports, strict parsing, redaction. |
-| `core/audio` | Real-time audio primitives and the session engine. Standard library only. |
-| `core/voice` | Opus codec wrapper, packet v1, bounded jitter/loss handling, real-time PCM bridges, transport-agnostic media pipeline. |
-| `core/video`, `core/transport`, `core/rtc` | Bounded H.264 RTP, UDP primitives, and the production small-room WebRTC mesh transport. |
-| `core/community` | Typed identity/server/channel roles, personal-server bootstrap, invite token format, versioned local-state codec. |
-| `platform/windows`, `platform/macos` | Passive probes, native audio, local state, and platform media implementations. Windows includes capture, hardware H.264 encode/decode, D3D11 presentation, and process-loopback audio. |
-| `apps/diagnostics` | Shared plain C++ diagnostics/audio presentation. |
-| `apps/shell` | Portable personal-server/channel navigation contract. |
-| `apps/room-runtime`, `apps/voice-runtime`, `apps/screen-runtime` | Windows runtime boundaries for shared RTC rooms, duplex voice, and full-duplex screen media. |
-| `apps/windows`, `apps/macos` | Native desktop shells. Windows includes the server-first voice and screen-stream product UI. |
-| `services/signaling` | TLS-ready identity, membership, Server Code lookup/join requests, direct invites, short-lived RTC/TURN provisioning, bounded API access, metrics, and WebRTC signaling service. |
-| `deploy/oracle-free` | Pinned Caddy + signaling + coturn single-VM production deployment boundary with health, backup, restore, and update scripts. |
-| `tools/capability-probe` | Helper process that runs one passive probe and prints one fragment. |
-| `tools/capability-report` | Command-line capability report. |
-| `tools/audio-check` | Command-line audio session check (meter, tone, monitor). |
-| `tools/voice-peer` | Localhost/LAN engineering harness for Opus voice, bounded UDP, jitter/FEC/PLC, and live timing counters. |
-| `tools/capture-check`, `tools/encode-check`, `tools/video-peer` | Windows capture, hardware encode, and two-client H.264 engineering validation tools. |
-| `tests` | Core, reporting, policy, and platform tests. |
+| **🎧 Voice channels** | Low-latency Opus voice over WebRTC. Join and leave with one click; mute and deafen from anywhere in the app. |
+| **🖥️ Screen and window sharing** | Share a whole display or a single window, hardware-encoded to H.264 on your GPU. Viewers can pop the stream out or go full screen. |
+| **🔊 Game and app audio** | Include the sound of the window you share — only that app, not your notifications or music. |
+| **💬 Text channel** | Every server has a persistent `#general` channel that keeps its history. |
+| **🔑 Invites that stay private** | Send a direct invite code to let a friend in instantly, or publish a Server Code so people can *ask* to join and you approve each request. |
+| **🪶 Light on your PC** | No Electron, no bundled browser. Background windows throttle their own UI refresh; voice and streams never do. |
+| **🎨 Ivory and Espresso themes** | A warm light theme and a dark theme, or follow Windows. |
+| **🛡️ No passwords** | Your identity is created on first launch and protected on your PC with Windows DPAPI. There is no account to sign up for. |
 
-## Windows product shell
+## Download
 
-The Windows app opens directly into the user's personal server: one real bounded/persistent
-`# general` text channel, one `Voice` channel, an authoritative server-member rail, owner state,
-direct-invite and approval-based Server Code join flows, and voice-local screen share controls. Shared-server members can join the same provisioned RTC room, publish a window or
-display, opt into remote viewing, pop the stream out or use full screen, and optionally include the
-selected window's process audio. The shell is native WinUI 3 and intentionally avoids
-blur/backdrop/animation costs. Its code-behind is split by directory, voice, screen, and
-presentation-state responsibility; online actions publish visible connecting, busy, unavailable,
-and failed reasons instead of relying on disabled controls or tooltips alone. See
-[`docs/ui-foundation.md`](docs/ui-foundation.md) and the
-[`native UI stabilization record`](docs/validation/native-ui-stabilization.md).
+**[⬇ Download Catro for Windows (x64)](https://github.com/brutalstein/catro/releases/latest/download/Catro-windows-x64.zip)** — portable, about 28 MB.
 
-## Quick start
+Unzip anywhere and run `Catro.exe`. Everything it needs, including the Windows App SDK and the
+Visual C++ runtime, is inside the folder.
 
-Windows (PowerShell):
+### Install with one command
+
+Prefer an installer with a Start Menu entry? Run this in PowerShell (no administrator rights
+needed):
 
 ```powershell
-./scripts/bootstrap.ps1
-./scripts/build.ps1
-./scripts/test.ps1
-./scripts/run.ps1                     # native Windows app
-./scripts/run.ps1 -Report --format json --output out/capability-report.json
+irm https://github.com/brutalstein/catro/releases/latest/download/install-windows.ps1 | iex
 ```
 
-macOS:
+It downloads the latest release, verifies its SHA-256 checksum, installs to
+`%LOCALAPPDATA%\Programs\Catro`, and adds Catro to the Start Menu. Run it again to update.
 
-```sh
-scripts/bootstrap.sh
-scripts/build.sh
-scripts/test.sh
-scripts/run.sh                        # native macOS app
-scripts/run.sh --report --format json --output out/capability-report.json
+### Verify the download
+
+Each release publishes `Catro-windows-x64.zip.sha256` next to the zip:
+
+```powershell
+(Get-FileHash .\Catro-windows-x64.zip -Algorithm SHA256).Hash
 ```
 
-The scripts check prerequisites and never install tools or change system settings. See
-[docs/building.md](docs/building.md) and [docs/troubleshooting.md](docs/troubleshooting.md).
+### First launch
 
-## Platform status
+Catro is not code-signed yet, so Windows SmartScreen may say it *protected your PC*. Choose
+**More info → Run anyway**. Signed builds are on the roadmap.
+
+### System requirements
+
+| | |
+| --- | --- |
+| **OS** | Windows 11, or Windows 10 version 2004 (build 19041) or newer, 64-bit |
+| **Screen sharing** | A GPU with a hardware H.264 encoder (NVIDIA, AMD, or Intel from the last several years) and current drivers |
+| **App audio in streams** | Windows build 20348 or newer. On older builds, streams still share video and your voice still works. |
+| **Network** | Any normal home connection. Catro relays through TURN automatically when a direct path is blocked. |
+
+## Getting started
+
+1. **Open Catro.** Your own server is ready with `#general` and a `Voice` channel.
+2. **Pick a name.** Open **Profile** in the left rail to set the name your friends see.
+3. **Invite friends.** Use the invite button next to your server name to share an invite code, or
+   turn on a Server Code and approve join requests as they come in.
+4. **Hop into Voice.** Click **Voice**, then **Join**. Up to five people can talk in one room.
+5. **Share your screen.** In a voice channel, choose **Share screen**, pick a window or display,
+   and decide whether to include that app's audio.
+
+## Uninstall
+
+If you used the installer:
+
+```powershell
+irm https://github.com/brutalstein/catro/releases/latest/download/uninstall-windows.ps1 | iex
+```
+
+This removes the app and its Start Menu shortcut and keeps your identity and servers in
+`%LOCALAPPDATA%\Catro`. To remove those too, download `uninstall-windows.ps1` and run it with
+`-RemoveUserData`. If you used the portable zip, delete its folder.
+
+## Status
+
+Catro is in **early access**. The Windows app is feature-complete for voice, screen sharing, and
+text chat, and every release is built and tested in CI. Large-scale real-world testing across
+many networks and machines is ongoing, so expect rough edges and please
+[report them](https://github.com/brutalstein/catro/issues).
 
 | Platform | Status |
 | --- | --- |
-| Windows 11 x64 | Native Debug/Release builds, local test gates, capability reporting, and the voice/screen/text product path are implemented. Server Code discovery, owner-reviewed join requests, authoritative member rosters, bounded persistent text messaging, and the Oracle single-VM deployment bundle are present; real-network forced-TURN, five-client, restart, latency, resource, keyboard-smoke, and visual acceptance remain explicit gates. External UI Automation currently crashes in the Windows App SDK path, so Narrator/screen-reader readiness is blocked; see troubleshooting and the stabilization record. |
-| macOS 13+ Apple Silicon | Debug build, tests, and capability-report generation pass on the `macos-15` CI runner. Windows product voice/screen/text parity is not claimed. |
-| macOS 13+ Intel | Debug build, tests, and capability-report generation pass on the `macos-15-intel` CI runner. Windows product voice/screen/text parity is not claimed. |
+| **Windows 10 / 11 x64** | ✅ Available — download above |
+| **macOS (Apple Silicon and Intel)** | 🛠️ In development, not yet released |
 
-Hosted CI runners have no reliable GPU, encoder, or display. Their reports are build evidence,
-not hardware evidence.
+**Roadmap:** code-signed builds and `winget install`, automatic updates, the macOS app, more
+channels per server.
 
-## More
+## Privacy and security
 
-- [Personal identity and server state](docs/architecture/personal-state.md)
-- [Capability system architecture](docs/architecture/capability-system.md)
-- [Oracle production operations](docs/operations/oracle-free-production.md)
-- [Oracle production acceptance record](docs/validation/oracle-free-production-acceptance.md)
-- [Native UI stabilization record](docs/validation/native-ui-stabilization.md)
-- [Decision records](docs/architecture/decisions)
-- [Dependencies](DEPENDENCIES.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+- Your identity is a random key generated on your PC, stored under `%LOCALAPPDATA%\Catro` and
+  encrypted with Windows DPAPI. No email, phone number, or password is collected.
+- Voice and video travel over WebRTC, which encrypts media with DTLS-SRTP. The Catro service
+  coordinates rooms and relays traffic only when a direct connection is impossible.
+- Rooms use short-lived access tokens that are never written to disk.
+
+Found a vulnerability? See [SECURITY.md](SECURITY.md).
+
+<details>
+<summary><b>For developers</b></summary>
+
+### Build from source
+
+Requirements: Windows 11, Visual Studio 2022 with the C++ desktop and WinUI workloads, CMake 3.28+.
+
+```powershell
+./scripts/bootstrap.ps1                 # check prerequisites (installs nothing)
+./scripts/build.ps1 -Configuration Release
+./scripts/test.ps1 -Configuration Release
+./scripts/run.ps1                       # launch the app
+./scripts/package-windows.ps1 -ServiceUrl https://your-catro-service   # portable zip
+```
+
+See [docs/building.md](docs/building.md) and [docs/troubleshooting.md](docs/troubleshooting.md).
+
+### Architecture
+
+```text
+WinUI 3 shell (C++/WinRT)  ─┐
+SwiftUI shell (in progress) ─┴─ shared C++20 core ─ capability, audio, Opus voice, H.264 RTP, WebRTC rooms
+                                     │
+              platform/windows: WASAPI · Windows Graphics Capture · Media Foundation · D3D11
+                                     │
+              services/signaling (Go): identity, servers, invites, text channel, RTC/TURN provisioning
+```
+
+| Path | Contents |
+| --- | --- |
+| `core/` | Portable C++20: capabilities, audio engine, Opus voice, video/RTP, WebRTC room transport, community model |
+| `platform/windows`, `platform/macos` | Native audio, capture, hardware encode/decode, presentation, local state |
+| `apps/windows` | WinUI 3 desktop app |
+| `apps/room-runtime`, `apps/voice-runtime`, `apps/screen-runtime` | Runtime boundaries for rooms, voice, and screen media |
+| `services/signaling` | Go service: identity, membership, invites, messages, signaling, TURN credentials |
+| `deploy/oracle-free` | Single-VM production deployment (Caddy + signaling + coturn) |
+| `tools/` | Capability report, audio check, voice/video engineering harnesses |
+| `tests/` | Unit, platform, UI-policy, installer, and lifecycle tests |
+
+More reading: [capability system](docs/architecture/capability-system.md) ·
+[personal state](docs/architecture/personal-state.md) ·
+[production operations](docs/operations/oracle-free-production.md) ·
+[decision records](docs/architecture/decisions) ·
+[dependencies](DEPENDENCIES.md) · [contributing](CONTRIBUTING.md)
+
+</details>
