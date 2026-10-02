@@ -62,6 +62,6 @@
   <g font-family="'Segoe UI Variable Display','Segoe UI',Inter,'Helvetica Neue',Arial,sans-serif">
     <text x="384" y="200" font-size="112" font-weight="700" fill="#F6EBDD" letter-spacing="-3">Catro</text>
     <text x="388" y="254" font-size="27" font-weight="400" fill="#CDBBA8">Native voice, screen sharing, and chat for small groups.</text>
-    <text x="390" y="308" font-size="18" font-weight="600" fill="#E08A5C" letter-spacing="3">WINDOWS  ·  C++20  ·  WINUI 3  ·  WEBRTC</text>
+    <text x="390" y="308" font-size="18" font-weight="600" fill="#E08A5C" letter-spacing="3">WINDOWS  ·  MACOS  ·  C++20  ·  WEBRTC</text>
   </g>
 </svg>

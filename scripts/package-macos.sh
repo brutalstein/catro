@@ -67,6 +67,8 @@ mkdir -p "$staging"
 ditto "$source_app" "$staged_app"
 
 if [ -n "$service_url" ]; then
+    # The shell bundle ships no other resources, so Contents/Resources may not exist yet.
+    mkdir -p "$staged_app/Contents/Resources"
     printf '{\n  "api_base_url": "%s",\n  "allow_insecure_http": false\n}\n' "$service_url" \
         >"$staged_app/Contents/Resources/catro-network.json"
 fi
