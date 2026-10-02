@@ -54,6 +54,7 @@ final class AppModel: ObservableObject {
     func lookup(_ code: String) { bridge.lookupServer(code) }
     func requestJoin(code: String, note: String) { bridge.requestJoin(code: code, note: note) }
     func decide(_ request: CatroJoinRequest, approve: Bool) { bridge.decideRequest(request.identifier, approve: approve) }
+    func rename(_ name: String) { bridge.renameProfile(name) }
 
     func toggleVoice() {
         if inVoice || snapshot?.voicePhase == .failed {

@@ -336,6 +336,47 @@ struct ProductSession::Impl {
         state_.notice = std::move(notice);
     }
 
+    void rename_profile(const std::string& raw) {
+        if (!deps_.local_state) {
+            notify("Local profile is unavailable.");
+            return;
+        }
+        const auto first = raw.find_first_not_of(" \t\r\n");
+        const auto name = first == std::string::npos
+            ? std::string{} : raw.substr(first, raw.find_last_not_of(" \t\r\n") - first + 1);
+        if (name.empty() || name.size() > community::kMaxDisplayNameBytes ||
+            std::any_of(name.begin(), name.end(),
+                        [](unsigned char ch) { return ch < 0x20 || ch == 0x7f; })) {
+            notify("Enter a name of 1 to 64 bytes without line breaks.");
+            return;
+        }
+        auto updated = *deps_.local_state;
+        updated.identity.display_name = name;
+        const auto failure = deps_.save_local_state
+            ? deps_.save_local_state(updated) : std::optional<std::string>{"storage is unavailable"};
+        if (failure) {
+            notify("Profile not saved: " + *failure);
+            return;
+        }
+        deps_.local_state = updated;
+        state_.identity_name = name;
+        if (!online()) {
+            notify("Profile saved on this Mac. It will sync when you are online.");
+            return;
+        }
+        auto credential = deps_.load_credential();
+        if (error_of(credential) == nullptr) {
+            auto access = client_->register_identity(updated.identity, std::get<std::string>(credential), token());
+            if (error_of(access) == nullptr) {
+                access_token_ = std::get<std::string>(access);
+                refresh_members();
+                notify("Profile saved and synced.");
+                return;
+            }
+        }
+        notify("Profile saved on this Mac, but online sync failed. Save again to retry.");
+    }
+
     // Approved requests are consumed only after the server list refresh that shows the new server.
     void refresh_outgoing() {
         auto result = client_->list_outgoing_join_requests(access_token_, token());
@@ -700,6 +741,10 @@ void ProductSession::send_message(std::string content) {
             impl->refresh_messages();
         });
     });
+}
+
+void ProductSession::rename_profile(std::string name) {
+    impl_->enqueue([impl = impl_.get(), name = std::move(name)] { impl->rename_profile(name); });
 }
 
 void ProductSession::create_invite() {

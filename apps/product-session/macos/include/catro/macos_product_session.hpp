@@ -141,6 +141,8 @@ struct ProductSessionDependencies {
     std::optional<community::LocalState> local_state;
     std::function<community::DirectoryConfigResult()> load_config;
     std::function<community::DirectoryStringResult()> load_credential;
+    // Persists a renamed profile; returns a user-facing reason on failure.
+    std::function<std::optional<std::string>(const community::LocalState&)> save_local_state;
     std::function<std::unique_ptr<platform::macos::DirectoryHttpTransport>(
         const community::DirectoryServiceConfig&)>
         make_transport;
@@ -174,6 +176,8 @@ public:
     void lookup_server(std::string server_code);
     void request_join(std::string server_code, std::string note);
     void decide_request(std::string request_id, bool approve);
+    // Saves the new display name on this Mac, then re-registers it online when connected.
+    void rename_profile(std::string name);
 
     // Joins the active server's voice channel: RTC provisioning, room, voice, then screen listening.
     void join_voice();

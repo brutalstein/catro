@@ -64,6 +64,16 @@ product::ProductSessionDependencies production_dependencies() {
     }
     deps.load_config = [] { return macos::load_directory_service_config(); };
     deps.load_credential = [] { return macos::load_or_create_directory_credential(); };
+    deps.save_local_state = [](const catro::community::LocalState& updated) -> std::optional<std::string> {
+        const auto path = macos::default_local_state_path();
+        if (const auto* error = std::get_if<macos::LocalStateError>(&path)) {
+            return error->detail;
+        }
+        if (const auto error = macos::save_local_state_atomic(std::get<std::filesystem::path>(path), updated)) {
+            return error->detail;
+        }
+        return std::nullopt;
+    };
     deps.make_transport = [](const catro::community::DirectoryServiceConfig& service) {
         return macos::make_foundation_directory_http_transport(service);
     };
@@ -326,6 +336,12 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
 - (void)decideRequest:(NSString*)identifier approve:(BOOL)approve {
     if (_session) {
         _session->decide_request(utf8(identifier), approve);
+    }
+}
+
+- (void)renameProfile:(NSString*)name {
+    if (_session) {
+        _session->rename_profile(utf8(name));
     }
 }
 

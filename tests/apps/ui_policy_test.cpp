@@ -384,9 +384,11 @@ TEST_CASE("macOS product shell stays native accessible and free of view-body med
     CHECK(stream.find("NSViewRepresentable") != std::string::npos);
     CHECK(stream.find("dismantleNSView") != std::string::npos);
 
-    // Same Settings rows and values as Windows.
+    // Same Settings rows and values as Windows: an editable profile name and the System, Ivory and
+    // Espresso themes the Windows appearance picker offers.
     const auto settings = read(root / "Product/SettingsView.swift");
-    for (const auto* row : {"\"Theme\", value: \"System\"", "\"Microphone\", value: \"Default\"",
+    for (const auto* row : {"Section(\"Profile\")", "model.rename(", "Picker(\"Theme\"", "\"Ivory\"",
+                            "\"Espresso\"", "\"Microphone\", value: \"Default\"",
                             "\"Output\", value: \"Default\"", "\"Profile\", value: \"Balanced\""}) {
         INFO(row);
         CHECK(settings.find(row) != std::string::npos);

@@ -130,6 +130,7 @@ __attribute__((objc_subclassing_restricted))
 - (void)lookupServer:(NSString*)code;
 - (void)requestJoin:(NSString*)code note:(NSString*)note NS_SWIFT_NAME(requestJoin(code:note:));
 - (void)decideRequest:(NSString*)identifier approve:(BOOL)approve NS_SWIFT_NAME(decideRequest(_:approve:));
+- (void)renameProfile:(NSString*)name;
 
 - (void)joinVoice;
 - (void)leaveVoice;

@@ -49,6 +49,11 @@ LocalState state() {
 
 } // namespace
 
+TEST_CASE("bootstrap names a new identity after its id") {
+    const auto created = state();
+    CHECK(created.identity.display_name == "Player-" + to_hex(created.identity.id).substr(0, 8));
+}
+
 TEST_CASE("bootstrap creates stable personal server invariants from injected entropy") {
     SequenceEntropy first_entropy;
     SequenceEntropy second_entropy;

@@ -247,7 +247,8 @@ std::variant<LocalState, StateError> bootstrap_personal_state(EntropySource& ent
     }
 
     LocalState state{
-        .identity = Identity{.id = *user_id, .display_name = "You"},
+        // A friendly first-run label, not an authentication identifier; users rename it in Settings.
+        .identity = Identity{.id = *user_id, .display_name = "Player-" + to_hex(*user_id).substr(0, 8)},
         .personal_server =
             PersonalServer{
                 .id = *server_id,

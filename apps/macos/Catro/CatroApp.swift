@@ -4,11 +4,16 @@ import SwiftUI
 struct CatroApp: App {
     @StateObject private var product = AppModel()
     @StateObject private var model = DiagnosticsViewModel()
+    @AppStorage("appearance") private var appearance = Appearance.system.rawValue
+
+    private var colorScheme: ColorScheme? { Appearance(rawValue: appearance)?.colorScheme }
 
     var body: some Scene {
         Window("Catro", id: "workspace") {
             ServerWorkspace(model: product)
                 .frame(minWidth: 960, minHeight: 600)
+                .tint(.catroAccent)
+                .preferredColorScheme(colorScheme)
         }
         .commands {
             CommandGroup(replacing: .newItem) {}
@@ -55,7 +60,9 @@ struct CatroApp: App {
         }
 
         Settings {
-            SettingsView()
+            SettingsView(model: product)
+                .tint(.catroAccent)
+                .preferredColorScheme(colorScheme)
         }
     }
 }

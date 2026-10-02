@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -409,6 +410,60 @@ TEST_CASE("macOS product session keeps the personal server when online services 
     CHECK(snapshot.identity_name == "Owner");
     session.stop();
     CHECK_FALSE(transport_made);
+}
+
+TEST_CASE("macOS product session renames the profile locally and online") {
+    auto directory = seeded_directory();
+    Recorder recorder;
+    std::mutex saved_mutex;
+    std::vector<std::string> saved;
+    auto deps = online(directory);
+    deps.save_local_state = [&](const community::LocalState& state) -> std::optional<std::string> {
+        std::scoped_lock lock(saved_mutex);
+        saved.push_back(state.identity.display_name);
+        return std::nullopt;
+    };
+    product::ProductSession session(std::move(deps), recorder.listener());
+    session.start();
+    REQUIRE(wait_until(session, synchronized_with_messages));
+
+    session.rename_profile(" \n ");
+    session.rename_profile(std::string(65, 'x'));
+    REQUIRE(wait_until(session, [&recorder](const auto&) {
+        return recorder.count("Enter a name of 1 to 64 bytes without line breaks.") == 2;
+    }));
+    session.rename_profile("  Mira  ");
+    REQUIRE(wait_until(session, [](const auto& snapshot) { return snapshot.identity_name == "Mira"; }));
+    REQUIRE(wait_until(session, [&recorder](const auto&) {
+        return recorder.count("Profile saved and synced.") == 1;
+    }));
+    session.stop();
+    {
+        std::scoped_lock lock(saved_mutex);
+        CHECK(saved == std::vector<std::string>{"Mira"});
+    }
+    std::scoped_lock lock(directory->mutex);
+    CHECK(std::count_if(directory->endpoints.begin(), directory->endpoints.end(), [](const std::string& endpoint) {
+              return endpoint.ends_with("/v1/users/register");
+          }) == 2);
+}
+
+TEST_CASE("macOS product session saves a renamed profile without online services") {
+    auto deps = online(std::make_shared<FakeDirectory>());
+    deps.load_config = [] {
+        return community::DirectoryConfigResult{
+            community::DirectoryError{community::DirectoryErrorCode::not_configured, "missing"}};
+    };
+    deps.save_local_state = [](const community::LocalState&) -> std::optional<std::string> { return std::nullopt; };
+    Recorder recorder;
+    product::ProductSession session(std::move(deps), recorder.listener());
+    session.start();
+    session.rename_profile("Mira");
+    REQUIRE(wait_until(session, [&recorder](const auto&) {
+        return recorder.count("Profile saved on this Mac. It will sync when you are online.") == 1;
+    }));
+    CHECK(session.snapshot().identity_name == "Mira");
+    session.stop();
 }
 
 TEST_CASE("macOS product session synchronizes and resets state on server switch") {
