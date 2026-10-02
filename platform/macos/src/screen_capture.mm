@@ -9,6 +9,8 @@
 #import <Foundation/Foundation.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -34,41 +36,147 @@ namespace {
         error == nil ? 0 : static_cast<std::int64_t>(error.code)};
 }
 
+bool interleave_stereo(
+    std::span<const std::span<const float>> buffers,
+    std::uint32_t channels_per_buffer,
+    std::vector<float>& out) {
+    if (buffers.empty() || channels_per_buffer == 0) {
+        return false;
+    }
+    if (buffers.size() == 1) {
+        const auto samples = buffers.front();
+        if (samples.empty() || samples.size() % channels_per_buffer != 0) {
+            return false;
+        }
+        const auto frames = samples.size() / channels_per_buffer;
+        const auto right = channels_per_buffer > 1 ? 1U : 0U;
+        out.resize(frames * 2);
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+            const auto* in = samples.data() + frame * channels_per_buffer;
+            out[frame * 2] = in[0];
+            out[frame * 2 + 1] = in[right];
+        }
+        return true;
+    }
+    const auto left = buffers[0];
+    const auto right = buffers[1];
+    if (channels_per_buffer != 1 || left.empty() || left.size() != right.size()) {
+        return false;
+    }
+    out.resize(left.size() * 2);
+    for (std::size_t frame = 0; frame < left.size(); ++frame) {
+        out[frame * 2] = left[frame];
+        out[frame * 2 + 1] = right[frame];
+    }
+    return true;
+}
+
 } // namespace catro::platform::macos
 
 @interface CatroScreenStreamOutput : NSObject <SCStreamOutput, SCStreamDelegate>
 - (instancetype)initWithFrameHandler:
         (catro::platform::macos::ScreenCaptureNativeAdapter::FrameHandler)frameHandler
+    audioHandler:
+        (catro::platform::macos::ScreenCaptureNativeAdapter::AudioHandler)audioHandler
     stopHandler:
         (catro::platform::macos::ScreenCaptureNativeAdapter::StopHandler)stopHandler;
 @end
 
 @implementation CatroScreenStreamOutput {
     catro::platform::macos::ScreenCaptureNativeAdapter::FrameHandler _frameHandler;
+    catro::platform::macos::ScreenCaptureNativeAdapter::AudioHandler _audioHandler;
     catro::platform::macos::ScreenCaptureNativeAdapter::StopHandler _stopHandler;
     std::atomic_uint64_t _sequence;
+    // Reused on the serial audio queue so steady-state audio never allocates.
+    std::vector<std::uint64_t> _audioList;
+    std::vector<float> _audioScratch;
 }
 
 - (instancetype)initWithFrameHandler:
         (catro::platform::macos::ScreenCaptureNativeAdapter::FrameHandler)frameHandler
+    audioHandler:
+        (catro::platform::macos::ScreenCaptureNativeAdapter::AudioHandler)audioHandler
     stopHandler:
         (catro::platform::macos::ScreenCaptureNativeAdapter::StopHandler)stopHandler {
     self = [super init];
     if (self != nil) {
         _frameHandler = std::move(frameHandler);
+        _audioHandler = std::move(audioHandler);
         _stopHandler = std::move(stopHandler);
         _sequence.store(0, std::memory_order_relaxed);
     }
     return self;
 }
 
+- (void)handleAudio:(CMSampleBufferRef)sampleBuffer {
+    if (!_audioHandler) {
+        return;
+    }
+    CMFormatDescriptionRef format = CMSampleBufferGetFormatDescription(sampleBuffer);
+    const AudioStreamBasicDescription* description =
+        format == nullptr ? nullptr : CMAudioFormatDescriptionGetStreamBasicDescription(format);
+    if (description == nullptr || description->mFormatID != kAudioFormatLinearPCM ||
+        (description->mFormatFlags & kAudioFormatFlagIsFloat) == 0 ||
+        description->mBitsPerChannel != 32 ||
+        description->mSampleRate != catro::platform::macos::kCaptureAudioSampleRate) {
+        return;
+    }
+
+    std::size_t list_bytes = 0;
+    if (CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer, &list_bytes, nullptr, 0, nullptr, nullptr, 0, nullptr) != noErr ||
+        list_bytes == 0) {
+        return;
+    }
+    _audioList.resize((list_bytes + sizeof(std::uint64_t) - 1) / sizeof(std::uint64_t));
+    auto* list = reinterpret_cast<AudioBufferList*>(_audioList.data());
+    CMBlockBufferRef block = nullptr;
+    if (CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer,
+            nullptr,
+            list,
+            list_bytes,
+            nullptr,
+            nullptr,
+            kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment,
+            &block) != noErr) {
+        return;
+    }
+
+    const AudioBuffer* native = list->mBuffers;
+    const auto count = std::min<UInt32>(list->mNumberBuffers, 2);
+    std::array<std::span<const float>, 2> buffers{};
+    for (UInt32 index = 0; index < count; ++index) {
+        if (native[index].mData != nullptr) {
+            buffers[index] = std::span<const float>{
+                static_cast<const float*>(native[index].mData),
+                native[index].mDataByteSize / sizeof(float)};
+        }
+    }
+    if (count != 0 &&
+        catro::platform::macos::interleave_stereo(
+            std::span<const std::span<const float>>{buffers.data(), count},
+            native[0].mNumberChannels,
+            _audioScratch)) {
+        _audioHandler(std::span<const float>{_audioScratch});
+    }
+    if (block != nullptr) {
+        CFRelease(block);
+    }
+}
+
 - (void)stream:(SCStream*)stream
     didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
                   ofType:(SCStreamOutputType)type {
     (void)stream;
-    if (type != SCStreamOutputTypeScreen ||
-        sampleBuffer == nullptr ||
-        !CMSampleBufferIsValid(sampleBuffer)) {
+    if (sampleBuffer == nullptr || !CMSampleBufferIsValid(sampleBuffer)) {
+        return;
+    }
+    if (type == SCStreamOutputTypeAudio) {
+        [self handleAudio:sampleBuffer];
+        return;
+    }
+    if (type != SCStreamOutputTypeScreen) {
         return;
     }
 
@@ -188,8 +296,10 @@ public:
         const CaptureSource& source,
         const ScreenCaptureConfig& config,
         FrameHandler on_frame,
+        AudioHandler on_audio,
         StopHandler on_stop) noexcept override {
         stop();
+        const bool captures_audio = static_cast<bool>(on_audio);
         if ([NSThread isMainThread]) {
             return ScreenCaptureError{ScreenCaptureErrorCode::wrong_thread, 0};
         }
@@ -240,9 +350,19 @@ public:
         native_config.showsCursor = config.shows_cursor;
         native_config.pixelFormat =
             kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
+        if (captures_audio) {
+            // ScreenCaptureKit mixes audio per application: a window filter yields its owning
+            // app, a display filter yields every app. Excluding Catro keeps voice and watched
+            // streams out of the share, so viewers never hear themselves echoed back.
+            native_config.capturesAudio = YES;
+            native_config.sampleRate = kCaptureAudioSampleRate;
+            native_config.channelCount = 2;
+            native_config.excludesCurrentProcessAudio = YES;
+        }
 
         output_ = [[CatroScreenStreamOutput alloc]
             initWithFrameHandler:std::move(on_frame)
+                    audioHandler:std::move(on_audio)
                      stopHandler:std::move(on_stop)];
         queue_ = dispatch_queue_create(
             "com.catro.screen-capture", DISPATCH_QUEUE_SERIAL);
@@ -259,6 +379,21 @@ public:
             stop();
             return native_error(
                 add_error, ScreenCaptureErrorCode::capture_creation_failed);
+        }
+        if (captures_audio) {
+            // Audio gets its own high-priority queue so a slow video callback never delays it.
+            audio_queue_ = dispatch_queue_create(
+                "com.catro.screen-audio",
+                dispatch_queue_attr_make_with_qos_class(
+                    DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE, 0));
+            if (![stream_ addStreamOutput:output_
+                                     type:SCStreamOutputTypeAudio
+                       sampleHandlerQueue:audio_queue_
+                                    error:&add_error]) {
+                stop();
+                return native_error(
+                    add_error, ScreenCaptureErrorCode::capture_creation_failed);
+            }
         }
 
         dispatch_semaphore_t done = dispatch_semaphore_create(0);
@@ -283,6 +418,7 @@ public:
         if (stream_ == nil) {
             output_ = nil;
             queue_ = nil;
+            audio_queue_ = nil;
             return;
         }
         dispatch_semaphore_t done = dispatch_semaphore_create(0);
@@ -290,16 +426,23 @@ public:
             dispatch_semaphore_signal(done);
         }];
         dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+        NSError* ignored = nil;
         if (queue_ != nil) {
             dispatch_sync(queue_, ^{});
         }
-        NSError* ignored = nil;
         [stream_ removeStreamOutput:output_
                               type:SCStreamOutputTypeScreen
                              error:&ignored];
+        if (audio_queue_ != nil) {
+            dispatch_sync(audio_queue_, ^{});
+            [stream_ removeStreamOutput:output_
+                                  type:SCStreamOutputTypeAudio
+                                 error:&ignored];
+        }
         stream_ = nil;
         output_ = nil;
         queue_ = nil;
+        audio_queue_ = nil;
     }
 
     ~ScreenCaptureKitAdapter() override {
@@ -344,6 +487,7 @@ private:
     __strong SCStream* stream_ = nil;
     __strong CatroScreenStreamOutput* output_ = nil;
     dispatch_queue_t queue_ = nil;
+    dispatch_queue_t audio_queue_ = nil;
 };
 
 } // namespace
@@ -422,7 +566,8 @@ CaptureEnumerationResult MacScreenCapture::enumerate_sources() noexcept {
 
 std::optional<ScreenCaptureError> MacScreenCapture::start_source(
     const CaptureSource& source,
-    const ScreenCaptureConfig& config) noexcept {
+    const ScreenCaptureConfig& config,
+    ScreenCaptureNativeAdapter::AudioHandler on_audio) noexcept {
     stop();
     if (source.native_id == 0 || source.width < 2 || source.height < 2 ||
         config.frame_rate == 0 ||
@@ -444,6 +589,7 @@ std::optional<ScreenCaptureError> MacScreenCapture::start_source(
         [owner = impl_.get(), current](NativeVideoFrame frame) {
             owner->on_frame(current, std::move(frame));
         },
+        std::move(on_audio),
         [owner = impl_.get(), current](ScreenCaptureError failure) {
             owner->on_stop(current, failure);
         });

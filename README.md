@@ -39,7 +39,7 @@ and one person streaming. Windows and Mac users share the same servers, voice ro
 | --- | --- |
 | **🎧 Voice channels** | Low-latency Opus voice over WebRTC. Join and leave with one click; mute and deafen from anywhere in the app. |
 | **🖥️ Screen and window sharing** | Share a whole display or a single window, hardware-encoded to H.264. Viewers can pop the stream out or go full screen. |
-| **🔊 Game and app audio** | On Windows, include the sound of the window you share — only that app, not your notifications or music. |
+| **🔊 Game and app audio** | Share the sound of the app you stream — only that app, not your notifications or music. On the Mac you can also share all computer audio with a whole screen. Catro never streams your friends' voices back to them. |
 | **💬 Text channel** | Every server has a persistent `#general` channel that keeps its history. |
 | **🔑 Invites that stay private** | Send a direct invite code to let a friend in instantly, or publish a Server Code so people can *ask* to join and you approve each request. |
 | **🪶 Light on your PC** | No Electron, no bundled browser. Background windows throttle their own UI refresh; voice and streams never do. |
@@ -106,7 +106,7 @@ Signed and notarized builds are on the roadmap.
 | --- | --- | --- |
 | **OS** | Windows 11, or Windows 10 version 2004 (build 19041) or newer, 64-bit | macOS 13 Ventura or newer, Apple silicon or Intel |
 | **Screen sharing** | A GPU with a hardware H.264 encoder (NVIDIA, AMD, or Intel from the last several years) and current drivers | Built in on every supported Mac |
-| **App audio in streams** | Windows build 20348 or newer | Not available yet — Mac streams share video, and your voice still works |
+| **App audio in streams** | Windows build 20348 or newer | Every supported Mac (window shares send that app's audio; display shares can send all computer audio) |
 | **Network** | Any normal home connection. Catro relays through TURN automatically when a direct path is blocked. | Same |
 
 ## Getting started
@@ -118,7 +118,8 @@ Signed and notarized builds are on the roadmap.
    turn on a Server Code and approve join requests as they come in.
 4. **Hop into Voice.** Click **Voice**, then **Join**. Up to five people can talk in one room.
 5. **Share your screen.** In a voice channel, choose **Share screen** and pick a window or
-   display. On Windows, you can also include that app's audio.
+   display. A window share includes that app's audio; on the Mac, a display share can include
+   all computer audio.
 
 ## Uninstall
 
@@ -145,10 +146,10 @@ machines is ongoing, so expect rough edges and please
 | Platform | Status |
 | --- | --- |
 | **Windows 10 / 11 x64** | ✅ Available — download above |
-| **macOS 13+ (Apple silicon and Intel)** | ✅ Available — download above. App audio in streams is not available yet. |
+| **macOS 13+ (Apple silicon and Intel)** | ✅ Available — download above |
 
 **Roadmap:** code-signed and notarized builds, `winget` and Homebrew installs, automatic updates,
-app audio on the Mac, more channels per server.
+more channels per server.
 
 ## Privacy and security
 

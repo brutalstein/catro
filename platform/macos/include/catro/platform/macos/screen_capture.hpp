@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -111,17 +112,34 @@ struct ScreenCaptureStatistics {
     std::uint32_t height = 0;
 };
 
+// Shared audio is delivered as 48 kHz interleaved float stereo, the stream-audio Opus format.
+inline constexpr std::uint32_t kCaptureAudioSampleRate = 48'000;
+
+// Converts one ScreenCaptureKit float32 buffer list to interleaved stereo: one interleaved
+// stereo buffer, one mono buffer (duplicated), or one buffer per channel (first two used).
+// Returns false for empty or mismatched layouts.
+[[nodiscard]] bool interleave_stereo(
+    std::span<const std::span<const float>> buffers,
+    std::uint32_t channels_per_buffer,
+    std::vector<float>& out);
+
 class ScreenCaptureNativeAdapter {
 public:
     using FrameHandler = std::function<void(NativeVideoFrame)>;
+    // Runs on the capture audio queue; must not block.
+    using AudioHandler = std::function<void(std::span<const float>)>;
     using StopHandler = std::function<void(ScreenCaptureError)>;
 
     virtual ~ScreenCaptureNativeAdapter() = default;
     [[nodiscard]] virtual CaptureEnumerationResult enumerate_sources() noexcept = 0;
+    // An empty on_audio captures video only. With audio, a window source shares its application's
+    // audio and a display shares all system audio; Catro's own playback is always excluded.
+    // stop() returns only after the last frame and audio callback has finished.
     [[nodiscard]] virtual std::optional<ScreenCaptureError> start(
         const CaptureSource& source,
         const ScreenCaptureConfig& config,
         FrameHandler on_frame,
+        AudioHandler on_audio,
         StopHandler on_stop) noexcept = 0;
     virtual void stop() noexcept = 0;
 };
@@ -139,9 +157,11 @@ public:
     MacScreenCapture& operator=(const MacScreenCapture&) = delete;
 
     [[nodiscard]] CaptureEnumerationResult enumerate_sources() noexcept;
+    // on_audio must outlive stop(); see ScreenCaptureNativeAdapter::start.
     [[nodiscard]] std::optional<ScreenCaptureError> start_source(
         const CaptureSource& source,
-        const ScreenCaptureConfig& config = {}) noexcept;
+        const ScreenCaptureConfig& config = {},
+        ScreenCaptureNativeAdapter::AudioHandler on_audio = {}) noexcept;
     void stop() noexcept;
 
     [[nodiscard]] bool wait_for_latest(

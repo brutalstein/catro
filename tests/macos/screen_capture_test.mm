@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <memory>
+#include <span>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -24,11 +25,13 @@ public:
         const CaptureSource& source,
         const ScreenCaptureConfig& config,
         FrameHandler on_frame,
+        AudioHandler on_audio,
         StopHandler on_stop) noexcept override {
         ++start_calls;
         started_source = source;
         started_config = config;
         frame_handler = std::move(on_frame);
+        audio_handler = std::move(on_audio);
         stop_handler = std::move(on_stop);
         return start_error;
     }
@@ -44,6 +47,7 @@ public:
     std::optional<ScreenCaptureError> start_error;
     std::optional<NativeVideoFrame> frame_during_stop;
     FrameHandler frame_handler;
+    AudioHandler audio_handler;
     StopHandler stop_handler;
     CaptureSource started_source;
     ScreenCaptureConfig started_config;
@@ -165,4 +169,47 @@ TEST_CASE("macOS capture ignores callbacks delivered while stop is draining") {
     CHECK_FALSE(capture.wait_for_latest(latest, 0ms));
     CHECK(capture.statistics().state == ScreenCaptureState::idle);
     CHECK(fake->stop_calls == 1);
+}
+
+TEST_CASE("macOS capture requests audio only when a sink is supplied") {
+    auto adapter = std::make_unique<FakeCaptureAdapter>();
+    auto* fake = adapter.get();
+    MacScreenCapture capture(std::move(adapter));
+
+    REQUIRE_FALSE(capture.start_source(display()));
+    CHECK_FALSE(fake->audio_handler);
+
+    std::vector<float> received;
+    REQUIRE_FALSE(capture.start_source(display(), {}, [&received](std::span<const float> samples) {
+        received.assign(samples.begin(), samples.end());
+    }));
+    REQUIRE(fake->audio_handler);
+    const std::vector<float> stereo{0.25F, -0.25F};
+    fake->audio_handler(stereo);
+    CHECK(received == stereo);
+}
+
+TEST_CASE("ScreenCaptureKit audio buffers become interleaved stereo") {
+    std::vector<float> out;
+
+    const std::vector<float> left{1.0F, 2.0F};
+    const std::vector<float> right{-1.0F, -2.0F};
+    const std::vector<std::span<const float>> planar{left, right};
+    REQUIRE(interleave_stereo(planar, 1, out));
+    CHECK(out == std::vector<float>{1.0F, -1.0F, 2.0F, -2.0F});
+
+    const std::vector<float> mono{0.5F, 0.75F};
+    const std::vector<std::span<const float>> single{mono};
+    REQUIRE(interleave_stereo(single, 1, out));
+    CHECK(out == std::vector<float>{0.5F, 0.5F, 0.75F, 0.75F});
+
+    const std::vector<float> interleaved{0.1F, 0.2F, 0.3F, 0.4F};
+    const std::vector<std::span<const float>> packed{interleaved};
+    REQUIRE(interleave_stereo(packed, 2, out));
+    CHECK(out == interleaved);
+
+    const std::vector<float> short_right{-1.0F};
+    const std::vector<std::span<const float>> mismatched{left, short_right};
+    CHECK_FALSE(interleave_stereo(mismatched, 1, out));
+    CHECK_FALSE(interleave_stereo({}, 1, out));
 }

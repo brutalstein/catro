@@ -369,6 +369,12 @@ TEST_CASE("macOS product shell stays native accessible and free of view-body med
     CHECK(all.find(".accessibilityLabel(") != std::string::npos);
     CHECK(all.find(".help(") != std::string::npos);
 
+    // Shared audio follows the source like Discord: app audio for a window, system audio for a display.
+    const auto picker = read(root / "Product/SourcePicker.swift");
+    CHECK(picker.find("\"Share app audio\"") != std::string::npos);
+    CHECK(picker.find("\"Share computer audio\"") != std::string::npos);
+    CHECK(picker.find(".disabled(true)") == std::string::npos);
+
     const auto app = read(root / "CatroApp.swift");
     CHECK(app.find(".keyboardShortcut(\"j\", modifiers: [.command, .shift])") != std::string::npos);
     CHECK(app.find(".keyboardShortcut(\"m\", modifiers: [.command, .shift])") != std::string::npos);

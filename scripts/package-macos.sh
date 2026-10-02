@@ -80,8 +80,9 @@ Move Catro.app to Applications and open it. Requires macOS 13.0 or newer.
 
 Voice channels, screen and window sharing, and the #general text channel work with friends on
 Windows and macOS. macOS asks for Microphone access when you first join voice and for Screen
-Recording access when you first share. Sharing app audio from a Mac is not available yet; your
-stream shares video and your voice still works.
+Recording access when you first share. Sharing a window includes that app's sound; sharing a
+whole display can include everything your Mac plays. Catro's own voice and streams are never
+shared back, so friends do not hear an echo.
 
 The app is ad-hoc signed, not notarized. Gatekeeper may require you to confirm that you
 trust the downloaded app: Control-click Catro.app, choose Open, then Open again. This package

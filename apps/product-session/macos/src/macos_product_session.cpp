@@ -651,6 +651,8 @@ struct ProductSession::Impl {
         if (media.sharing && share.state == screen::ScreenShareState::failed) {
             stop_share();
             media.status = "Screen share stopped: " + share.error;
+        } else if (media.sharing && !share.stream_audio_error.empty()) {
+            media.status = "Sharing without audio: " + share.stream_audio_error;
         }
         if (room.state == CATRO_ROOM_FAILED) {
             stop_share();

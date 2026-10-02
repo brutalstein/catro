@@ -13,6 +13,7 @@
 #include <exception>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -29,6 +30,7 @@ using platform::macos::MacScreenCapture;
 using platform::macos::MacVideoPresenter;
 using platform::macos::NativeVideoFrame;
 using platform::macos::ScreenCaptureConfig;
+using platform::macos::ScreenCaptureNativeAdapter;
 using platform::macos::VideoDecoderConfig;
 using platform::macos::VideoDecoderError;
 using platform::macos::VideoEncoderConfig;
@@ -36,6 +38,19 @@ using platform::macos::VideoEncoderError;
 
 constexpr auto kFirstFrameTimeout = 3s;
 constexpr std::uint32_t kPreviewMaxFps = 10;
+
+// Joins the stream-audio pump on every exit path of the sender worker.
+struct AudioPump {
+    std::atomic_bool stop{false};
+    std::thread worker;
+
+    ~AudioPump() {
+        stop.store(true, std::memory_order_release);
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+};
 
 [[nodiscard]] RoomScreenApi production_room_api() noexcept {
     return RoomScreenApi{
@@ -266,11 +281,8 @@ struct MacScreenShareRuntime::Impl {
             std::scoped_lock lock(metadata_mutex_);
             source_title_ = config.source.title;
             error_.clear();
-            if (config.share_audio) {
-                // ScreenCaptureKit stream audio is wired separately; report it instead of hiding it.
-                stream_audio_error_ = "stream audio capture is not available on macOS yet";
-            }
         }
+        stream_audio_enabled_.store(config.share_audio, std::memory_order_release);
         share_stop_requested_.store(false, std::memory_order_release);
         state_.store(ScreenShareState::starting, std::memory_order_release);
         try {
@@ -392,14 +404,50 @@ struct MacScreenShareRuntime::Impl {
         }
     }
 
+    // Stream audio rides the same ScreenCaptureKit stream as the video; a 20 ms pump moves captured
+    // PCM into the shared Opus sender, exactly as the Windows process-loopback path does.
+    void pump_stream_audio(StreamAudioCaptureBridge& bridge, StreamAudioSender& sender,
+                           const std::atomic_bool& stop) noexcept {
+        StreamAudioPcmFrame pcm{};
+        while (!stop.load(std::memory_order_acquire) && !should_stop_sender()) {
+            if (!bridge.try_pop(pcm)) {
+                std::unique_lock stop_lock(stop_mutex_);
+                stop_cv_.wait_for(stop_lock, 2ms, [this] { return should_stop_sender(); });
+                continue;
+            }
+            sender.send(pcm);
+        }
+    }
+
     void run_sender(const MacScreenShareConfig& config) {
+        // Declared before the capture so both outlive its audio callbacks.
+        StreamAudioCaptureBridge audio_bridge;
+        std::optional<StreamAudioSender> audio_sender;
+        if (config.share_audio) {
+            audio_sender.emplace(api_, config.room_runtime, counters_);
+            if (const auto failure = audio_sender->start(config.stream_audio_bitrate, config.ssrc)) {
+                set_stream_audio_error(voice::name(failure->code), failure->native_code);
+                audio_sender.reset();
+            }
+        }
         MacScreenCapture capture;
         ScreenCaptureConfig capture_config;
         capture_config.max_width = config.max_width;
         capture_config.max_height = config.max_height;
         capture_config.frame_rate = config.fps;
-        if (const auto error = capture.start_source(config.source, capture_config)) {
-            fail_share(platform::macos::name(error->code), error->native_code);
+        ScreenCaptureNativeAdapter::AudioHandler on_audio;
+        if (audio_sender) {
+            on_audio = [&audio_bridge](std::span<const float> samples) { audio_bridge.on_captured(samples); };
+        }
+        auto capture_error = capture.start_source(config.source, capture_config, std::move(on_audio));
+        if (capture_error && audio_sender) {
+            // Audio is optional: keep the picture flowing and say why the sound is missing.
+            set_stream_audio_error("ScreenCaptureKit audio capture failed", capture_error->native_code);
+            audio_sender.reset();
+            capture_error = capture.start_source(config.source, capture_config);
+        }
+        if (capture_error) {
+            fail_share(platform::macos::name(capture_error->code), capture_error->native_code);
             return;
         }
         NativeVideoFrame first;
@@ -520,6 +568,12 @@ struct MacScreenShareRuntime::Impl {
             capture.stop();
             return;
         }
+        AudioPump audio_pump;
+        if (audio_sender) {
+            audio_pump.worker =
+                std::thread([&] { pump_stream_audio(audio_bridge, *audio_sender, audio_pump.stop); });
+            stream_audio_active_.store(true, std::memory_order_release);
+        }
         state_.store(ScreenShareState::sharing, std::memory_order_release);
         bool running = process_frame(first);
         first = {};
@@ -552,6 +606,7 @@ struct MacScreenShareRuntime::Impl {
         frames_encoded_.store(encoder_stats.frames_encoded, std::memory_order_relaxed);
         encoder_output_failures_.store(encoder_stats.output_failures, std::memory_order_relaxed);
         capture_contention_drops_.store(capture.statistics().contention_drops, std::memory_order_relaxed);
+        counters_.stream_audio_capture_drops.store(audio_bridge.dropped_callbacks(), std::memory_order_relaxed);
         if (state_.load(std::memory_order_acquire) != ScreenShareState::failed &&
             !stop_requested_.load(std::memory_order_acquire)) {
             state_.store(ScreenShareState::listening, std::memory_order_release);
@@ -603,6 +658,14 @@ struct MacScreenShareRuntime::Impl {
     }
 
     void set_error(std::string_view message, std::int64_t native_code) noexcept {
+        store_error(error_, message, native_code);
+    }
+
+    void set_stream_audio_error(std::string_view message, std::int64_t native_code = 0) noexcept {
+        store_error(stream_audio_error_, message, native_code);
+    }
+
+    void store_error(std::string& target, std::string_view message, std::int64_t native_code) noexcept {
         try {
             std::string owned{message};
             if (native_code != 0) {
@@ -611,7 +674,7 @@ struct MacScreenShareRuntime::Impl {
                 owned += ")";
             }
             std::scoped_lock lock(metadata_mutex_);
-            error_ = std::move(owned);
+            target = std::move(owned);
         } catch (...) {
         }
     }

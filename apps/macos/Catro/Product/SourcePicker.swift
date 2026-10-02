@@ -9,6 +9,8 @@ struct SourcePicker: View {
     @State private var settings = ShareSettings()
 
     private var sources: [CatroShareSource] { model.snapshot?.sources ?? [] }
+    private var selectedSource: CatroShareSource? { sources.first { $0.nativeID == selection } }
+    private var sharesDisplay: Bool { selectedSource.map { !$0.window } ?? false }
 
     private var emptyText: String {
         let status = model.snapshot?.voiceStatus ?? ""
@@ -39,9 +41,11 @@ struct SourcePicker: View {
                     .help("1 to 120 frames per second")
                 TextField("Bitrate (Mbps)", value: $settings.bitrateMbps, format: .number)
                     .help("0.128 to 50 Mbps")
-                Toggle("Share audio", isOn: $settings.audio)
-                    .help("Stream audio capture is not available on macOS yet")
-                    .disabled(true)
+                Toggle(sharesDisplay ? "Share computer audio" : "Share app audio", isOn: $settings.audio)
+                    .help(sharesDisplay
+                        ? "Everything this Mac plays except Catro, including notification sounds"
+                        : "Only the sound of the app you share")
+                    .disabled(selection == nil)
             }
             HStack {
                 Button("Refresh") { model.loadSources() }
@@ -56,10 +60,13 @@ struct SourcePicker: View {
         .padding(20)
         .frame(minWidth: 480, minHeight: 520)
         .onAppear { model.loadSources() }
+        // Like Discord: an app share includes its sound by default; whole-screen audio is opt-in
+        // because it also carries notifications.
+        .onChange(of: selection) { _ in settings.audio = selectedSource?.window ?? false }
     }
 
     private func goLive() {
-        if let source = sources.first(where: { $0.nativeID == selection }) {
+        if let source = selectedSource {
             model.share(source, settings: settings)
         }
         isPresented = false

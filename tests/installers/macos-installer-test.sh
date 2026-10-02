@@ -196,7 +196,7 @@ if [ -n "${CATRO_TEST_BUILT_APP:-}" ]; then
     grep -qi 'Gatekeeper' "$package_check/README.txt"
     grep -qi 'voice channels' "$package_check/README.txt"
     grep -qi 'screen' "$package_check/README.txt"
-    grep -qi 'app audio from a Mac is not available' "$package_check/README.txt"
+    grep -qi "includes that app's sound" "$package_check/README.txt"
     # CI packages without a service URL; only release packages carry the network config.
     if [ -n "${CATRO_SERVICE_URL:-}" ]; then
         grep -q "\"api_base_url\": \"${CATRO_SERVICE_URL%/}\"" \
