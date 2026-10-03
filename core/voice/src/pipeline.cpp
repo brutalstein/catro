@@ -54,10 +54,12 @@ struct VoicePipeline::RemoteStream {
 
 VoicePipeline::VoicePipeline(
     const VoicePipelineConfig& config,
-    std::unique_ptr<Encoder> encoder)
+    std::unique_ptr<Encoder> encoder,
+    std::unique_ptr<VoiceProcessor> processor)
     : capture_(config.capture_queue_frames),
       render_(config.render_queue_frames),
       encoder_(std::move(encoder)),
+      processor_(std::move(processor)),
       jitter_target_packets_(config.jitter_target_packets),
       stream_id_(config.local_stream_id),
       next_sequence_(config.initial_sequence),
@@ -77,15 +79,28 @@ VoicePipeline::CreateResult VoicePipeline::create(
         return *error;
     }
 
+    // A missing processor is not fatal: voice keeps flowing, just unprocessed.
+    auto processor = config.processing
+        ? VoiceProcessor::create(*config.processing)
+        : nullptr;
+
     try {
         return std::unique_ptr<VoicePipeline>(
             new VoicePipeline(
                 config,
                 std::move(
                     std::get<std::unique_ptr<Encoder>>(
-                        encoder_result))));
+                        encoder_result)),
+                std::move(processor)));
     } catch (const std::bad_alloc&) {
         return CodecError{CodecErrorCode::allocation_failed};
+    }
+}
+
+void VoicePipeline::set_processing(
+    const VoiceProcessingConfig& config) noexcept {
+    if (processor_) {
+        processor_->set_config(config);
     }
 }
 
@@ -141,6 +156,8 @@ VoicePipeline::encode_next(
             0.0F);
         muted_frames_.fetch_add(
             1, std::memory_order_relaxed);
+    } else if (processor_) {
+        processor_->process_capture(capture_frame_);
     }
 
     auto output =
@@ -478,6 +495,10 @@ VoicePipeline::decode_next() noexcept {
         // flushes stale backlog on its next native audio period.
         render_.request_resync();
         return DecodeStep::render_queue_full;
+    }
+    if (processor_ && !render_.deafened()) {
+        // The echo canceller's reference is exactly the mix the speakers will play.
+        processor_->analyze_render(mix_frame_);
     }
 
     if (saw_packet) {

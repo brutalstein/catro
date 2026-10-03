@@ -51,6 +51,81 @@ function(catro_enable_voice_dependency)
 endfunction()
 
 
+# Voice processing: WebRTC's AudioProcessing module (AEC3 echo cancellation, noise suppression,
+# AGC2), the processing Chrome and most voice apps ship. It is built from source with Catro's own
+# CMake source list (cmake/WebRtcApmSources.cmake), so no meson toolchain is needed.
+FetchContent_Declare(
+    abseil
+    URL https://github.com/abseil/abseil-cpp/releases/download/20240722.0/abseil-cpp-20240722.0.tar.gz
+    URL_HASH SHA256=f50e5ac311a81382da7fa75b97310e4b9006474f9560ac46f54a9967f07d4ae3
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SYSTEM
+)
+
+FetchContent_Declare(
+    webrtc_apm
+    GIT_REPOSITORY https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing.git
+    GIT_TAG 846fe90a289f58b7c9303a635142aa2c7caa93e5 # v2.1
+    GIT_PROGRESS TRUE
+)
+
+function(catro_enable_voice_processing_dependency)
+    set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "" FORCE)
+    set(ABSL_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(ABSL_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    # Catro links the static MSVC runtime (/MT); Abseil must match.
+    set(ABSL_MSVC_STATIC_RUNTIME ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(abseil)
+    FetchContent_MakeAvailable(webrtc_apm)
+
+    include(${PROJECT_SOURCE_DIR}/cmake/WebRtcApmSources.cmake)
+    set(root ${webrtc_apm_SOURCE_DIR})
+    foreach(group COMMON SSE2 AVX2 NEON)
+        list(TRANSFORM CATRO_WEBRTC_APM_${group}_SOURCES PREPEND ${root}/)
+    endforeach()
+
+    add_library(catro_webrtc_apm STATIC ${CATRO_WEBRTC_APM_COMMON_SOURCES})
+    # Upstream builds and tests this code as C++17.
+    set_target_properties(catro_webrtc_apm PROPERTIES CXX_STANDARD 17 C_STANDARD 11)
+    target_include_directories(catro_webrtc_apm SYSTEM PUBLIC ${root}/webrtc)
+    target_compile_definitions(catro_webrtc_apm
+        PUBLIC WEBRTC_LIBRARY_IMPL WEBRTC_APM_DEBUG_DUMP=0
+        PRIVATE NDEBUG _WINSOCKAPI_ _GNU_SOURCE)
+    target_link_libraries(catro_webrtc_apm PUBLIC
+        absl::base absl::core_headers absl::strings absl::any_invocable absl::algorithm_container)
+
+    if(WIN32)
+        target_compile_definitions(catro_webrtc_apm
+            PUBLIC WEBRTC_WIN NOMINMAX _USE_MATH_DEFINES
+            PRIVATE __STDC_FORMAT_MACROS=1)
+        target_link_libraries(catro_webrtc_apm PRIVATE winmm)
+    else()
+        target_compile_definitions(catro_webrtc_apm PUBLIC WEBRTC_POSIX)
+        if(APPLE)
+            target_compile_definitions(catro_webrtc_apm PUBLIC WEBRTC_MAC)
+            target_link_libraries(catro_webrtc_apm PRIVATE "-framework Foundation")
+        endif()
+    endif()
+
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|x64)$")
+        # AVX2 kernels are compiled separately and chosen at run time, so older CPUs still work.
+        target_sources(catro_webrtc_apm PRIVATE
+            ${CATRO_WEBRTC_APM_SSE2_SOURCES} ${CATRO_WEBRTC_APM_AVX2_SOURCES})
+        if(MSVC)
+            set(avx2_flags /arch:AVX2)
+        else()
+            set(avx2_flags -mavx2 -mfma)
+        endif()
+        set_source_files_properties(${CATRO_WEBRTC_APM_AVX2_SOURCES}
+            PROPERTIES COMPILE_OPTIONS "${avx2_flags}")
+        target_compile_definitions(catro_webrtc_apm PUBLIC WEBRTC_ENABLE_AVX2)
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64|ARM64)$")
+        target_sources(catro_webrtc_apm PRIVATE ${CATRO_WEBRTC_APM_NEON_SOURCES})
+        target_compile_definitions(catro_webrtc_apm PUBLIC WEBRTC_ARCH_ARM64 WEBRTC_HAS_NEON)
+    endif()
+endfunction()
+
+
 # Production RTC transport.
 #
 # libdatachannel provides ICE/STUN/TURN, DTLS-SRTP media transport, and WebSocket signaling.

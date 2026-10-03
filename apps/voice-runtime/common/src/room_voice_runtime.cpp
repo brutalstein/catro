@@ -48,6 +48,8 @@ int run_room_voice(const tools::VoicePeerOptions& options,
     media_config.local_stream_id = options.stream_id;
     media_config.jitter_target_packets = options.jitter_packets;
     media_config.encoder.bitrate = options.bitrate;
+    // Echo cancellation, noise suppression, and automatic gain, on by default like Discord.
+    media_config.processing = voice::VoiceProcessingConfig{};
 
     auto pipeline_result = voice::VoicePipeline::create(media_config);
     if (const auto* failure = std::get_if<voice::CodecError>(&pipeline_result)) {

@@ -4,6 +4,7 @@
 #include <catro/voice/codec.hpp>
 #include <catro/voice/jitter.hpp>
 #include <catro/voice/packet.hpp>
+#include <catro/voice/voice_processor.hpp>
 
 #include <array>
 #include <atomic>
@@ -28,6 +29,8 @@ struct VoicePipelineConfig {
     std::size_t capture_queue_frames = kDefaultRealtimeQueueFrames;
     std::size_t render_queue_frames = kDefaultRealtimeQueueFrames;
     EncoderConfig encoder;
+    // Echo cancellation, noise suppression, and gain control. Off unless a runtime asks for it.
+    std::optional<VoiceProcessingConfig> processing;
 };
 
 struct OutboundDatagram {
@@ -93,6 +96,9 @@ public:
     [[nodiscard]] bool muted() const noexcept { return muted_.load(std::memory_order_acquire); }
     void set_deafened(bool value) noexcept { render_.set_deafened(value); }
     [[nodiscard]] bool deafened() const noexcept { return render_.deafened(); }
+    // Applies new settings when processing was enabled at creation; otherwise does nothing.
+    void set_processing(const VoiceProcessingConfig& config) noexcept;
+    [[nodiscard]] bool processing_available() const noexcept { return processor_ != nullptr; }
 
     [[nodiscard]] std::variant<EncodeStep, CodecError> encode_next(OutboundDatagram& datagram) noexcept;
     [[nodiscard]] ReceiveResult receive(std::span<const std::byte> datagram) noexcept;
@@ -105,7 +111,8 @@ public:
 private:
     struct RemoteStream;
 
-    VoicePipeline(const VoicePipelineConfig& config, std::unique_ptr<Encoder> encoder);
+    VoicePipeline(const VoicePipelineConfig& config, std::unique_ptr<Encoder> encoder,
+                  std::unique_ptr<VoiceProcessor> processor);
 
     [[nodiscard]] RemoteStream* find_remote(std::uint32_t stream_id) noexcept;
     [[nodiscard]] JitterStatistics aggregate_jitter_statistics() const noexcept;
@@ -113,6 +120,7 @@ private:
     CaptureBridge capture_;
     RenderBridge render_;
     std::unique_ptr<Encoder> encoder_;
+    std::unique_ptr<VoiceProcessor> processor_;
     std::array<std::unique_ptr<RemoteStream>, kMaxRemoteVoiceStreams> remotes_{};
     std::uint16_t jitter_target_packets_ = kDefaultJitterTargetPackets;
     PcmFrame capture_frame_{};

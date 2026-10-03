@@ -53,6 +53,9 @@ target_link_libraries(catro_voice_realtime_test PRIVATE Catro::Voice)
 catro_add_test(voice_pipeline voice/pipeline_test.cpp)
 target_link_libraries(catro_voice_pipeline_test PRIVATE Catro::Voice)
 
+catro_add_test(voice_processor voice/voice_processor_test.cpp)
+target_link_libraries(catro_voice_processor_test PRIVATE Catro::Voice)
+
 catro_add_test(room_voice_runtime voice/room_voice_runtime_test.cpp)
 target_link_libraries(catro_room_voice_runtime_test PRIVATE catro_room_voice)
 catro_add_test(screen_transport_runtime video/screen_transport_runtime_test.cpp)

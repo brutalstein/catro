@@ -23,6 +23,8 @@ Fetched by CMake `FetchContent` at configure time and pinned by commit in
 | nlohmann/json | `65ee68451d8eb2b5f3a30b410476ab83deb3289b` | `core/reporting` only (private link). |
 | Catch2 | `95d8a61b089317bec800c7cc4c64064cbcb3802d` | Tests only. |
 | libopus | `1.6.1` source archive, SHA256 `6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1` | `core/voice` codec only. |
+| webrtc-audio-processing | `v2.1` (`846fe90a289f58b7c9303a635142aa2c7caa93e5`), built by `cmake/WebRtcApmSources.cmake` | `core/voice` echo cancellation, noise suppression, gain control (private link). |
+| Abseil | `20240722.0` source archive, SHA256 `f50e5ac311a81382da7fa75b97310e4b9006474f9560ac46f54a9967f07d4ae3` | webrtc-audio-processing only. |
 
 ## Windows shell NuGet packages
 
