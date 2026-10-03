@@ -65,6 +65,9 @@ private:
         const std::vector<catro::platform::windows::DirectoryMember>& members);
     // Rebuilds member rows with live speaking state; unchanged rows are left alone.
     void RenderMemberRows();
+    // Sends saved voice preferences to the runtime when they changed since the last call.
+    void ApplyVoicePreferences();
+    void UpdatePushToTalk(bool joined);
     Microsoft::UI::Xaml::Controls::Flyout MemberVolumeFlyout();
     winrt::fire_and_forget BeginMemberRefresh();
     void ResetAccessRequests();
@@ -119,6 +122,10 @@ private:
     std::string room_peer_id_;
     CatroVoiceRuntimeHandle voice_runtime_ = nullptr;
     Microsoft::UI::Dispatching::DispatcherQueueTimer voice_timer_{nullptr};
+    // Push-to-talk reads the key every 15 ms only while joined in push-to-talk mode.
+    Microsoft::UI::Dispatching::DispatcherQueueTimer push_to_talk_timer_{nullptr};
+    std::uint32_t applied_voice_preferences_ = ~0U;
+    bool push_to_talk_down_ = false;
     Microsoft::UI::Dispatching::DispatcherQueueTimer message_timer_{nullptr};
     Microsoft::UI::Dispatching::DispatcherQueueTimer member_timer_{nullptr};
     Microsoft::UI::Dispatching::DispatcherQueueTimer access_timer_{nullptr};

@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <variant>
 
 using namespace catro::voice;
@@ -124,4 +125,35 @@ TEST_CASE("pipeline reports who speaks and applies per-user volume") {
 
     receiver.reset();
     CHECK(receiver_controls.speaking(speaking) == 0);
+}
+
+TEST_CASE("voice activity gate sends quiet input as silence and reports the input level") {
+    StreamControls controls;
+    auto pipeline = make_pipeline(0x91000003U, &controls);
+    double phase = 0.0;
+
+    // Without a threshold every frame passes.
+    (void)encode(*pipeline, tone(phase, 0.001F));
+    CHECK(pipeline->statistics().gated_frames == 0);
+
+    // Automatic: a -63 dBFS hum stays closed, speech opens the gate.
+    pipeline->set_input_threshold(std::nullopt);
+    for (int frame = 0; frame < 20; ++frame) {
+        (void)encode(*pipeline, tone(phase, 0.001F));
+    }
+    CHECK(pipeline->statistics().gated_frames >= 5);
+    CHECK_FALSE(controls.local_speaking());
+    CHECK(controls.local_level() < -55.0F);
+    const auto gated = pipeline->statistics().gated_frames;
+    (void)encode(*pipeline, tone(phase, 0.2F));
+    CHECK(pipeline->statistics().gated_frames == gated);
+    CHECK(controls.local_speaking());
+    CHECK(controls.local_level() > -20.0F);
+
+    // A manual -10 dBFS threshold closes on a -17 dBFS voice once the hangover ends.
+    pipeline->set_input_threshold(-10.0F);
+    for (int frame = 0; frame < 20; ++frame) {
+        (void)encode(*pipeline, tone(phase, 0.2F));
+    }
+    CHECK_FALSE(controls.local_speaking());
 }

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // Same appearance choices as the Windows Settings page: Ivory is the light theme, Espresso the
@@ -34,6 +35,15 @@ struct SettingsView: View {
     @ObservedObject var model: AppModel
     @AppStorage("appearance") private var appearance = Appearance.system.rawValue
     @State private var name = ""
+    @AppStorage(VoicePreferenceKey.pushToTalk) private var pushToTalk = false
+    @AppStorage(VoicePreferenceKey.pushToTalkKey) private var pushToTalkKey = PushToTalkShortcut.none
+    @AppStorage(VoicePreferenceKey.pushToTalkName) private var pushToTalkName = ""
+    @AppStorage(VoicePreferenceKey.automaticSensitivity) private var automaticSensitivity = true
+    @AppStorage(VoicePreferenceKey.sensitivityDb) private var sensitivityDb = -50.0
+    @AppStorage(VoicePreferenceKey.echoCancellation) private var echoCancellation = true
+    @AppStorage(VoicePreferenceKey.noiseSuppression) private var noiseSuppression = true
+    @AppStorage(VoicePreferenceKey.automaticGain) private var automaticGain = true
+    @State private var recorder: Any?
 
     var body: some View {
         Form {
@@ -58,6 +68,40 @@ struct SettingsView: View {
                 LabeledContent("Microphone", value: "Default")
                 LabeledContent("Output", value: "Default")
             }
+            Section("Voice") {
+                Picker("Input mode", selection: $pushToTalk) {
+                    Text("Voice activity").tag(false)
+                    Text("Push to talk").tag(true)
+                }
+                .pickerStyle(.segmented)
+                if pushToTalk {
+                    LabeledContent("Shortcut") {
+                        Button(recorder != nil ? "Press a key…" : (pushToTalkName.isEmpty ? "Record keybind" : pushToTalkName),
+                               action: record)
+                    }
+                    Text("Works in every app once Catro has Accessibility access. Mouse side buttons work too; Esc cancels.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Toggle("Automatically determine input sensitivity", isOn: $automaticSensitivity)
+                LabeledContent("Threshold") {
+                    HStack {
+                        Slider(value: $sensitivityDb, in: -100...0, step: 1)
+                        Text("\(Int(sensitivityDb)) dB").monospacedDigit()
+                    }
+                }
+                .disabled(automaticSensitivity)
+                Toggle("Echo cancellation", isOn: $echoCancellation)
+                Toggle("Noise suppression", isOn: $noiseSuppression)
+                Toggle("Automatic gain control", isOn: $automaticGain)
+            }
+            .onChange(of: pushToTalk) { _ in model.applyVoicePreferences() }
+            .onChange(of: pushToTalkKey) { _ in model.applyVoicePreferences() }
+            .onChange(of: automaticSensitivity) { _ in model.applyVoicePreferences() }
+            .onChange(of: sensitivityDb) { _ in model.applyVoicePreferences() }
+            .onChange(of: echoCancellation) { _ in model.applyVoicePreferences() }
+            .onChange(of: noiseSuppression) { _ in model.applyVoicePreferences() }
+            .onChange(of: automaticGain) { _ in model.applyVoicePreferences() }
             Section("Performance") {
                 LabeledContent("Profile", value: "Balanced")
             }
@@ -66,6 +110,28 @@ struct SettingsView: View {
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
         .onAppear { name = model.snapshot?.identityName ?? "" }
+        .onDisappear(perform: stopRecording)
+    }
+
+    // The next key or mouse button pressed in Catro becomes the push-to-talk shortcut.
+    private func record() {
+        guard recorder == nil else { return }
+        recorder = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .otherMouseDown]) { event in
+            guard let read = PushToTalkShortcut.read(event), read.down else { return event }
+            if event.type != .keyDown || event.keyCode != 53 { // 53 is Esc
+                pushToTalkKey = read.shortcut
+                pushToTalkName = PushToTalkShortcut.name(for: event)
+            }
+            stopRecording()
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        if let recorder {
+            NSEvent.removeMonitor(recorder)
+        }
+        recorder = nil
     }
 
     private func save() {

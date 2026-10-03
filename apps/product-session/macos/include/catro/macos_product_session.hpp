@@ -114,6 +114,9 @@ struct ProductMediaApi {
     CatroVoiceRuntimeSnapshot (*voice_snapshot)(CatroVoiceRuntimeHandle) noexcept = nullptr;
     void (*voice_set_user_volume)(CatroVoiceRuntimeHandle, const char*, float) noexcept = nullptr;
     std::uint8_t (*voice_user_speaking)(CatroVoiceRuntimeHandle, const char*) noexcept = nullptr;
+    void (*voice_set_processing)(CatroVoiceRuntimeHandle, std::uint8_t, std::uint8_t, std::uint8_t) noexcept = nullptr;
+    void (*voice_set_input_threshold)(CatroVoiceRuntimeHandle, float) noexcept = nullptr;
+    void (*voice_set_transmit)(CatroVoiceRuntimeHandle, std::uint8_t) noexcept = nullptr;
 };
 
 [[nodiscard]] ProductMediaApi native_media_api() noexcept;
@@ -205,6 +208,11 @@ public:
     [[nodiscard]] std::vector<std::string> speaking_members() const;
     // 0 silences, 1 is unchanged, 2 doubles; kept until the session stops.
     void set_member_volume(const std::string& user_id, float volume);
+    // Main thread, applied live by the voice worker. Threshold in dBFS; NaN is automatic.
+    void set_voice_processing(bool echo_cancellation, bool noise_suppression, bool automatic_gain);
+    void set_input_threshold(float dbfs);
+    // Push-to-talk: false keeps the microphone closed.
+    void set_transmit(bool transmit);
 
 private:
     struct Impl;

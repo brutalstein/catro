@@ -74,6 +74,9 @@ ProductMediaApi native_media_api() noexcept {
     api.voice_snapshot = catro_voice_runtime_snapshot;
     api.voice_set_user_volume = catro_voice_runtime_set_user_volume;
     api.voice_user_speaking = catro_voice_runtime_user_speaking;
+    api.voice_set_processing = catro_voice_runtime_set_processing;
+    api.voice_set_input_threshold = catro_voice_runtime_set_input_threshold;
+    api.voice_set_transmit = catro_voice_runtime_set_transmit;
     return api;
 }
 
@@ -919,6 +922,28 @@ std::vector<std::string> ProductSession::speaking_members() const {
         }
     }
     return speaking;
+}
+
+void ProductSession::set_voice_processing(bool echo_cancellation, bool noise_suppression, bool automatic_gain) {
+    const auto voice = impl_->live_voice_.load(std::memory_order_acquire);
+    if (voice != nullptr && impl_->deps_.media.voice_set_processing != nullptr) {
+        impl_->deps_.media.voice_set_processing(voice, echo_cancellation ? 1U : 0U, noise_suppression ? 1U : 0U,
+                                                automatic_gain ? 1U : 0U);
+    }
+}
+
+void ProductSession::set_input_threshold(float dbfs) {
+    const auto voice = impl_->live_voice_.load(std::memory_order_acquire);
+    if (voice != nullptr && impl_->deps_.media.voice_set_input_threshold != nullptr) {
+        impl_->deps_.media.voice_set_input_threshold(voice, dbfs);
+    }
+}
+
+void ProductSession::set_transmit(bool transmit) {
+    const auto voice = impl_->live_voice_.load(std::memory_order_acquire);
+    if (voice != nullptr && impl_->deps_.media.voice_set_transmit != nullptr) {
+        impl_->deps_.media.voice_set_transmit(voice, transmit ? 1U : 0U);
+    }
 }
 
 void ProductSession::set_member_volume(const std::string& user_id, float volume) {

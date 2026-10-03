@@ -69,6 +69,25 @@ void catro_voice_runtime_set_user_volume(CatroVoiceRuntimeHandle handle, const c
     }
 }
 
+void catro_voice_runtime_set_processing(CatroVoiceRuntimeHandle handle, std::uint8_t echo_cancellation,
+                                        std::uint8_t noise_suppression, std::uint8_t automatic_gain) noexcept {
+    if (handle != nullptr) {
+        host(handle).set_processing(echo_cancellation != 0, noise_suppression != 0, automatic_gain != 0);
+    }
+}
+
+void catro_voice_runtime_set_input_threshold(CatroVoiceRuntimeHandle handle, float dbfs) noexcept {
+    if (handle != nullptr) {
+        host(handle).set_input_threshold(dbfs);
+    }
+}
+
+void catro_voice_runtime_set_transmit(CatroVoiceRuntimeHandle handle, std::uint8_t transmit) noexcept {
+    if (handle != nullptr) {
+        host(handle).set_transmit(transmit != 0);
+    }
+}
+
 std::uint8_t catro_voice_runtime_user_speaking(CatroVoiceRuntimeHandle handle, const char* user_id) noexcept {
     return handle != nullptr && host(handle).user_speaking(user_id) ? 1U : 0U;
 }

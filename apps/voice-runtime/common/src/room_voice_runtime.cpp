@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <memory>
 #include <optional>
@@ -45,13 +46,18 @@ int run_room_voice(const tools::VoicePeerOptions& options,
                    audio::AudioPlatform& platform,
                    tools::VoicePeerControl& control,
                    voice::StreamControls& streams,
+                   const LiveVoiceSettings& settings,
                    std::string& error_text) {
     voice::VoicePipelineConfig media_config;
     media_config.local_stream_id = options.stream_id;
     media_config.jitter_target_packets = options.jitter_packets;
     media_config.encoder.bitrate = options.bitrate;
     // Echo cancellation, noise suppression, and automatic gain, on by default like Discord.
-    media_config.processing = voice::VoiceProcessingConfig{};
+    media_config.processing = voice::VoiceProcessingConfig{
+        .echo_cancellation = settings.echo_cancellation.load(std::memory_order_relaxed),
+        .noise_suppression = settings.noise_suppression.load(std::memory_order_relaxed),
+        .automatic_gain = settings.automatic_gain.load(std::memory_order_relaxed),
+    };
     media_config.controls = &streams;
 
     auto pipeline_result = voice::VoicePipeline::create(media_config);
@@ -97,10 +103,23 @@ int run_room_voice(const tools::VoicePeerOptions& options,
         return true;
     };
 
+    // Forces the first pass to apply the threshold and processing settings.
+    auto applied_settings = settings.version.load(std::memory_order_acquire) - 1U;
     while (!control.stop_requested.load(std::memory_order_acquire)) {
         const bool deafened = control.deafened.load(std::memory_order_acquire);
         pipeline->set_deafened(deafened);
-        pipeline->set_muted(deafened || control.muted.load(std::memory_order_acquire));
+        pipeline->set_muted(deafened || control.muted.load(std::memory_order_acquire) ||
+                            !settings.transmit.load(std::memory_order_acquire));
+        if (const auto version = settings.version.load(std::memory_order_acquire); version != applied_settings) {
+            applied_settings = version;
+            pipeline->set_processing({
+                .echo_cancellation = settings.echo_cancellation.load(std::memory_order_relaxed),
+                .noise_suppression = settings.noise_suppression.load(std::memory_order_relaxed),
+                .automatic_gain = settings.automatic_gain.load(std::memory_order_relaxed),
+            });
+            const auto threshold = settings.input_threshold_db.load(std::memory_order_relaxed);
+            pipeline->set_input_threshold(std::isnan(threshold) ? std::nullopt : std::optional<float>{threshold});
+        }
 
         const auto room_snapshot = api.snapshot(room);
         if (room_snapshot.state == CATRO_ROOM_FAILED) {
@@ -249,7 +268,7 @@ std::int32_t VoiceRuntimeHost::start(const CatroVoiceRuntimeConfig& config) noex
             std::string error;
             int code = tools::voice_peer_ok;
             if (room != nullptr) {
-                code = run_room_voice(options, room, room_, platform_, control_, streams_, error);
+                code = run_room_voice(options, room, room_, platform_, control_, streams_, settings_, error);
             } else {
                 std::ostringstream stream;
                 code = direct_(options, control_, stream);
@@ -301,6 +320,7 @@ CatroVoiceRuntimeSnapshot VoiceRuntimeHost::snapshot() const noexcept {
     result.peer_unreachable_events = control_.peer_unreachable_events.load(std::memory_order_relaxed);
     result.peer_seen = result.received_packets > 0 ? 1U : 0U;
     result.speaking = streams_.local_speaking() ? 1U : 0U;
+    result.input_level = streams_.local_level();
 
     std::scoped_lock error_lock(error_mutex_);
     if (!error_.empty()) {
@@ -314,6 +334,23 @@ void VoiceRuntimeHost::set_user_volume(const char* user_id, float volume) noexce
     if (user_id != nullptr && user_id[0] != '\0') {
         streams_.set_volume(voice::user_stream_id(user_id), volume);
     }
+}
+
+void VoiceRuntimeHost::set_processing(bool echo_cancellation, bool noise_suppression,
+                                      bool automatic_gain) noexcept {
+    settings_.echo_cancellation.store(echo_cancellation, std::memory_order_relaxed);
+    settings_.noise_suppression.store(noise_suppression, std::memory_order_relaxed);
+    settings_.automatic_gain.store(automatic_gain, std::memory_order_relaxed);
+    settings_.version.fetch_add(1, std::memory_order_release);
+}
+
+void VoiceRuntimeHost::set_input_threshold(float dbfs) noexcept {
+    settings_.input_threshold_db.store(dbfs, std::memory_order_relaxed);
+    settings_.version.fetch_add(1, std::memory_order_release);
+}
+
+void VoiceRuntimeHost::set_transmit(bool transmit) noexcept {
+    settings_.transmit.store(transmit, std::memory_order_release);
 }
 
 bool VoiceRuntimeHost::user_speaking(const char* user_id) const noexcept {

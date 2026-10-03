@@ -3,6 +3,9 @@
 #include "Settings/SettingsView.xaml.h"
 #include "Settings/Appearance.hpp"
 #include "Settings/Performance.hpp"
+#include "Settings/Voice.hpp"
+
+#include <chrono>
 #if __has_include("SettingsView.g.cpp")
 #include "SettingsView.g.cpp"
 #endif
@@ -15,6 +18,110 @@ void SettingsView::InitializeComponent() {
     AppearanceBox().SelectedIndex(
         static_cast<int32_t>(catro::shell::load_appearance()));
     LocalPreviewToggle().IsOn(catro::shell::local_preview_preference());
+    LoadVoicePreferences();
+}
+
+namespace {
+
+std::wstring key_name(std::uint32_t key) {
+    switch (key) {
+    case 0:
+        return L"Record keybind";
+    case VK_MBUTTON:
+        return L"Mouse 3";
+    case VK_XBUTTON1:
+        return L"Mouse 4";
+    case VK_XBUTTON2:
+        return L"Mouse 5";
+    default:
+        break;
+    }
+    wchar_t name[64]{};
+    const auto scan = MapVirtualKeyW(key, MAPVK_VK_TO_VSC);
+    if (scan != 0 && GetKeyNameTextW(static_cast<LONG>(scan << 16U), name, 64) > 0) {
+        return name;
+    }
+    return L"Key " + std::to_wstring(key);
+}
+
+} // namespace
+
+void SettingsView::LoadVoicePreferences() {
+    loading_voice_ = true;
+    const auto& preferences = catro::shell::voice_preferences();
+    InputModeBox().SelectedIndex(preferences.push_to_talk ? 1 : 0);
+    AutoSensitivityToggle().IsOn(preferences.automatic_sensitivity);
+    SensitivitySlider().Value(preferences.sensitivity_db);
+    SensitivitySlider().IsEnabled(!preferences.automatic_sensitivity);
+    EchoToggle().IsOn(preferences.echo_cancellation);
+    NoiseToggle().IsOn(preferences.noise_suppression);
+    GainToggle().IsOn(preferences.automatic_gain);
+    PushToTalkRow().Visibility(preferences.push_to_talk ? Microsoft::UI::Xaml::Visibility::Visible
+                                                        : Microsoft::UI::Xaml::Visibility::Collapsed);
+    ShowPushToTalkKey();
+    loading_voice_ = false;
+}
+
+void SettingsView::ShowPushToTalkKey() {
+    PushToTalkKeyButton().Content(box_value(hstring{key_name(catro::shell::voice_preferences().push_to_talk_key)}));
+}
+
+void SettingsView::SaveVoicePreferences() {
+    if (loading_voice_) {
+        return;
+    }
+    auto preferences = catro::shell::voice_preferences();
+    preferences.push_to_talk = InputModeBox().SelectedIndex() == 1;
+    preferences.automatic_sensitivity = AutoSensitivityToggle().IsOn();
+    preferences.sensitivity_db = static_cast<float>(SensitivitySlider().Value());
+    preferences.echo_cancellation = EchoToggle().IsOn();
+    preferences.noise_suppression = NoiseToggle().IsOn();
+    preferences.automatic_gain = GainToggle().IsOn();
+    catro::shell::save_voice_preferences(preferences);
+    SensitivitySlider().IsEnabled(!preferences.automatic_sensitivity);
+    PushToTalkRow().Visibility(preferences.push_to_talk ? Microsoft::UI::Xaml::Visibility::Visible
+                                                        : Microsoft::UI::Xaml::Visibility::Collapsed);
+}
+
+void SettingsView::OnInputModeChanged(IInspectable const&,
+                                      Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&) {
+    SaveVoicePreferences();
+}
+
+void SettingsView::OnVoiceToggleChanged(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&) {
+    SaveVoicePreferences();
+}
+
+void SettingsView::OnSensitivityChanged(
+    IInspectable const&, Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const&) {
+    SaveVoicePreferences();
+}
+
+// Polls every key and mouse button instead of listening to this page, so side buttons and keys
+// pressed while another window has focus are captured the same way push-to-talk reads them.
+void SettingsView::OnRecordPushToTalk(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&) {
+    using namespace std::chrono_literals;
+    if (!record_timer_) {
+        record_timer_ = DispatcherQueue().CreateTimer();
+        record_timer_.Interval(15ms);
+        record_timer_.Tick([this](auto&&, auto&&) {
+            for (std::uint32_t key = VK_RBUTTON; key <= 0xFEU; ++key) {
+                if ((GetAsyncKeyState(static_cast<int>(key)) & 0x8000) == 0) {
+                    continue;
+                }
+                record_timer_.Stop();
+                if (key != VK_ESCAPE) {
+                    auto preferences = catro::shell::voice_preferences();
+                    preferences.push_to_talk_key = key;
+                    catro::shell::save_voice_preferences(preferences);
+                }
+                ShowPushToTalkKey();
+                return;
+            }
+        });
+    }
+    PushToTalkKeyButton().Content(box_value(L"Press a key…"));
+    record_timer_.Start();
 }
 
 void SettingsView::OnPreviewChanged(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&) {

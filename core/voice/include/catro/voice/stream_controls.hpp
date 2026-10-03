@@ -11,6 +11,7 @@ namespace catro::voice {
 
 inline constexpr std::size_t kMaxControlledStreams = 64;
 inline constexpr float kMaxStreamVolume = 2.0F;
+inline constexpr float kSilenceDbfs = -100.0F;
 
 // Room voice stream id of a user, from the hex identity id that the directory and the room share.
 // Every platform derives it the same way, so a member row can find its speaker without signaling.
@@ -31,12 +32,16 @@ public:
 
     void set_local_speaking(bool speaking) noexcept { local_speaking_.store(speaking, std::memory_order_relaxed); }
     [[nodiscard]] bool local_speaking() const noexcept { return local_speaking_.load(std::memory_order_relaxed); }
+    // Microphone level after processing, in dBFS (kSilenceDbfs when silent), for sensitivity meters.
+    void set_local_level(float dbfs) noexcept { local_level_.store(dbfs, std::memory_order_relaxed); }
+    [[nodiscard]] float local_level() const noexcept { return local_level_.load(std::memory_order_relaxed); }
 
 private:
     // stream id in the high half, volume float bits in the low half; 0 marks a free slot.
     std::array<std::atomic<std::uint64_t>, kMaxControlledStreams> volumes_{};
     std::array<std::atomic<std::uint32_t>, kMaxControlledStreams> speaking_{};
     std::atomic_bool local_speaking_{false};
+    std::atomic<float> local_level_{kSilenceDbfs};
 };
 
 } // namespace catro::voice

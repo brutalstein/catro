@@ -15,6 +15,12 @@ struct SettingsView : SettingsViewT<SettingsView> {
     void ShowProfile(bool show);
     void OnProfileTab(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnAppearanceTab(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnVoiceTab(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnInputModeChanged(IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
+    void OnVoiceToggleChanged(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnSensitivityChanged(
+        IInspectable const&, Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const&);
+    void OnRecordPushToTalk(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnSaveProfile(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnCopyIdentity(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnPreviewChanged(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
@@ -23,7 +29,14 @@ struct SettingsView : SettingsViewT<SettingsView> {
         Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
 
 private:
+    enum class Panel { profile, appearance, voice };
+    void ShowPanel(Panel panel);
+    void LoadVoicePreferences();
+    void SaveVoicePreferences();
+    void ShowPushToTalkKey();
     winrt::fire_and_forget SaveProfile();
+    Microsoft::UI::Dispatching::DispatcherQueueTimer record_timer_{nullptr};
+    bool loading_voice_ = false;
     std::optional<catro::community::LocalState> local_state_;
     std::function<void(catro::community::LocalState const&)> profile_changed_;
     bool saving_ = false;

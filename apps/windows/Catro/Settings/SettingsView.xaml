@@ -19,6 +19,8 @@
                                   Padding="18,9" CornerRadius="10" />
                     <ToggleButton x:Name="AppearanceTab" Content="Appearance &amp; performance"
                                   Click="OnAppearanceTab" IsChecked="True" Padding="18,9" CornerRadius="10" />
+                    <ToggleButton x:Name="VoiceTab" Content="Voice &amp; video" Click="OnVoiceTab"
+                                  Padding="18,9" CornerRadius="10" />
                 </StackPanel>
                 <StackPanel x:Name="ProfilePanel" Visibility="Collapsed" Spacing="20">
                     <Border Style="{StaticResource CatroCardStyle}" Padding="24">
@@ -92,6 +94,8 @@
                                    FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource CatroTextTertiaryBrush}" />
                     </StackPanel>
                 </Border>
+                </StackPanel>
+                <StackPanel x:Name="VoicePanel" Visibility="Collapsed" Spacing="24">
                 <Border Style="{StaticResource CatroCardStyle}" Padding="20">
                     <StackPanel Spacing="16">
                         <TextBlock Text="Audio" Style="{StaticResource CatroSectionTitleTextStyle}" />
@@ -110,6 +114,49 @@
                             <TextBlock Grid.Row="1" Grid.Column="1" Text="Default" Margin="0,12,0,0" Style="{StaticResource CatroSecondaryTextStyle}" />
                         </Grid>
                         <TextBlock Text="Uses your Windows default devices. Device diagnostics are available in System."
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource CatroCardStyle}" Padding="20">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="Input mode" Style="{StaticResource CatroSectionTitleTextStyle}" />
+                        <RadioButtons x:Name="InputModeBox" SelectionChanged="OnInputModeChanged"
+                                      AutomationProperties.Name="Input mode">
+                            <x:String>Voice activity</x:String>
+                            <x:String>Push to talk</x:String>
+                        </RadioButtons>
+                        <StackPanel x:Name="PushToTalkRow" Orientation="Horizontal" Spacing="12">
+                            <TextBlock Text="Shortcut" VerticalAlignment="Center" Style="{StaticResource CatroBodyTextStyle}" />
+                            <Button x:Name="PushToTalkKeyButton" Content="Record keybind" Click="OnRecordPushToTalk"
+                                    Style="{StaticResource CatroSecondaryButtonStyle}"
+                                    AutomationProperties.Name="Push to talk shortcut" />
+                        </StackPanel>
+                        <TextBlock Text="Hold the shortcut anywhere, even inside a game. Mouse side buttons work too; Esc cancels recording."
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource CatroCardStyle}" Padding="20">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="Input sensitivity" Style="{StaticResource CatroSectionTitleTextStyle}" />
+                        <ToggleSwitch x:Name="AutoSensitivityToggle" Header="Automatically determine input sensitivity"
+                                      Toggled="OnVoiceToggleChanged" AutomationProperties.Name="Automatic input sensitivity" />
+                        <Slider x:Name="SensitivitySlider" Header="Threshold (dB)" Minimum="-100" Maximum="0"
+                                StepFrequency="1" ValueChanged="OnSensitivityChanged"
+                                AutomationProperties.Name="Input sensitivity threshold" />
+                        <TextBlock Text="Sound quieter than the threshold is never sent, so friends hear clean silence between your words."
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource CatroCardStyle}" Padding="20">
+                    <StackPanel Spacing="16">
+                        <TextBlock Text="Voice processing" Style="{StaticResource CatroSectionTitleTextStyle}" />
+                        <ToggleSwitch x:Name="EchoToggle" Header="Echo cancellation" Toggled="OnVoiceToggleChanged"
+                                      AutomationProperties.Name="Echo cancellation" />
+                        <ToggleSwitch x:Name="NoiseToggle" Header="Noise suppression" Toggled="OnVoiceToggleChanged"
+                                      AutomationProperties.Name="Noise suppression" />
+                        <ToggleSwitch x:Name="GainToggle" Header="Automatic gain control" Toggled="OnVoiceToggleChanged"
+                                      AutomationProperties.Name="Automatic gain control" />
+                        <TextBlock Text="Changes apply right away, even during a call."
                                    FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource CatroTextTertiaryBrush}" />
                     </StackPanel>
                 </Border>

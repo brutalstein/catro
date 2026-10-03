@@ -150,6 +150,12 @@ __attribute__((objc_subclassing_restricted))
 - (NSArray<NSString*>*)speakingMembers;
 // 0 silences, 1 is unchanged, 2 doubles.
 - (void)setVolume:(float)volume forMember:(NSString*)identifier NS_SWIFT_NAME(setVolume(_:forMember:));
+// Main thread; applied live during a call. A NaN threshold picks it automatically.
+- (void)setVoiceProcessingEcho:(BOOL)echo noise:(BOOL)noise gain:(BOOL)gain
+    NS_SWIFT_NAME(setVoiceProcessing(echo:noise:gain:));
+- (void)setInputThreshold:(float)dbfs;
+// Push-to-talk: NO keeps the microphone closed.
+- (void)setTransmit:(BOOL)transmit;
 
 // Main thread only. Hosts the local preview / remote stream inside a caller-owned layer; nil
 // detaches. Returns nil on success, otherwise the failure.

@@ -211,6 +211,9 @@ struct FakeMedia {
     std::string speaking_user;
     std::string volume_user;
     float volume = 1.0F;
+    std::uint8_t processing = 0;
+    float threshold = 0.0F;
+    std::uint8_t transmit = 1;
     int room_storage = 0;
     int voice_storage = 0;
 
@@ -316,6 +319,19 @@ product::ProductMediaApi fake_media_api() {
     api.voice_user_speaking = [](CatroVoiceRuntimeHandle, const char* user_id) noexcept -> std::uint8_t {
         std::scoped_lock lock(g_media->mutex);
         return g_media->speaking_user == user_id ? 1U : 0U;
+    };
+    api.voice_set_processing = [](CatroVoiceRuntimeHandle, std::uint8_t echo, std::uint8_t noise,
+                                  std::uint8_t gain) noexcept {
+        std::scoped_lock lock(g_media->mutex);
+        g_media->processing = static_cast<std::uint8_t>(echo | (noise << 1U) | (gain << 2U));
+    };
+    api.voice_set_input_threshold = [](CatroVoiceRuntimeHandle, float dbfs) noexcept {
+        std::scoped_lock lock(g_media->mutex);
+        g_media->threshold = dbfs;
+    };
+    api.voice_set_transmit = [](CatroVoiceRuntimeHandle, std::uint8_t transmit) noexcept {
+        std::scoped_lock lock(g_media->mutex);
+        g_media->transmit = transmit;
     };
     return api;
 }
@@ -644,10 +660,16 @@ TEST_CASE("macOS product session joins voice through provisioning, room, voice a
     REQUIRE(speaking.size() == 2);
     CHECK(speaking[1] == "user-2");
     session.set_member_volume("user-2", 0.5F);
+    session.set_voice_processing(true, false, true);
+    session.set_input_threshold(-42.0F);
+    session.set_transmit(false);
     {
         std::scoped_lock lock(media.mutex);
         CHECK(media.volume_user == "user-2");
         CHECK(media.volume == 0.5F);
+        CHECK(media.processing == 0b101);
+        CHECK(media.threshold == -42.0F);
+        CHECK(media.transmit == 0);
         media.speaking_user.clear();
         media.self_speaking = 0;
     }

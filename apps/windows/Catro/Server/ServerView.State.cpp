@@ -1,6 +1,9 @@
 #include "pch.h"
 
 #include "Server/ServerView.xaml.h"
+#include "Settings/Voice.hpp"
+
+#include <cmath>
 
 #include <algorithm>
 #include <string>
@@ -103,6 +106,36 @@ void ServerView::UpdateMessageUi() {
     }
 }
 
+void ServerView::ApplyVoicePreferences() {
+    const auto version = catro::shell::voice_preferences_version();
+    if (voice_runtime_ == nullptr || version == applied_voice_preferences_) {
+        return;
+    }
+    applied_voice_preferences_ = version;
+    const auto& preferences = catro::shell::voice_preferences();
+    catro_voice_runtime_set_processing(voice_runtime_, preferences.echo_cancellation ? 1U : 0U,
+                                       preferences.noise_suppression ? 1U : 0U,
+                                       preferences.automatic_gain ? 1U : 0U);
+    catro_voice_runtime_set_input_threshold(
+        voice_runtime_, preferences.automatic_sensitivity ? NAN : preferences.sensitivity_db);
+}
+
+void ServerView::UpdatePushToTalk(bool joined) {
+    const auto& preferences = catro::shell::voice_preferences();
+    const bool active = joined && preferences.push_to_talk && preferences.push_to_talk_key != 0;
+    if (active == push_to_talk_timer_.IsRunning()) {
+        return;
+    }
+    // Entering push-to-talk closes the microphone until the key goes down; leaving reopens it.
+    push_to_talk_down_ = false;
+    catro_voice_runtime_set_transmit(voice_runtime_, active ? 0U : 1U);
+    if (active) {
+        push_to_talk_timer_.Start();
+    } else {
+        push_to_talk_timer_.Stop();
+    }
+}
+
 void ServerView::UpdateVoiceUi() {
     if (voice_runtime_ == nullptr) {
         JoinVoiceButton().IsEnabled(false);
@@ -112,6 +145,7 @@ void ServerView::UpdateVoiceUi() {
         return;
     }
     RenderMemberRows();
+    ApplyVoicePreferences();
 
     const auto snapshot =
         catro_voice_runtime_snapshot(
@@ -133,6 +167,7 @@ void ServerView::UpdateVoiceUi() {
     const bool joined =
         snapshot.state == CATRO_VOICE_JOINED &&
         room_ready;
+    UpdatePushToTalk(joined);
     const bool another_participant_sharing =
         room_mode_active_ &&
         room.screen_owner[0] != '\0' &&

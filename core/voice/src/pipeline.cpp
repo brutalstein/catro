@@ -16,13 +16,17 @@ constexpr float kLimiterReleasePerFrame = 0.02F;
 constexpr float kSpeakingMeanSquare = 3.2e-5F;
 constexpr std::uint16_t kSpeakingHangoverFrames = 15;
 
-// Returns true while the stream counts as speaking.
-[[nodiscard]] bool track_speaking(std::uint16_t& hangover, const PcmFrame& frame) noexcept {
+[[nodiscard]] float mean_square(const PcmFrame& frame) noexcept {
     float energy = 0.0F;
     for (const auto sample : frame) {
         energy += sample * sample;
     }
-    if (energy > kSpeakingMeanSquare * static_cast<float>(frame.size())) {
+    return energy / static_cast<float>(frame.size());
+}
+
+// Returns true while the stream counts as speaking.
+[[nodiscard]] bool track_speaking(std::uint16_t& hangover, float level, float threshold) noexcept {
+    if (level > threshold) {
         hangover = kSpeakingHangoverFrames;
     } else if (hangover > 0) {
         --hangover;
@@ -127,6 +131,11 @@ VoicePipeline::CreateResult VoicePipeline::create(
     }
 }
 
+void VoicePipeline::set_input_threshold(std::optional<float> dbfs) noexcept {
+    gate_mean_square_ = dbfs ? std::pow(10.0F, std::clamp(*dbfs, kSilenceDbfs, 0.0F) / 10.0F)
+                             : kSpeakingMeanSquare;
+}
+
 void VoicePipeline::set_processing(
     const VoiceProcessingConfig& config) noexcept {
     if (processor_) {
@@ -189,8 +198,17 @@ VoicePipeline::encode_next(
     } else if (processor_) {
         processor_->process_capture(capture_frame_);
     }
+    const auto level = mean_square(capture_frame_);
+    const auto threshold = gate_mean_square_ > 0.0F ? gate_mean_square_ : kSpeakingMeanSquare;
+    const bool speaking = track_speaking(local_speaking_hangover_, level, threshold);
+    if (gate_mean_square_ > 0.0F && !speaking) {
+        // Clean silence between words: no fan or keyboard noise, and Opus spends almost no bits.
+        std::fill(capture_frame_.begin(), capture_frame_.end(), 0.0F);
+        gated_frames_.fetch_add(1, std::memory_order_relaxed);
+    }
     if (controls_ != nullptr) {
-        controls_->set_local_speaking(track_speaking(local_speaking_hangover_, capture_frame_));
+        controls_->set_local_speaking(speaking);
+        controls_->set_local_level(level > 1e-10F ? 10.0F * std::log10(level) : kSilenceDbfs);
     }
 
     auto output =
@@ -478,7 +496,7 @@ VoicePipeline::decode_next() noexcept {
             // Speaking follows the sender's level, not the local volume, like Discord.
             controls_->set_speaking(
                 remote->stream_id,
-                track_speaking(remote->speaking_hangover, remote->decoded));
+                track_speaking(remote->speaking_hangover, mean_square(remote->decoded), kSpeakingMeanSquare));
             volume = controls_->volume(remote->stream_id);
         }
         for (std::size_t sample = 0;
@@ -590,6 +608,9 @@ VoicePipeline::statistics() const noexcept {
                 std::memory_order_relaxed),
         .muted_frames =
             muted_frames_.load(
+                std::memory_order_relaxed),
+        .gated_frames =
+            gated_frames_.load(
                 std::memory_order_relaxed),
         .received_datagrams =
             received_datagrams_.load(

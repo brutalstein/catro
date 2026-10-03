@@ -25,6 +25,11 @@ TEST_CASE("Windows voice runtime C ABI has deterministic idle control semantics"
     CHECK(catro_voice_runtime_user_speaking(handle, "ab01ff10") == 0);
     CHECK(catro_voice_runtime_user_speaking(handle, nullptr) == 0);
     CHECK(catro_voice_runtime_user_speaking(nullptr, "ab01ff10") == 0);
+    CHECK(snapshot.input_level == -100.0F);
+    catro_voice_runtime_set_processing(handle, 0, 1, 0);
+    catro_voice_runtime_set_input_threshold(handle, -40.0F);
+    catro_voice_runtime_set_transmit(handle, 0);
+    catro_voice_runtime_set_transmit(nullptr, 1);
 
     catro_voice_runtime_stop(handle);
     CHECK(catro_voice_runtime_snapshot(handle).state == CATRO_VOICE_IDLE);

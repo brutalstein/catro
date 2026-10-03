@@ -21,18 +21,29 @@ void SettingsView::SetProfile(
 }
 
 void SettingsView::ShowProfile(bool show) {
-    ProfilePanel().Visibility(show ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
-    AppearancePanel().Visibility(show ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
-    ProfileTab().IsChecked(show);
-    AppearanceTab().IsChecked(!show);
+    ShowPanel(show ? Panel::profile : Panel::appearance);
+}
+
+void SettingsView::ShowPanel(Panel panel) {
+    const auto visible = [](bool shown) { return shown ? xaml::Visibility::Visible : xaml::Visibility::Collapsed; };
+    ProfilePanel().Visibility(visible(panel == Panel::profile));
+    AppearancePanel().Visibility(visible(panel == Panel::appearance));
+    VoicePanel().Visibility(visible(panel == Panel::voice));
+    ProfileTab().IsChecked(panel == Panel::profile);
+    AppearanceTab().IsChecked(panel == Panel::appearance);
+    VoiceTab().IsChecked(panel == Panel::voice);
 }
 
 void SettingsView::OnProfileTab(IInspectable const&, xaml::RoutedEventArgs const&) {
-    ShowProfile(true);
+    ShowPanel(Panel::profile);
 }
 
 void SettingsView::OnAppearanceTab(IInspectable const&, xaml::RoutedEventArgs const&) {
-    ShowProfile(false);
+    ShowPanel(Panel::appearance);
+}
+
+void SettingsView::OnVoiceTab(IInspectable const&, xaml::RoutedEventArgs const&) {
+    ShowPanel(Panel::voice);
 }
 
 void SettingsView::OnSaveProfile(IInspectable const&, xaml::RoutedEventArgs const&) {

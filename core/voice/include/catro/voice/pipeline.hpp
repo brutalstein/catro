@@ -65,6 +65,7 @@ struct VoicePipelineStatistics {
     std::uint64_t encode_errors = 0;
     std::uint64_t outbound_bytes = 0;
     std::uint64_t muted_frames = 0;
+    std::uint64_t gated_frames = 0;
     std::uint64_t received_datagrams = 0;
     std::uint64_t malformed_datagrams = 0;
     std::uint64_t decoded_frames = 0;
@@ -102,6 +103,9 @@ public:
     // Applies new settings when processing was enabled at creation; otherwise does nothing.
     void set_processing(const VoiceProcessingConfig& config) noexcept;
     [[nodiscard]] bool processing_available() const noexcept { return processor_ != nullptr; }
+    // Voice activity gate, worker thread only: microphone frames quieter than the threshold (dBFS)
+    // are sent as silence. nullopt picks the threshold automatically. Off until first called.
+    void set_input_threshold(std::optional<float> dbfs) noexcept;
 
     [[nodiscard]] std::variant<EncodeStep, CodecError> encode_next(OutboundDatagram& datagram) noexcept;
     [[nodiscard]] ReceiveResult receive(std::span<const std::byte> datagram) noexcept;
@@ -137,6 +141,7 @@ private:
     std::atomic<std::uint64_t> encode_errors_{0};
     std::atomic<std::uint64_t> outbound_bytes_{0};
     std::atomic<std::uint64_t> muted_frames_{0};
+    std::atomic<std::uint64_t> gated_frames_{0};
     std::atomic_bool muted_{false};
     std::atomic<std::uint64_t> received_datagrams_{0};
     std::atomic<std::uint64_t> malformed_datagrams_{0};
@@ -149,6 +154,8 @@ private:
     std::uint64_t playout_tick_ = 0;
     float limiter_gain_ = 1.0F;
     std::uint16_t local_speaking_hangover_ = 0;
+    // Mean square per sample; 0 leaves the gate open.
+    float gate_mean_square_ = 0.0F;
 };
 
 } // namespace catro::voice

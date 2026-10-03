@@ -318,6 +318,7 @@ void ServerView::StartVoice(
 
     muted_ = false;
     deafened_ = false;
+    ApplyVoicePreferences();
     if (catro_voice_runtime_start(
             voice_runtime_,
             &config) == 0) {

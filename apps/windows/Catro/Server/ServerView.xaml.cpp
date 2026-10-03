@@ -6,6 +6,7 @@
 #endif
 
 #include <catro/screen_runtime.hpp>
+#include "Settings/Voice.hpp"
 
 #include <chrono>
 #include <memory>
@@ -61,6 +62,17 @@ void ServerView::InitializeComponent() {
     voice_timer_ = DispatcherQueue().CreateTimer();
     voice_timer_.Interval(500ms);
     voice_timer_.Tick([this](auto&&, auto&&) { UpdateVoiceUi(); });
+
+    push_to_talk_timer_ = DispatcherQueue().CreateTimer();
+    push_to_talk_timer_.Interval(15ms);
+    push_to_talk_timer_.Tick([this](auto&&, auto&&) {
+        const auto key = catro::shell::voice_preferences().push_to_talk_key;
+        const bool down = (GetAsyncKeyState(static_cast<int>(key)) & 0x8000) != 0;
+        if (down != push_to_talk_down_ && voice_runtime_ != nullptr) {
+            push_to_talk_down_ = down;
+            catro_voice_runtime_set_transmit(voice_runtime_, down ? 1U : 0U);
+        }
+    });
 
     message_timer_ = DispatcherQueue().CreateTimer();
     message_timer_.Interval(1s);

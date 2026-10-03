@@ -16,6 +16,8 @@ final class AppModel: ObservableObject {
     private let bridge = CatroProductBridge()
     private var timer: Timer?
     private var speakingTimer: Timer?
+    private lazy var pushToTalk = PushToTalkMonitor { [weak self] open in self?.bridge.setTransmit(open) }
+    private var pushToTalkShortcut: Int?
 
     var connected: Bool { snapshot?.connection == .synchronized }
 
@@ -31,6 +33,7 @@ final class AppModel: ObservableObject {
 
     func start() {
         guard timer == nil else { return }
+        VoicePreferenceKey.registerDefaults()
         bridge.start { [weak self] snapshot in
             Task { @MainActor in self?.apply(snapshot) }
         }
@@ -44,6 +47,7 @@ final class AppModel: ObservableObject {
         timer = nil
         speakingTimer?.invalidate()
         speakingTimer = nil
+        pushToTalk.stop()
         bridge.stop()
     }
 
@@ -62,10 +66,37 @@ final class AppModel: ObservableObject {
             speakingTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.refreshSpeaking() }
             }
+            applyVoicePreferences()
         } else if !joined, let speakingTimer {
             speakingTimer.invalidate()
             self.speakingTimer = nil
             speaking = []
+            updatePushToTalk()
+        }
+    }
+
+    // Sends the saved Voice settings to the call; Settings calls this after every change.
+    func applyVoicePreferences() {
+        let defaults = UserDefaults.standard
+        bridge.setVoiceProcessing(echo: defaults.bool(forKey: VoicePreferenceKey.echoCancellation),
+                                  noise: defaults.bool(forKey: VoicePreferenceKey.noiseSuppression),
+                                  gain: defaults.bool(forKey: VoicePreferenceKey.automaticGain))
+        bridge.setInputThreshold(defaults.bool(forKey: VoicePreferenceKey.automaticSensitivity)
+            ? .nan : Float(defaults.double(forKey: VoicePreferenceKey.sensitivityDb)))
+        updatePushToTalk()
+    }
+
+    private func updatePushToTalk() {
+        let defaults = UserDefaults.standard
+        let shortcut = defaults.integer(forKey: VoicePreferenceKey.pushToTalkKey)
+        let active = snapshot?.voicePhase == .joined && defaults.bool(forKey: VoicePreferenceKey.pushToTalk) &&
+            shortcut != PushToTalkShortcut.none
+        if active, pushToTalkShortcut != shortcut {
+            pushToTalk.start(shortcut: shortcut)
+            pushToTalkShortcut = shortcut
+        } else if !active, pushToTalkShortcut != nil {
+            pushToTalk.stop()
+            pushToTalkShortcut = nil
         }
     }
 

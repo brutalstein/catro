@@ -124,6 +124,7 @@
     <ClInclude Include="Settings\Appearance.hpp" />
     <ClInclude Include="Settings\Profile.hpp" />
     <ClInclude Include="Settings\Performance.hpp" />
+    <ClInclude Include="Settings\Voice.hpp" />
     <ClInclude Include="UiActivityPolicy.hpp" />
     <ClInclude Include="Settings\SettingsView.xaml.h">
       <DependentUpon>Settings\SettingsView.xaml</DependentUpon>

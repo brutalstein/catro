@@ -428,6 +428,24 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
     return result;
 }
 
+- (void)setVoiceProcessingEcho:(BOOL)echo noise:(BOOL)noise gain:(BOOL)gain {
+    if (_session) {
+        _session->set_voice_processing(echo, noise, gain);
+    }
+}
+
+- (void)setInputThreshold:(float)dbfs {
+    if (_session) {
+        _session->set_input_threshold(dbfs);
+    }
+}
+
+- (void)setTransmit:(BOOL)transmit {
+    if (_session) {
+        _session->set_transmit(transmit);
+    }
+}
+
 - (void)setVolume:(float)volume forMember:(NSString*)identifier {
     if (_session) {
         _session->set_member_volume(utf8(identifier), volume);

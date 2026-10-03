@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <mutex>
 #include <ostream>
 #include <string>
@@ -25,6 +26,18 @@ struct RoomVoiceApi {
     CatroRoomRuntimeSnapshot (*snapshot)(CatroRoomRuntimeHandle) noexcept;
     std::size_t (*send_voice)(CatroRoomRuntimeHandle, const std::byte*, std::size_t) noexcept;
     std::ptrdiff_t (*receive_voice)(CatroRoomRuntimeHandle, std::byte*, std::size_t, std::uint32_t) noexcept;
+};
+
+// Settings the UI changes during a call. The media loop applies them when version moves.
+struct LiveVoiceSettings {
+    std::atomic<std::uint32_t> version{0};
+    std::atomic_bool echo_cancellation{true};
+    std::atomic_bool noise_suppression{true};
+    std::atomic_bool automatic_gain{true};
+    // NaN selects the automatic threshold.
+    std::atomic<float> input_threshold_db{std::numeric_limits<float>::quiet_NaN()};
+    // Push-to-talk releases this; the microphone is silent while it is false.
+    std::atomic_bool transmit{true};
 };
 
 // Engineering-only direct UDP media, supplied by adapters that keep it. Returns a VoicePeerExit.
@@ -49,6 +62,9 @@ public:
     [[nodiscard]] CatroVoiceRuntimeSnapshot snapshot() const noexcept;
     void set_user_volume(const char* user_id, float volume) noexcept;
     [[nodiscard]] bool user_speaking(const char* user_id) const noexcept;
+    void set_processing(bool echo_cancellation, bool noise_suppression, bool automatic_gain) noexcept;
+    void set_input_threshold(float dbfs) noexcept;
+    void set_transmit(bool transmit) noexcept;
 
 private:
     void stop_locked() noexcept;
@@ -59,6 +75,7 @@ private:
     DirectPeerRunner direct_;
     tools::VoicePeerControl control_;
     voice::StreamControls streams_;
+    LiveVoiceSettings settings_;
     std::mutex lifecycle_mutex_;
     mutable std::mutex error_mutex_;
     std::thread worker_;

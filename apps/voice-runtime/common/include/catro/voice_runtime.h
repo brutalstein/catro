@@ -51,6 +51,8 @@ struct CatroVoiceRuntimeSnapshot {
     std::uint64_t received_packets;
     std::uint64_t peer_unreachable_events;
     char error[192];
+    // Microphone level after processing in dBFS (-100 when silent), for sensitivity meters.
+    float input_level;
 };
 
 CATRO_VOICE_API CatroVoiceRuntimeHandle catro_voice_runtime_create() noexcept;
@@ -69,6 +71,16 @@ CATRO_VOICE_API CatroVoiceRuntimeSnapshot catro_voice_runtime_snapshot(
 // rejoins for the lifetime of the handle.
 CATRO_VOICE_API void catro_voice_runtime_set_user_volume(
     CatroVoiceRuntimeHandle handle, const char* user_id, float volume) noexcept;
+// Echo cancellation, noise suppression and automatic gain; all on by default. Applies live.
+CATRO_VOICE_API void catro_voice_runtime_set_processing(
+    CatroVoiceRuntimeHandle handle, std::uint8_t echo_cancellation, std::uint8_t noise_suppression,
+    std::uint8_t automatic_gain) noexcept;
+// Voice activity threshold in dBFS (-100..0); NaN picks it automatically, the default.
+CATRO_VOICE_API void catro_voice_runtime_set_input_threshold(
+    CatroVoiceRuntimeHandle handle, float dbfs) noexcept;
+// Push-to-talk: 0 keeps the microphone closed, 1 opens it (the default).
+CATRO_VOICE_API void catro_voice_runtime_set_transmit(
+    CatroVoiceRuntimeHandle handle, std::uint8_t transmit) noexcept;
 // 1 while the remote user with this hex user id is speaking.
 CATRO_VOICE_API std::uint8_t catro_voice_runtime_user_speaking(
     CatroVoiceRuntimeHandle handle, const char* user_id) noexcept;
