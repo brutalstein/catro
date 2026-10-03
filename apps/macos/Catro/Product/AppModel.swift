@@ -13,6 +13,13 @@ final class AppModel: ObservableObject {
     // Per-member volume in percent (0-200), saved across calls like Discord.
     @Published private(set) var memberVolumes: [String: Double] =
         UserDefaults.standard.dictionary(forKey: VoicePreferenceKey.memberVolumes) as? [String: Double] ?? [:]
+    // Watched stream audio in percent (0-200), saved like Discord's stream volume.
+    @Published var streamVolume = UserDefaults.standard.double(forKey: VoicePreferenceKey.streamVolume) {
+        didSet {
+            UserDefaults.standard.set(streamVolume, forKey: VoicePreferenceKey.streamVolume)
+            bridge.setStreamVolume(Float(streamVolume / 100))
+        }
+    }
     // The stream shows in its own window instead of the workspace.
     @Published var streamPoppedOut = false
     // Set by "Full Screen"; the stream window consumes it once it has a window.
@@ -46,6 +53,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in self?.apply(snapshot) }
         }
         applyAudioDevices()
+        streamVolume = UserDefaults.standard.double(forKey: VoicePreferenceKey.streamVolume)
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.bridge.poll() }
         }

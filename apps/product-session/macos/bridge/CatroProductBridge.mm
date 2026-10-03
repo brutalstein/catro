@@ -409,6 +409,12 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
     }
 }
 
+- (void)setStreamVolume:(float)volume {
+    if (_session) {
+        _session->set_stream_volume(volume);
+    }
+}
+
 - (nullable NSString*)attachPreviewLayer:(nullable CALayer*)layer {
     if (!_session) {
         return @"Session is not running";

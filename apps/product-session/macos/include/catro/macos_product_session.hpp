@@ -195,6 +195,8 @@ public:
     void start_share(ShareRequest request);
     void stop_share();
     void set_watching(bool watching);
+    // Main thread. Volume of the watched stream's audio: 0 silences, 1 unchanged, 2 doubles.
+    void set_stream_volume(float volume);
     // Main thread only; forwards a caller-owned CALayer* (nullptr detaches) to the screen runtime.
     [[nodiscard]] std::optional<screen::ScreenShareError> attach_preview_surface(void* host_layer);
     [[nodiscard]] std::optional<screen::ScreenShareError> attach_remote_surface(void* host_layer);

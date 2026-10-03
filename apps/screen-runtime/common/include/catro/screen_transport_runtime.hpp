@@ -197,6 +197,8 @@ struct ScreenTransportCounters {
     std::atomic<std::uint64_t> remote_stream_audio_decode_failures{0};
     std::atomic<std::uint64_t> remote_stream_audio_render_drops{0};
     std::atomic<std::int64_t> remote_stream_audio_last_ns{0};
+    // Viewer-side stream volume (0 silences, 1 unchanged, 2 doubles); kept across streams.
+    std::atomic<float> remote_stream_volume{1.0F};
 
     void reset_local() noexcept;
     void reset_remote() noexcept;
@@ -274,6 +276,9 @@ struct VideoReceiveContext {
 // keyframe after every viewer start or stream reset.
 [[nodiscard]] std::optional<ScreenShareError> run_video_receive_loop(const VideoReceiveContext& context,
                                                                      RemoteVideoViewer& viewer);
+
+// Scales decoded stream audio by the viewer's stream volume, clipping at full scale.
+void apply_stream_volume(std::span<float> samples, float volume) noexcept;
 
 // Capture callback -> sender thread hand-off. Overflow requests a resync instead of growing latency.
 class StreamAudioCaptureBridge final {

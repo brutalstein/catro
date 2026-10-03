@@ -47,6 +47,8 @@ public:
     void stop_sharing() noexcept;
     void set_local_preview_enabled(bool enabled) noexcept;
     void set_remote_viewing_enabled(bool enabled) noexcept;
+    // 0 silences the watched stream's audio, 1 is unchanged, 2 doubles.
+    void set_stream_volume(float volume) noexcept;
     void stop() noexcept;
 
     [[nodiscard]] ScreenShareSnapshot snapshot() const;

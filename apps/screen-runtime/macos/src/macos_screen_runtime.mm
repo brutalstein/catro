@@ -345,6 +345,10 @@ struct MacScreenShareRuntime::Impl {
         local_preview_enabled_.store(enabled, std::memory_order_release);
     }
 
+    void set_stream_volume(float volume) noexcept {
+        counters_.remote_stream_volume.store(std::clamp(volume, 0.0F, 2.0F), std::memory_order_relaxed);
+    }
+
     void set_remote_viewing_enabled(bool enabled) noexcept {
         counters_.remote_viewing_enabled.store(enabled, std::memory_order_release);
         if (!enabled) {
@@ -785,6 +789,10 @@ void MacScreenShareRuntime::set_local_preview_enabled(bool enabled) noexcept {
 
 void MacScreenShareRuntime::set_remote_viewing_enabled(bool enabled) noexcept {
     impl_->set_remote_viewing_enabled(enabled);
+}
+
+void MacScreenShareRuntime::set_stream_volume(float volume) noexcept {
+    impl_->set_stream_volume(volume);
 }
 
 void MacScreenShareRuntime::stop() noexcept {

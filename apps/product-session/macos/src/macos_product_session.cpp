@@ -907,6 +907,10 @@ void ProductSession::set_watching(bool watching) {
     });
 }
 
+void ProductSession::set_stream_volume(float volume) {
+    impl_->screen_->set_stream_volume(volume);
+}
+
 std::optional<screen::ScreenShareError> ProductSession::attach_preview_surface(void* host_layer) {
     return impl_->screen_->attach_preview_surface(host_layer);
 }

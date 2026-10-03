@@ -447,6 +447,18 @@ TEST_CASE("stream audio flows through Opus framing only while the stream is watc
     CHECK_FALSE(counters.remote_stream_audio_active.load());
 }
 
+TEST_CASE("stream volume scales decoded stream audio and clips at full scale") {
+    std::array<float, 3> samples{0.5F, -0.25F, 0.8F};
+    apply_stream_volume(samples, 1.0F);
+    CHECK(samples[0] == 0.5F);
+    apply_stream_volume(samples, 2.0F);
+    CHECK(samples[0] == 1.0F);
+    CHECK(samples[1] == -0.5F);
+    CHECK(samples[2] == 1.0F);
+    apply_stream_volume(samples, 0.0F);
+    CHECK(samples[1] == 0.0F);
+}
+
 TEST_CASE("stream audio capture bridge keeps latency bounded") {
     StreamAudioCaptureBridge bridge;
     const StreamAudioPcmFrame frame = tone(0.0F);

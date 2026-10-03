@@ -538,6 +538,15 @@ std::optional<ScreenShareError> run_video_receive_loop(const VideoReceiveContext
     return fatal;
 }
 
+void apply_stream_volume(std::span<float> samples, float volume) noexcept {
+    if (volume == 1.0F) {
+        return;
+    }
+    for (auto& sample : samples) {
+        sample = std::clamp(sample * volume, -1.0F, 1.0F);
+    }
+}
+
 StreamAudioCaptureBridge::StreamAudioCaptureBridge() : ring_(kStreamAudioFrameSamples * kStreamAudioQueueFrames) {}
 
 void StreamAudioCaptureBridge::on_captured(std::span<const float> samples) noexcept {
@@ -715,6 +724,7 @@ void run_stream_audio_receive_loop(const RoomScreenApi& api, CatroRoomRuntimeHan
             counters.remote_stream_audio_decode_failures.fetch_add(1, std::memory_order_relaxed);
             return false;
         }
+        apply_stream_volume(pcm, counters.remote_stream_volume.load(std::memory_order_relaxed));
         if (!bridge.try_push(pcm)) {
             counters.remote_stream_audio_render_drops.fetch_add(1, std::memory_order_relaxed);
         }

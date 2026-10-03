@@ -146,6 +146,8 @@ __attribute__((objc_subclassing_restricted))
              audio:(BOOL)audio NS_SWIFT_NAME(startShare(_:maxWidth:maxHeight:fps:bitrateMbps:audio:));
 - (void)stopShare;
 - (void)setWatching:(BOOL)watching;
+// Main thread. Volume of the watched stream's audio: 0 silences, 1 unchanged, 2 doubles.
+- (void)setStreamVolume:(float)volume;
 // Main thread. Member identifiers speaking right now; empty outside voice.
 - (NSArray<NSString*>*)speakingMembers;
 // 0 silences, 1 is unchanged, 2 doubles.

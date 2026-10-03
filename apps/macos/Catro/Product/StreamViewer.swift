@@ -35,6 +35,7 @@ struct StreamViewer: View {
                             .help(watching ? "Stop decoding the shared screen" : "Decode and show the shared screen")
                         if watching {
                             windowButtons
+                            StreamVolume(model: model)
                         }
                     }
                 }
@@ -90,6 +91,22 @@ struct StreamWindow: View {
             if !poppedOut { window?.close() }
         }
         .onDisappear { model.streamPoppedOut = false }
+    }
+}
+
+// Discord's per-stream volume: turns the stream's sound down without touching voice.
+private struct StreamVolume: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: model.streamVolume == 0 ? "speaker.slash" : "speaker.wave.2")
+                .accessibilityHidden(true)
+            Slider(value: $model.streamVolume, in: 0...200, step: 5)
+                .frame(width: 120)
+                .accessibilityLabel("Stream volume")
+                .help("Stream volume: \(Int(model.streamVolume))%")
+        }
     }
 }
 

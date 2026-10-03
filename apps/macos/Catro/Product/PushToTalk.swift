@@ -15,6 +15,8 @@ enum VoicePreferenceKey {
     static let sounds = "voice.sounds"
     // Per-member volume in percent, keyed by user id, kept across calls like Discord.
     static let memberVolumes = "voice.memberVolumes"
+    // Volume of a watched stream's audio in percent.
+    static let streamVolume = "voice.streamVolume"
     // Audio endpoint ids; empty follows the system default.
     static let inputDevice = "audio.input"
     static let outputDevice = "audio.output"
@@ -24,7 +26,7 @@ enum VoicePreferenceKey {
             pushToTalk: false, pushToTalkKey: PushToTalkShortcut.none, pushToTalkName: "",
             automaticSensitivity: true, sensitivityDb: -50.0,
             echoCancellation: true, noiseSuppression: true, automaticGain: true,
-            sounds: true, inputDevice: "", outputDevice: "",
+            sounds: true, inputDevice: "", outputDevice: "", streamVolume: 100.0,
         ])
     }
 }
