@@ -2,6 +2,7 @@
 
 #include <catro/video/geometry.hpp>
 
+#import <AVFoundation/AVFoundation.h>
 #import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <CoreMedia/CoreMedia.h>
@@ -13,7 +14,9 @@
 #include <array>
 #include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <mutex>
+#include <string>
 #include <utility>
 
 namespace catro::platform::macos {
@@ -24,6 +27,68 @@ namespace {
         return {};
     }
     return std::string{value.UTF8String};
+}
+
+// Built-in, USB and Continuity cameras in system order.
+[[nodiscard]] NSArray<AVCaptureDevice*>* cameras() {
+    NSMutableArray<AVCaptureDeviceType>* types =
+        [NSMutableArray arrayWithObject:AVCaptureDeviceTypeBuiltInWideAngleCamera];
+    if (@available(macOS 14.0, *)) {
+        [types addObject:AVCaptureDeviceTypeExternal];
+        // Needs NSCameraUseContinuityCameraDeviceType in Info.plist.
+        [types addObject:AVCaptureDeviceTypeContinuityCamera];
+    } else {
+        [types addObject:AVCaptureDeviceTypeExternalUnknown];
+    }
+    return [AVCaptureDeviceDiscoverySession
+               discoverySessionWithDeviceTypes:types
+                                     mediaType:AVMediaTypeVideo
+                                      position:AVCaptureDevicePositionUnspecified]
+        .devices;
+}
+
+[[nodiscard]] std::uint64_t camera_id(AVCaptureDevice* device) {
+    const std::uint64_t hash = std::hash<std::string>{}(utf8(device.uniqueID));
+    return hash != 0 ? hash : 1;
+}
+
+[[nodiscard]] std::vector<CaptureSource> camera_sources() {
+    std::vector<CaptureSource> sources;
+    for (AVCaptureDevice* device in cameras()) {
+        const auto size = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription);
+        if (size.width <= 0 || size.height <= 0) {
+            continue;
+        }
+        sources.push_back(CaptureSource{
+            .kind = CaptureSourceKind::camera,
+            .native_id = camera_id(device),
+            .title = utf8(device.localizedName),
+            .width = static_cast<std::uint32_t>(size.width),
+            .height = static_cast<std::uint32_t>(size.height),
+        });
+    }
+    return sources;
+}
+
+// Off the main thread only: the first use shows the system camera prompt and waits for it.
+[[nodiscard]] bool camera_access() {
+    switch ([AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo]) {
+    case AVAuthorizationStatusAuthorized:
+        return true;
+    case AVAuthorizationStatusNotDetermined: {
+        dispatch_semaphore_t done = dispatch_semaphore_create(0);
+        __block BOOL granted = NO;
+        [AVCaptureDevice requestAccessForMediaType:AVMediaTypeVideo
+                                 completionHandler:^(BOOL value) {
+                                     granted = value;
+                                     dispatch_semaphore_signal(done);
+                                 }];
+        dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+        return granted;
+    }
+    default:
+        return false;
+    }
 }
 
 } // namespace
@@ -73,7 +138,9 @@ bool interleave_stereo(
 
 } // namespace catro::platform::macos
 
-@interface CatroScreenStreamOutput : NSObject <SCStreamOutput, SCStreamDelegate>
+// Receives ScreenCaptureKit frames and audio, and camera frames from AVCaptureVideoDataOutput.
+@interface CatroScreenStreamOutput
+    : NSObject <SCStreamOutput, SCStreamDelegate, AVCaptureVideoDataOutputSampleBufferDelegate>
 - (instancetype)initWithFrameHandler:
         (catro::platform::macos::ScreenCaptureNativeAdapter::FrameHandler)frameHandler
     audioHandler:
@@ -176,10 +243,22 @@ bool interleave_stereo(
         [self handleAudio:sampleBuffer];
         return;
     }
-    if (type != SCStreamOutputTypeScreen) {
-        return;
+    if (type == SCStreamOutputTypeScreen) {
+        [self handleVideo:sampleBuffer];
     }
+}
 
+- (void)captureOutput:(AVCaptureOutput*)output
+    didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
+           fromConnection:(AVCaptureConnection*)connection {
+    (void)output;
+    (void)connection;
+    if (sampleBuffer != nullptr && CMSampleBufferIsValid(sampleBuffer)) {
+        [self handleVideo:sampleBuffer];
+    }
+}
+
+- (void)handleVideo:(CMSampleBufferRef)sampleBuffer {
     CVImageBufferRef image = CMSampleBufferGetImageBuffer(sampleBuffer);
     if (image == nullptr) {
         return;
@@ -231,7 +310,9 @@ public:
                 ScreenCaptureErrorCode::wrong_thread, 0};
             return result;
         }
+        auto camera_list = camera_sources();
         if (!CGPreflightScreenCaptureAccess()) {
+            result.sources = std::move(camera_list);
             result.error = ScreenCaptureError{
                 ScreenCaptureErrorCode::permission_denied, 0};
             return result;
@@ -253,6 +334,7 @@ public:
         dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
 
         if (failure != nil || content == nil) {
+            result.sources = std::move(camera_list);
             result.error = native_error(
                 failure,
                 CGPreflightScreenCaptureAccess()
@@ -289,6 +371,7 @@ public:
                 .height = static_cast<std::uint32_t>(window.frame.size.height),
             });
         }
+        result.sources.insert(result.sources.end(), camera_list.begin(), camera_list.end());
         return result;
     }
 
@@ -310,6 +393,9 @@ public:
             config.max_height);
         if (!extent || config.frame_rate == 0 || source.native_id == 0) {
             return ScreenCaptureError{ScreenCaptureErrorCode::invalid_config, 0};
+        }
+        if (source.kind == CaptureSourceKind::camera) {
+            return start_camera(source, config, std::move(on_frame), std::move(on_stop));
         }
 
         const auto enumeration = fetch_content();
@@ -415,6 +501,18 @@ public:
     }
 
     void stop() noexcept override {
+        if (session_ != nil) {
+            for (id observer in observers_) {
+                [NSNotificationCenter.defaultCenter removeObserver:observer];
+            }
+            observers_ = nil;
+            [session_ stopRunning];
+            dispatch_sync(queue_, ^{});
+            session_ = nil;
+            output_ = nil;
+            queue_ = nil;
+            return;
+        }
         if (stream_ == nil) {
             output_ = nil;
             queue_ = nil;
@@ -450,6 +548,99 @@ public:
     }
 
 private:
+    // Camera frames take the same NV12 path as screen frames. Audio is never captured here; the
+    // microphone already reaches the room through voice.
+    // ponytail: the preset picks the size and the camera keeps its own frame rate; choose a
+    // device format per frame rate if 60 fps webcams matter.
+    std::optional<ScreenCaptureError> start_camera(
+        const CaptureSource& source,
+        const ScreenCaptureConfig& config,
+        FrameHandler on_frame,
+        StopHandler on_stop) noexcept {
+        AVCaptureDevice* device = nil;
+        for (AVCaptureDevice* candidate in cameras()) {
+            if (camera_id(candidate) == source.native_id) {
+                device = candidate;
+                break;
+            }
+        }
+        if (device == nil) {
+            return ScreenCaptureError{ScreenCaptureErrorCode::source_unavailable, 0};
+        }
+        if (!camera_access()) {
+            return ScreenCaptureError{ScreenCaptureErrorCode::permission_denied, 0};
+        }
+        NSError* input_error = nil;
+        AVCaptureDeviceInput* input =
+            [AVCaptureDeviceInput deviceInputWithDevice:device error:&input_error];
+        if (input == nil) {
+            return native_error(input_error, ScreenCaptureErrorCode::capture_creation_failed);
+        }
+
+        AVCaptureSession* session = [AVCaptureSession new];
+        AVCaptureVideoDataOutput* video = [AVCaptureVideoDataOutput new];
+        video.videoSettings = @{
+            (__bridge id)kCVPixelBufferPixelFormatTypeKey :
+                @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
+        };
+        video.alwaysDiscardsLateVideoFrames = YES;
+        const StopHandler stopped = on_stop;
+        output_ = [[CatroScreenStreamOutput alloc]
+            initWithFrameHandler:std::move(on_frame)
+                    audioHandler:AudioHandler{}
+                     stopHandler:std::move(on_stop)];
+        queue_ = dispatch_queue_create("com.catro.camera-capture", DISPATCH_QUEUE_SERIAL);
+        [video setSampleBufferDelegate:output_ queue:queue_];
+
+        [session beginConfiguration];
+        const bool configured = [session canAddInput:input] && [session canAddOutput:video];
+        if (configured) {
+            [session addInput:input];
+            [session addOutput:video];
+            NSArray<AVCaptureSessionPreset>* presets = config.max_height <= 720
+                ? @[ AVCaptureSessionPreset1280x720, AVCaptureSessionPresetHigh ]
+                : @[ AVCaptureSessionPreset1920x1080, AVCaptureSessionPreset1280x720,
+                     AVCaptureSessionPresetHigh ];
+            for (AVCaptureSessionPreset preset in presets) {
+                if ([session canSetSessionPreset:preset]) {
+                    session.sessionPreset = preset;
+                    break;
+                }
+            }
+        }
+        [session commitConfiguration];
+        if (!configured) {
+            output_ = nil;
+            queue_ = nil;
+            return ScreenCaptureError{ScreenCaptureErrorCode::capture_creation_failed, 0};
+        }
+
+        NSNotificationCenter* center = NSNotificationCenter.defaultCenter;
+        observers_ = @[
+            [center addObserverForName:AVCaptureSessionRuntimeErrorNotification
+                                object:session
+                                 queue:nil
+                            usingBlock:^(NSNotification* note) {
+                                stopped(native_error(note.userInfo[AVCaptureSessionErrorKey],
+                                                     ScreenCaptureErrorCode::frame_failure));
+                            }],
+            [center addObserverForName:AVCaptureDeviceWasDisconnectedNotification
+                                object:device
+                                 queue:nil
+                            usingBlock:^(NSNotification*) {
+                                stopped(ScreenCaptureError{
+                                    ScreenCaptureErrorCode::source_unavailable, 0});
+                            }],
+        ];
+        session_ = session;
+        [session startRunning];
+        if (!session.running) {
+            stop();
+            return ScreenCaptureError{ScreenCaptureErrorCode::capture_creation_failed, 0};
+        }
+        return std::nullopt;
+    }
+
     struct ContentResult {
         __strong SCShareableContent* content = nil;
         std::optional<ScreenCaptureError> error;
@@ -488,6 +679,8 @@ private:
     __strong CatroScreenStreamOutput* output_ = nil;
     dispatch_queue_t queue_ = nil;
     dispatch_queue_t audio_queue_ = nil;
+    __strong AVCaptureSession* session_ = nil;
+    __strong NSArray* observers_ = nil;
 };
 
 } // namespace

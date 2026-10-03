@@ -22,6 +22,10 @@
     <string>${CMAKE_OSX_DEPLOYMENT_TARGET}</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSCameraUsageDescription</key>
+    <string>Catro uses the camera only when you choose it as the video you share.</string>
+    <key>NSCameraUseContinuityCameraDeviceType</key>
+    <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>Catro uses the microphone while you are in a voice channel and during audio tests.</string>
     <key>NSScreenCaptureUsageDescription</key>

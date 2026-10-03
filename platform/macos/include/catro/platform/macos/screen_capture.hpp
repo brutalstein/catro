@@ -58,6 +58,8 @@ struct ScreenCaptureError {
 enum class CaptureSourceKind : std::uint8_t {
     display,
     window,
+    // A webcam; native_id is a hash of its AVCaptureDevice uniqueID.
+    camera,
 };
 
 struct CaptureSource {

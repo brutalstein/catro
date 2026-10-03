@@ -885,6 +885,11 @@ TEST_CASE("macOS product session loads sources and toggles watching") {
     deps.enumerate_sources = [&denied] {
         platform::macos::CaptureEnumerationResult result;
         if (denied) {
+            platform::macos::CaptureSource camera;
+            camera.kind = platform::macos::CaptureSourceKind::camera;
+            camera.native_id = 3;
+            camera.title = "FaceTime HD Camera";
+            result.sources = {camera};
             result.error = platform::macos::ScreenCaptureError{
                 platform::macos::ScreenCaptureErrorCode::permission_denied, 0};
             return result;
@@ -910,7 +915,8 @@ TEST_CASE("macOS product session loads sources and toggles watching") {
     REQUIRE(wait_until(session, [](const auto& snapshot) {
         return snapshot.media.status == "Screen Recording permission denied";
     }));
-    CHECK(session.snapshot().media.sources.empty());
+    REQUIRE(session.snapshot().media.sources.size() == 1);
+    CHECK(session.snapshot().media.sources[0].kind == platform::macos::CaptureSourceKind::camera);
 
     session.join_voice();
     REQUIRE(wait_until(session, joined));

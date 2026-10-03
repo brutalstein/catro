@@ -689,12 +689,11 @@ struct ProductSession::Impl {
 
     void load_sources() {
         auto result = deps_.enumerate_sources();
-        if (result.error) {
-            state_.media.sources.clear();
-            state_.media.status = platform::macos::name(result.error->code);
-            return;
-        }
+        // Cameras still list when Screen Recording is denied.
         state_.media.sources = std::move(result.sources);
+        if (result.error) {
+            state_.media.status = platform::macos::name(result.error->code);
+        }
     }
 
     ProductSessionDependencies deps_;

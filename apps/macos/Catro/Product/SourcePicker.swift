@@ -1,7 +1,8 @@
 import SwiftUI
 
 // Catro's own source picker (never the stock system picker): displays and windows from
-// ScreenCaptureKit, enumerated on the session worker, plus Discord's stream quality presets.
+// ScreenCaptureKit and cameras, enumerated on the session worker, plus Discord's stream quality
+// presets.
 struct SourcePicker: View {
     @ObservedObject var model: AppModel
     @Binding var isPresented: Bool
@@ -10,7 +11,10 @@ struct SourcePicker: View {
 
     private var sources: [CatroShareSource] { model.snapshot?.sources ?? [] }
     private var selectedSource: CatroShareSource? { sources.first { $0.nativeID == selection } }
-    private var sharesDisplay: Bool { selectedSource.map { !$0.window } ?? false }
+    private var sharesDisplay: Bool { selectedSource.map { !$0.window && !$0.camera } ?? false }
+    private var sharesCamera: Bool { selectedSource?.camera ?? false }
+    // Only cameras listed: Screen Recording is off, so say how to get displays and windows.
+    private var screensBlocked: Bool { !sources.isEmpty && sources.allSatisfy { $0.camera } }
 
     private var emptyText: String {
         let status = model.snapshot?.voiceStatus ?? ""
@@ -24,6 +28,14 @@ struct SourcePicker: View {
                 SourceRow(source: source).tag(source.nativeID)
             }
             .frame(minHeight: 220)
+            .overlay(alignment: .bottom) {
+                if screensBlocked {
+                    Text("Allow Screen Recording in System Settings to share displays and windows.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                }
+            }
             .overlay {
                 if sources.isEmpty {
                     Text(emptyText)
@@ -50,7 +62,7 @@ struct SourcePicker: View {
                     .help(sharesDisplay
                         ? "Everything this Mac plays except Catro, including notification sounds"
                         : "Only the sound of the app you share")
-                    .disabled(selection == nil)
+                    .disabled(selection == nil || sharesCamera)
             }
             HStack {
                 Button("Refresh") { model.loadSources() }
@@ -82,7 +94,7 @@ private struct SourceRow: View {
     let source: CatroShareSource
 
     private var detail: String {
-        let kind = source.window ? "Window" : "Display"
+        let kind = source.camera ? "Camera" : source.window ? "Window" : "Display"
         let main = source.primary ? " · Main display" : ""
         return "\(kind) · \(source.width)×\(source.height)\(main)"
     }
@@ -94,7 +106,7 @@ private struct SourceRow: View {
                 Text(detail).font(.caption).foregroundStyle(.secondary)
             }
         } icon: {
-            Image(systemName: source.window ? "macwindow" : "display")
+            Image(systemName: source.camera ? "video" : source.window ? "macwindow" : "display")
         }
         .accessibilityElement(children: .combine)
     }

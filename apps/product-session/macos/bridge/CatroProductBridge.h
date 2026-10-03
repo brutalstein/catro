@@ -77,6 +77,7 @@ __attribute__((objc_subclassing_restricted))
 @property(nonatomic, readonly) uint32_t width;
 @property(nonatomic, readonly) uint32_t height;
 @property(nonatomic, readonly) BOOL window;
+@property(nonatomic, readonly) BOOL camera;
 @property(nonatomic, readonly) BOOL primary;
 - (instancetype)init NS_UNAVAILABLE;
 @end
