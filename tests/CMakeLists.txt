@@ -64,6 +64,12 @@ target_link_libraries(catro_room_voice_runtime_test PRIVATE catro_room_voice)
 catro_add_test(screen_transport_runtime video/screen_transport_runtime_test.cpp)
 target_link_libraries(catro_screen_transport_runtime_test PRIVATE catro_screen_transport)
 
+# Two people over real WebRTC on this machine; runs wherever the RTC transport builds.
+if(TARGET Catro::Rtc)
+    catro_add_test(rtc_two_peer rtc/room_two_peer_test.cpp)
+    target_link_libraries(catro_rtc_two_peer_test PRIVATE Catro::Rtc nlohmann_json::nlohmann_json)
+endif()
+
 catro_add_test(voice_transport voice/udp_transport_test.cpp)
 target_link_libraries(catro_voice_transport_test PRIVATE Catro::Voice catro_voice_peer_transport)
 
