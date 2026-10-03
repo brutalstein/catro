@@ -446,6 +446,16 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
     }
 }
 
+- (void)setInputDevice:(nullable NSString*)input outputDevice:(nullable NSString*)output {
+    if (_session) {
+        _session->set_audio_devices(input ? utf8(input) : std::string{}, output ? utf8(output) : std::string{});
+    }
+}
+
+- (float)inputLevel {
+    return _session ? _session->input_level() : -100.0F;
+}
+
 - (void)setVolume:(float)volume forMember:(NSString*)identifier {
     if (_session) {
         _session->set_member_volume(utf8(identifier), volume);

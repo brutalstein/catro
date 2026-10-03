@@ -38,6 +38,12 @@ struct LiveVoiceSettings {
     std::atomic<float> input_threshold_db{std::numeric_limits<float>::quiet_NaN()};
     // Push-to-talk releases this; the microphone is silent while it is false.
     std::atomic_bool transmit{true};
+    // Devices picked during a call, empty for the system default. The loop reopens audio on them
+    // when device_version moves; the strings are guarded by device_mutex.
+    mutable std::mutex device_mutex;
+    std::string input_device;
+    std::string output_device;
+    std::atomic<std::uint32_t> device_version{0};
 };
 
 // Engineering-only direct UDP media, supplied by adapters that keep it. Returns a VoicePeerExit.
@@ -65,6 +71,7 @@ public:
     void set_processing(bool echo_cancellation, bool noise_suppression, bool automatic_gain) noexcept;
     void set_input_threshold(float dbfs) noexcept;
     void set_transmit(bool transmit) noexcept;
+    void set_devices(const char* input_endpoint, const char* output_endpoint) noexcept;
 
 private:
     void stop_locked() noexcept;

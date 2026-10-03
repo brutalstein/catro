@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 // Same appearance choices as the Windows Settings page: Ivory is the light theme, Espresso the
-// dark one, and System follows macOS. Audio follows the system default devices and the balanced
-// performance profile runs, as on Windows.
+// dark one, and System follows macOS. Audio uses the chosen devices, or follows the system default,
+// and the balanced performance profile runs, as on Windows.
 enum Appearance: String, CaseIterable, Identifiable {
     case system, ivory, espresso
 
@@ -33,6 +33,11 @@ extension Color {
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
+    // Supplies the microphone and output lists.
+    @ObservedObject var devices: DiagnosticsViewModel
+    @AppStorage(VoicePreferenceKey.inputDevice) private var inputDevice = ""
+    @AppStorage(VoicePreferenceKey.outputDevice) private var outputDevice = ""
+    @AppStorage(VoicePreferenceKey.sounds) private var sounds = true
     @AppStorage("appearance") private var appearance = Appearance.system.rawValue
     @State private var name = ""
     @AppStorage(VoicePreferenceKey.pushToTalk) private var pushToTalk = false
@@ -65,9 +70,12 @@ struct SettingsView: View {
                 }
             }
             Section("Audio") {
-                LabeledContent("Microphone", value: "Default")
-                LabeledContent("Output", value: "Default")
+                DevicePicker(title: "Microphone", selection: $inputDevice, devices: devices.audioDevices(input: true))
+                DevicePicker(title: "Output", selection: $outputDevice, devices: devices.audioDevices(input: false))
+                Toggle("Play join, leave and mute sounds", isOn: $sounds)
             }
+            .onChange(of: inputDevice) { _ in model.applyAudioDevices() }
+            .onChange(of: outputDevice) { _ in model.applyAudioDevices() }
             Section("Voice") {
                 Picker("Input mode", selection: $pushToTalk) {
                     Text("Voice activity").tag(false)
@@ -91,6 +99,7 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(automaticSensitivity)
+                InputMeter(model: model, threshold: automaticSensitivity ? -45 : sensitivityDb)
                 Toggle("Echo cancellation", isOn: $echoCancellation)
                 Toggle("Noise suppression", isOn: $noiseSuppression)
                 Toggle("Automatic gain control", isOn: $automaticGain)
@@ -109,7 +118,10 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
-        .onAppear { name = model.snapshot?.identityName ?? "" }
+        .onAppear {
+            name = model.snapshot?.identityName ?? ""
+            devices.start()
+        }
         .onDisappear(perform: stopRecording)
     }
 
@@ -136,5 +148,42 @@ struct SettingsView: View {
 
     private func save() {
         model.rename(name)
+    }
+}
+
+// The system default first, then the devices macOS reports; a saved device that is unplugged stays
+// listed so the choice survives until it returns.
+private struct DevicePicker: View {
+    let title: String
+    @Binding var selection: String
+    let devices: [CatroAudioDevice]
+
+    var body: some View {
+        Picker(title, selection: $selection) {
+            ForEach(devices, id: \.label) { device in
+                Text(device.label).tag(device.identifier ?? "")
+            }
+            if !selection.isEmpty, !devices.contains(where: { $0.identifier == selection }) {
+                Text("Unavailable device").tag(selection)
+            }
+        }
+    }
+}
+
+// Live microphone level against the voice activity threshold, like Discord's sensitivity bar. Only
+// moves during a call, when the voice runtime is reading the microphone.
+private struct InputMeter: View {
+    @ObservedObject var model: AppModel
+    let threshold: Double
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+            let level = Double(model.inputLevel())
+            LabeledContent("Input level") {
+                ProgressView(value: min(max(level + 100, 0), 100), total: 100)
+                    .tint(level >= threshold ? .green : .secondary)
+                    .help(model.inVoice ? "\(Int(level)) dB" : "Join voice to test your microphone")
+            }
+        }
     }
 }

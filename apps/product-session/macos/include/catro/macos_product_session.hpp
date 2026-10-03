@@ -117,6 +117,7 @@ struct ProductMediaApi {
     void (*voice_set_processing)(CatroVoiceRuntimeHandle, std::uint8_t, std::uint8_t, std::uint8_t) noexcept = nullptr;
     void (*voice_set_input_threshold)(CatroVoiceRuntimeHandle, float) noexcept = nullptr;
     void (*voice_set_transmit)(CatroVoiceRuntimeHandle, std::uint8_t) noexcept = nullptr;
+    void (*voice_set_devices)(CatroVoiceRuntimeHandle, const char*, const char*) noexcept = nullptr;
 };
 
 [[nodiscard]] ProductMediaApi native_media_api() noexcept;
@@ -213,6 +214,11 @@ public:
     void set_input_threshold(float dbfs);
     // Push-to-talk: false keeps the microphone closed.
     void set_transmit(bool transmit);
+    // Main thread. Microphone and output endpoint ids, empty for the system default. Used by the
+    // next join and applied live to a running call.
+    void set_audio_devices(const std::string& input, const std::string& output);
+    // Main thread. Microphone level in dBFS after processing; -100 outside voice.
+    [[nodiscard]] float input_level() const;
 
 private:
     struct Impl;

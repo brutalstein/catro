@@ -12,12 +12,19 @@ enum VoicePreferenceKey {
     static let echoCancellation = "voice.echoCancellation"
     static let noiseSuppression = "voice.noiseSuppression"
     static let automaticGain = "voice.automaticGain"
+    static let sounds = "voice.sounds"
+    // Per-member volume in percent, keyed by user id, kept across calls like Discord.
+    static let memberVolumes = "voice.memberVolumes"
+    // Audio endpoint ids; empty follows the system default.
+    static let inputDevice = "audio.input"
+    static let outputDevice = "audio.output"
 
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
             pushToTalk: false, pushToTalkKey: PushToTalkShortcut.none, pushToTalkName: "",
             automaticSensitivity: true, sensitivityDb: -50.0,
             echoCancellation: true, noiseSuppression: true, automaticGain: true,
+            sounds: true, inputDevice: "", outputDevice: "",
         ])
     }
 }

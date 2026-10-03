@@ -83,6 +83,9 @@ CATRO_VOICE_API void catro_voice_runtime_set_input_threshold(
 // Push-to-talk: 0 keeps the microphone closed, 1 opens it (the default).
 CATRO_VOICE_API void catro_voice_runtime_set_transmit(
     CatroVoiceRuntimeHandle handle, std::uint8_t transmit) noexcept;
+// Moves a running call to these devices without leaving it; null or empty picks the system default.
+CATRO_VOICE_API void catro_voice_runtime_set_devices(
+    CatroVoiceRuntimeHandle handle, const char* input_endpoint, const char* output_endpoint) noexcept;
 // 1 while the remote user with this hex user id is speaking.
 CATRO_VOICE_API std::uint8_t catro_voice_runtime_user_speaking(
     CatroVoiceRuntimeHandle handle, const char* user_id) noexcept;

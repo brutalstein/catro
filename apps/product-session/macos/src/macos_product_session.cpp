@@ -77,6 +77,7 @@ ProductMediaApi native_media_api() noexcept {
     api.voice_set_processing = catro_voice_runtime_set_processing;
     api.voice_set_input_threshold = catro_voice_runtime_set_input_threshold;
     api.voice_set_transmit = catro_voice_runtime_set_transmit;
+    api.voice_set_devices = catro_voice_runtime_set_devices;
     return api;
 }
 
@@ -512,6 +513,13 @@ struct ProductSession::Impl {
                                              : std::string{"Room connection error: "} + room.error);
             return;
         }
+        std::string input_device;
+        std::string output_device;
+        {
+            std::scoped_lock lock(devices_mutex_);
+            input_device = input_device_;
+            output_device = output_device_;
+        }
         const CatroVoiceRuntimeConfig voice_config{
             .room_runtime = room_,
             .bind_address = nullptr,
@@ -521,8 +529,8 @@ struct ProductSession::Impl {
             .stream_id = local_stream_id(),
             .jitter_packets = 3,
             .bitrate = 48'000,
-            .input_endpoint = nullptr,
-            .output_endpoint = nullptr,
+            .input_endpoint = input_device.c_str(),
+            .output_endpoint = output_device.c_str(),
         };
         if (deps_.media.voice_start(voice_, &voice_config) != 0) {
             const auto voice = deps_.media.voice_snapshot(voice_);
@@ -694,6 +702,10 @@ struct ProductSession::Impl {
     CatroVoiceRuntimeHandle voice_ = nullptr;
     // Published for main-thread speaking and volume calls; created once, cleared before destroy.
     std::atomic<CatroVoiceRuntimeHandle> live_voice_{nullptr};
+    // Chosen in Settings on the main thread, read by the worker when voice starts.
+    std::mutex devices_mutex_;
+    std::string input_device_;
+    std::string output_device_;
     std::string peer_id_;
     ProductSnapshot state_;
     std::unique_ptr<platform::macos::DirectoryHttpTransport> transport_;
@@ -951,6 +963,26 @@ void ProductSession::set_transmit(bool transmit) {
     if (voice != nullptr && impl_->deps_.media.voice_set_transmit != nullptr) {
         impl_->deps_.media.voice_set_transmit(voice, transmit ? 1U : 0U);
     }
+}
+
+void ProductSession::set_audio_devices(const std::string& input, const std::string& output) {
+    {
+        std::scoped_lock lock(impl_->devices_mutex_);
+        impl_->input_device_ = input;
+        impl_->output_device_ = output;
+    }
+    const auto voice = impl_->live_voice_.load(std::memory_order_acquire);
+    if (voice != nullptr && impl_->deps_.media.voice_set_devices != nullptr) {
+        impl_->deps_.media.voice_set_devices(voice, input.c_str(), output.c_str());
+    }
+}
+
+float ProductSession::input_level() const {
+    const auto voice = impl_->live_voice_.load(std::memory_order_acquire);
+    if (voice == nullptr || impl_->deps_.media.voice_snapshot == nullptr) {
+        return -100.0F;
+    }
+    return impl_->deps_.media.voice_snapshot(voice).input_level;
 }
 
 void ProductSession::set_member_volume(const std::string& user_id, float volume) {

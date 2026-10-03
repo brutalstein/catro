@@ -132,13 +132,14 @@ class FakeAudioPlatform final : public audio::AudioPlatform {
 public:
     explicit FakeAudioPlatform(float capture_sample) : capture_sample_(capture_sample) {}
 
-    audio::OpenResult open_capture(const std::optional<capabilities::AudioEndpointId>&,
+    audio::OpenResult open_capture(const std::optional<capabilities::AudioEndpointId>& device,
                                    audio::CaptureSink& sink,
                                    audio::StreamFailure failure) override {
         if (capture_error) {
             return *capture_error;
         }
         std::scoped_lock lock(mutex_);
+        requested_capture_ = device ? device->value : std::string{};
         capture_failure_ = std::move(failure);
         capture_opens.fetch_add(1, std::memory_order_relaxed);
         return std::unique_ptr<audio::AudioStream>(
@@ -157,6 +158,12 @@ public:
     void set_default_capture(std::string device) {
         std::scoped_lock lock(mutex_);
         default_capture_ = std::move(device);
+    }
+
+    // The device the last capture open asked for; empty for the system default.
+    std::string requested_capture() {
+        std::scoped_lock lock(mutex_);
+        return requested_capture_;
     }
 
     // Reports the open capture stream as lost, like unplugging its device.
@@ -187,6 +194,7 @@ private:
     float capture_sample_;
     std::mutex mutex_;
     std::optional<std::string> default_capture_;
+    std::string requested_capture_;
     audio::StreamFailure capture_failure_;
 };
 

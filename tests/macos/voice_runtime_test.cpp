@@ -28,6 +28,8 @@ TEST_CASE("macOS voice runtime C ABI has deterministic idle control semantics") 
     catro_voice_runtime_set_input_threshold(handle, -40.0F);
     catro_voice_runtime_set_transmit(handle, 0);
     catro_voice_runtime_set_transmit(nullptr, 1);
+    catro_voice_runtime_set_devices(handle, nullptr, nullptr);
+    catro_voice_runtime_set_devices(nullptr, "in", "out");
 
     catro_voice_runtime_stop(handle);
     CHECK(catro_voice_runtime_snapshot(handle).state == CATRO_VOICE_IDLE);

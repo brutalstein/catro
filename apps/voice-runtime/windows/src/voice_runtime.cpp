@@ -113,6 +113,13 @@ void catro_voice_runtime_set_transmit(CatroVoiceRuntimeHandle handle, std::uint8
     }
 }
 
+void catro_voice_runtime_set_devices(CatroVoiceRuntimeHandle handle, const char* input_endpoint,
+                                     const char* output_endpoint) noexcept {
+    if (handle != nullptr) {
+        host(handle).set_devices(input_endpoint, output_endpoint);
+    }
+}
+
 std::uint8_t catro_voice_runtime_user_speaking(CatroVoiceRuntimeHandle handle, const char* user_id) noexcept {
     return handle != nullptr && host(handle).user_speaking(user_id) ? 1U : 0U;
 }

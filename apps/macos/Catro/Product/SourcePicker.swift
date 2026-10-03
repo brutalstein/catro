@@ -1,7 +1,7 @@
 import SwiftUI
 
 // Catro's own source picker (never the stock system picker): displays and windows from
-// ScreenCaptureKit, enumerated on the session worker, plus the Windows share settings.
+// ScreenCaptureKit, enumerated on the session worker, plus Discord's stream quality presets.
 struct SourcePicker: View {
     @ObservedObject var model: AppModel
     @Binding var isPresented: Bool
@@ -33,14 +33,19 @@ struct SourcePicker: View {
                 }
             }
             Form {
-                TextField("Maximum width", value: $settings.maxWidth, format: .number)
-                    .help("320 to 7680 pixels")
-                TextField("Maximum height", value: $settings.maxHeight, format: .number)
-                    .help("180 to 4320 pixels")
-                TextField("Frame rate", value: $settings.fps, format: .number)
-                    .help("1 to 120 frames per second")
-                TextField("Bitrate (Mbps)", value: $settings.bitrateMbps, format: .number)
-                    .help("0.128 to 50 Mbps")
+                Picker("Resolution", selection: $settings.resolution) {
+                    ForEach(ShareSettings.Resolution.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Picker("Frame rate", selection: $settings.fps) {
+                    ForEach(ShareSettings.FrameRate.allCases) { Text("\($0.rawValue) FPS").tag($0) }
+                }
+                .pickerStyle(.segmented)
+                if let source = selectedSource {
+                    LabeledContent("Bitrate",
+                                   value: String(format: "%.1f Mbps", settings.bitrateMbps(for: source)))
+                        .help("Set from resolution and frame rate; the hardware encoder holds it")
+                }
                 Toggle(sharesDisplay ? "Share computer audio" : "Share app audio", isOn: $settings.audio)
                     .help(sharesDisplay
                         ? "Everything this Mac plays except Catro, including notification sounds"

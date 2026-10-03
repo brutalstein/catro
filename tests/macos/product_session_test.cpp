@@ -215,6 +215,10 @@ struct FakeMedia {
     std::uint8_t processing = 0;
     float threshold = 0.0F;
     std::uint8_t transmit = 1;
+    std::string voice_input;
+    std::string live_input;
+    std::string live_output;
+    float input_level = -100.0F;
     int room_storage = 0;
     int voice_storage = 0;
 
@@ -294,6 +298,7 @@ product::ProductMediaApi fake_media_api() {
         std::scoped_lock lock(g_media->mutex);
         g_media->voice_room = config->room_runtime;
         g_media->voice_bitrate = config->bitrate;
+        g_media->voice_input = config->input_endpoint != nullptr ? config->input_endpoint : "";
         return g_media->voice_start_result;
     };
     api.voice_stop = [](CatroVoiceRuntimeHandle) noexcept { record("voice_stop"); };
@@ -312,6 +317,7 @@ product::ProductMediaApi fake_media_api() {
         snapshot.muted = g_media->muted;
         snapshot.deafened = g_media->deafened;
         snapshot.speaking = g_media->self_speaking;
+        snapshot.input_level = g_media->input_level;
         return snapshot;
     };
     api.voice_set_user_volume = [](CatroVoiceRuntimeHandle, const char* user_id, float volume) noexcept {
@@ -335,6 +341,11 @@ product::ProductMediaApi fake_media_api() {
     api.voice_set_transmit = [](CatroVoiceRuntimeHandle, std::uint8_t transmit) noexcept {
         std::scoped_lock lock(g_media->mutex);
         g_media->transmit = transmit;
+    };
+    api.voice_set_devices = [](CatroVoiceRuntimeHandle, const char* input, const char* output) noexcept {
+        std::scoped_lock lock(g_media->mutex);
+        g_media->live_input = input;
+        g_media->live_output = output;
     };
     return api;
 }
@@ -717,8 +728,23 @@ TEST_CASE("macOS product session shows a rejoining room without leaving voice") 
     product::ProductSession session(online(seeded_directory()), {});
     session.start();
     REQUIRE(wait_until(session, synchronized_with_messages));
+    CHECK(session.input_level() == -100.0F);
+    session.set_audio_devices("mic-1", "");
     session.join_voice();
     REQUIRE(wait_until(session, joined));
+    {
+        std::scoped_lock lock(media.mutex);
+        CHECK(media.voice_input == "mic-1");
+        media.input_level = -30.0F;
+    }
+    CHECK(session.input_level() == -30.0F);
+    // A device picked during the call moves it live.
+    session.set_audio_devices("mic-2", "speakers-2");
+    {
+        std::scoped_lock lock(media.mutex);
+        CHECK(media.live_input == "mic-2");
+        CHECK(media.live_output == "speakers-2");
+    }
 
     {
         std::scoped_lock lock(media.mutex);

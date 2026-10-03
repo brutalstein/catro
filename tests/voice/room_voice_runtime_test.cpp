@@ -271,6 +271,12 @@ TEST_CASE("room voice runtime follows a new default microphone and survives a lo
     CHECK(snapshot.state == CATRO_VOICE_JOINED);
     CHECK(snapshot.audio_restarts == 2);
     CHECK(snapshot.error[0] == '\0');
+
+    // Picking a microphone in Settings moves the running call to it.
+    host.set_devices("usb-mic", nullptr);
+    REQUIRE(wait_until([&] { return audio.capture_opens == 4; }));
+    CHECK(audio.requested_capture() == "usb-mic");
+    CHECK(host.snapshot().state == CATRO_VOICE_JOINED);
 }
 
 TEST_CASE("room voice runtime fails with the room error when the RTC room fails") {

@@ -35,6 +35,12 @@ struct CatroApp: App {
             }
         }
 
+        Window("Stream", id: "stream") {
+            StreamWindow(model: product)
+                .preferredColorScheme(colorScheme)
+        }
+        .defaultSize(width: 1280, height: 720)
+
         Window("Catro Diagnostics", id: "diagnostics") {
             DiagnosticsView(model: model)
                 .frame(minWidth: 860, minHeight: 540)
@@ -60,7 +66,7 @@ struct CatroApp: App {
         }
 
         Settings {
-            SettingsView(model: product)
+            SettingsView(model: product, devices: model)
                 .tint(.catroAccent)
                 .preferredColorScheme(colorScheme)
         }

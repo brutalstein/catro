@@ -138,6 +138,7 @@ int run_room_voice(const tools::VoicePeerOptions& options,
 
     // Forces the first pass to apply the threshold and processing settings.
     auto applied_settings = settings.version.load(std::memory_order_acquire) - 1U;
+    auto applied_devices = settings.device_version.load(std::memory_order_acquire);
     while (!control.stop_requested.load(std::memory_order_acquire)) {
         const bool deafened = control.deafened.load(std::memory_order_acquire);
         pipeline->set_deafened(deafened);
@@ -152,6 +153,19 @@ int run_room_voice(const tools::VoicePeerOptions& options,
             });
             const auto threshold = settings.input_threshold_db.load(std::memory_order_relaxed);
             pipeline->set_input_threshold(std::isnan(threshold) ? std::nullopt : std::optional<float>{threshold});
+        }
+
+        if (const auto version = settings.device_version.load(std::memory_order_acquire);
+            version != applied_devices) {
+            applied_devices = version;
+            {
+                std::scoped_lock lock(settings.device_mutex);
+                audio_config.input = endpoint(settings.input_device.c_str());
+                audio_config.output = endpoint(settings.output_device.c_str());
+            }
+            if (reopen_audio()) {
+                control.audio_restarts.fetch_add(1, std::memory_order_relaxed);
+            }
         }
 
         const auto room_snapshot = api.snapshot(room);
@@ -400,6 +414,17 @@ void VoiceRuntimeHost::set_input_threshold(float dbfs) noexcept {
 
 void VoiceRuntimeHost::set_transmit(bool transmit) noexcept {
     settings_.transmit.store(transmit, std::memory_order_release);
+}
+
+void VoiceRuntimeHost::set_devices(const char* input_endpoint, const char* output_endpoint) noexcept {
+    try {
+        std::scoped_lock lock(settings_.device_mutex);
+        settings_.input_device = input_endpoint != nullptr ? input_endpoint : "";
+        settings_.output_device = output_endpoint != nullptr ? output_endpoint : "";
+    } catch (...) {
+        return;
+    }
+    settings_.device_version.fetch_add(1, std::memory_order_release);
 }
 
 bool VoiceRuntimeHost::user_speaking(const char* user_id) const noexcept {

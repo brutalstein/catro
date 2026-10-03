@@ -390,12 +390,19 @@ TEST_CASE("macOS product shell stays native accessible and free of view-body med
     CHECK(stream.find("NSViewRepresentable") != std::string::npos);
     CHECK(stream.find("dismantleNSView") != std::string::npos);
 
+    // Discord-style stream window: pop out and full screen, plus quality presets in the picker.
+    CHECK(stream.find("\"Pop Out\"") != std::string::npos);
+    CHECK(stream.find("toggleFullScreen") != std::string::npos);
+    CHECK(app.find("Window(\"Stream\", id: \"stream\")") != std::string::npos);
+    CHECK(picker.find("Picker(\"Resolution\"") != std::string::npos);
+    CHECK(picker.find("Picker(\"Frame rate\"") != std::string::npos);
+
     // Same Settings rows and values as Windows: an editable profile name and the System, Ivory and
-    // Espresso themes the Windows appearance picker offers.
+    // Espresso themes the Windows appearance picker offers, plus device choice and a live mic meter.
     const auto settings = read(root / "Product/SettingsView.swift");
     for (const auto* row : {"Section(\"Profile\")", "model.rename(", "Picker(\"Theme\"", "\"Ivory\"",
-                            "\"Espresso\"", "\"Microphone\", value: \"Default\"",
-                            "\"Output\", value: \"Default\"", "\"Profile\", value: \"Balanced\""}) {
+                            "\"Espresso\"", "DevicePicker(title: \"Microphone\"",
+                            "DevicePicker(title: \"Output\"", "InputMeter(", "\"Profile\", value: \"Balanced\""}) {
         INFO(row);
         CHECK(settings.find(row) != std::string::npos);
     }

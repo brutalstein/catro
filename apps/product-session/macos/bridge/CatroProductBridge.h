@@ -156,6 +156,11 @@ __attribute__((objc_subclassing_restricted))
 - (void)setInputThreshold:(float)dbfs;
 // Push-to-talk: NO keeps the microphone closed.
 - (void)setTransmit:(BOOL)transmit;
+// Endpoint ids from the audio device list; nil is the system default. Applies to a running call.
+- (void)setInputDevice:(nullable NSString*)input outputDevice:(nullable NSString*)output
+    NS_SWIFT_NAME(setAudioDevices(input:output:));
+// Microphone level in dBFS after processing; -100 outside voice.
+- (float)inputLevel;
 
 // Main thread only. Hosts the local preview / remote stream inside a caller-owned layer; nil
 // detaches. Returns nil on success, otherwise the failure.
