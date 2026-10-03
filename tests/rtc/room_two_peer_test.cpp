@@ -28,6 +28,11 @@ using Json = nlohmann::json;
 
 namespace {
 
+const bool kLogger = [] {
+    ::rtc::InitLogger(::rtc::LogLevel::Warning);
+    return true;
+}();
+
 class Relay {
 public:
     Relay() : server_(configuration()) {
