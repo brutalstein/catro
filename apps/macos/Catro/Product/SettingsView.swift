@@ -112,7 +112,8 @@ struct SettingsView: View {
             .onChange(of: noiseSuppression) { _ in model.applyVoicePreferences() }
             .onChange(of: automaticGain) { _ in model.applyVoicePreferences() }
             Section("Performance") {
-                LabeledContent("Profile", value: "Balanced")
+                LabeledContent("Video encoding", value: "Hardware H.264")
+                LabeledContent("Stream bitrate", value: "Adapts to the network")
             }
         }
         .formStyle(.grouped)

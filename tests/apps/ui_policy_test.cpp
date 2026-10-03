@@ -402,7 +402,7 @@ TEST_CASE("macOS product shell stays native accessible and free of view-body med
     const auto settings = read(root / "Product/SettingsView.swift");
     for (const auto* row : {"Section(\"Profile\")", "model.rename(", "Picker(\"Theme\"", "\"Ivory\"",
                             "\"Espresso\"", "DevicePicker(title: \"Microphone\"",
-                            "DevicePicker(title: \"Output\"", "InputMeter(", "\"Profile\", value: \"Balanced\""}) {
+                            "DevicePicker(title: \"Output\"", "InputMeter(", "\"Video encoding\", value: \"Hardware H.264\""}) {
         INFO(row);
         CHECK(settings.find(row) != std::string::npos);
     }
