@@ -94,6 +94,7 @@ struct ProductSession::Impl {
     Impl(ProductSessionDependencies dependencies, Listener listener)
         : deps_(std::move(dependencies)), listener_(std::move(listener)),
           screen_(std::make_unique<screen::MacScreenShareRuntime>(deps_.media.screen)) {
+        screen_->set_local_preview_enabled(false);
         if (!deps_.enumerate_sources) {
             deps_.enumerate_sources = [] { return platform::macos::MacScreenCapture{}.enumerate_sources(); };
         }
@@ -673,6 +674,11 @@ struct ProductSession::Impl {
         media.muted = voice.muted != 0;
         media.deafened = voice.deafened != 0;
         const auto share = screen_->snapshot();
+        media.share_source_title = share.source_title;
+        media.encoded_width = share.encoded_width;
+        media.encoded_height = share.encoded_height;
+        media.frames_sent = share.frames_sent;
+        media.stream_audio_active = share.stream_audio_active;
         media.remote_available = share.remote_available;
         if (media.sharing && share.state == screen::ScreenShareState::failed) {
             stop_share();
@@ -917,6 +923,10 @@ void ProductSession::set_watching(bool watching) {
 
 void ProductSession::set_stream_volume(float volume) {
     impl_->screen_->set_stream_volume(volume);
+}
+
+void ProductSession::set_local_preview_enabled(bool enabled) noexcept {
+    impl_->screen_->set_local_preview_enabled(enabled);
 }
 
 std::optional<screen::ScreenShareError> ProductSession::attach_preview_surface(void* host_layer) {

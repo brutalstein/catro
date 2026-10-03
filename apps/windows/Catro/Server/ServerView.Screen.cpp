@@ -2,6 +2,7 @@
 
 #include "Server/ServerView.xaml.h"
 #include "Server/ServerView.RuntimeConfig.hpp"
+#include "Settings/Performance.hpp"
 
 #include <catro/platform/windows/screen_capture.hpp>
 #include <catro/screen_runtime.hpp>
@@ -26,6 +27,20 @@
 #include <vector>
 
 namespace winrt::Catro::implementation {
+
+void ServerView::OnLocalPreviewChanged(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&) {
+    const bool enabled = LocalPreviewToggle().IsOn();
+    if (enabled == catro::shell::local_preview_preference()) {
+        return;
+    }
+    if (!catro::shell::save_local_preview(enabled)) {
+        LocalPreviewToggle().IsOn(catro::shell::local_preview_preference());
+        VoiceStateText().Text(L"Could not save the preview preference");
+        return;
+    }
+    ApplyActivityPolicy();
+    UpdateScreenShareUi();
+}
 
 namespace {
 
@@ -354,6 +369,16 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         audio_note.FontSize(11);
         form.Children().Append(audio_note);
 
+        controls::ToggleSwitch preview_box;
+        preview_box.Header(box_value(hstring{L"Show my preview"}));
+        preview_box.IsOn(catro::shell::local_preview_preference());
+        form.Children().Append(preview_box);
+
+        controls::TextBlock preview_note;
+        preview_note.Text(L"Preview only changes what you see here. You can turn it on or off while sharing.");
+        preview_note.TextWrapping(xaml::TextWrapping::Wrap);
+        form.Children().Append(preview_note);
+
         source_box.SelectionChanged(
             [&sources,
              audio_for,
@@ -541,6 +566,12 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
 
         const auto& selected_source =
             sources[static_cast<std::size_t>(selected)];
+        if (!catro::shell::save_local_preview(preview_box.IsOn())) {
+            workspace_state_.share_screen.fail("Could not save the preview preference");
+            UpdateVoiceUi();
+            co_return;
+        }
+        ApplyActivityPolicy();
         const auto capture_backend =
             catro::platform::windows::recommended_capture_backend(
                 selected_source);
@@ -1253,13 +1284,13 @@ void ServerView::UpdateScreenShareUi() {
                 ? hstring{L"Starting…"}
                 : to_hstring(snapshot.source_title));
 
-        if (snapshot.encoded_width != 0 &&
+        if (snapshot.frames_sent > 0 && snapshot.encoded_width != 0 &&
             snapshot.encoded_height != 0) {
             std::wstring meta =
                 std::to_wstring(snapshot.encoded_width);
             meta += L"×";
             meta += std::to_wstring(snapshot.encoded_height);
-            meta += L"  ·  LIVE";
+            meta += L"  ·  SENDING";
             if (snapshot.stream_audio_active) {
                 meta += L"  ·  AUDIO";
             } else if (

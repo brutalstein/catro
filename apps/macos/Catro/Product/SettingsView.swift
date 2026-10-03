@@ -112,6 +112,10 @@ struct SettingsView: View {
             .onChange(of: noiseSuppression) { _ in model.applyVoicePreferences() }
             .onChange(of: automaticGain) { _ in model.applyVoicePreferences() }
             Section("Performance") {
+                Toggle("Show my screen-share preview", isOn: $model.localPreviewEnabled)
+                Text("Turning preview off saves presentation work. Your stream continues at the selected quality.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 LabeledContent("Video encoding", value: "Hardware H.264")
                 LabeledContent("Stream bitrate", value: "Adapts to the network")
             }

@@ -38,6 +38,7 @@ struct ServerView : ServerViewT<ServerView> {
     void OnMuteVoice(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnDeafenVoice(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnShareScreen(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnLocalPreviewChanged(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnWatchStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnLeaveStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnPopOutStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);

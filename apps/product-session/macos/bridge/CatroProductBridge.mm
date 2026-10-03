@@ -236,6 +236,11 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
         _deafened = media.deafened;
         _peerCount = media.peer_count;
         _sharing = media.sharing;
+        _shareSourceTitle = copy_string(media.share_source_title);
+        _encodedWidth = media.encoded_width;
+        _encodedHeight = media.encoded_height;
+        _framesSent = media.frames_sent;
+        _streamAudioActive = media.stream_audio_active;
         _screenOwner = copy_string(media.screen_owner);
         _remoteAvailable = media.remote_available;
         _watching = media.watching;
@@ -414,6 +419,12 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
 - (void)setStreamVolume:(float)volume {
     if (_session) {
         _session->set_stream_volume(volume);
+    }
+}
+
+- (void)setLocalPreviewEnabled:(BOOL)enabled {
+    if (_session) {
+        _session->set_local_preview_enabled(enabled);
     }
 }
 

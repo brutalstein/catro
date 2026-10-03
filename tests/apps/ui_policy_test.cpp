@@ -36,6 +36,38 @@ std::string read_server_sources(const std::filesystem::path& root) {
 
 } // namespace
 
+TEST_CASE("both source pickers and live streams expose the saved local preview choice") {
+    const auto windows = std::filesystem::path(CATRO_WINDOWS_XAML_DIR);
+    const auto macos = std::filesystem::path(CATRO_MACOS_UI_DIR);
+    const auto picker = read(windows / "Server/ServerView.Screen.cpp");
+    const auto xaml = read(windows / "Server/ServerView.xaml");
+    CHECK(picker.find("Show my preview") != std::string::npos);
+    CHECK(xaml.find("OnLocalPreviewChanged") != std::string::npos);
+    CHECK(picker.find("save_local_preview") != std::string::npos);
+    CHECK(picker.find("snapshot.frames_sent > 0") != std::string::npos);
+
+    for (const auto* file : {"Product/SourcePicker.swift", "Product/StreamViewer.swift",
+                             "Product/SettingsView.swift"}) {
+        INFO(file);
+        const auto source = read(macos / file);
+        CHECK(source.find("$model.localPreviewEnabled") != std::string::npos);
+    }
+    const auto model = read(macos / "Product/AppModel.swift");
+    CHECK(model.find("UserDefaults.standard.bool(forKey: \"localPreviewEnabled\")") != std::string::npos);
+    CHECK(model.find("bridge.setLocalPreviewEnabled(") != std::string::npos);
+    // A detached layer must stop local presentation, including while moving to another window.
+    CHECK(model.find("localPreviewEnabled && previewLayer != nil") != std::string::npos);
+    const auto stream = read(macos / "Product/StreamViewer.swift");
+    CHECK(stream.find("if model.localPreviewEnabled") != std::string::npos);
+    CHECK(stream.find("Your screen is being shared") != std::string::npos);
+    CHECK(stream.find("didChangeOcclusionStateNotification") != std::string::npos);
+    CHECK(stream.find("window.occlusionState.contains(.visible)") != std::string::npos);
+    CHECK(model.find("&& previewVisible") != std::string::npos);
+    // The sharing status stays visible without a preview and uses outgoing media evidence.
+    CHECK(stream.find("snapshot.framesSent > 0") != std::string::npos);
+    CHECK(stream.find("snapshot.encodedWidth") != std::string::npos);
+}
+
 TEST_CASE("product shell XAML stays on the low-cost composition path") {
     const std::filesystem::path root = CATRO_WINDOWS_XAML_DIR;
     const std::array files{
