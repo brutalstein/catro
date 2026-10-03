@@ -10,11 +10,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <chrono>
+#include <condition_variable>
 #include <exception>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -34,6 +36,11 @@ constexpr std::string_view kVoiceLabel = "catro.voice.v1";
 constexpr std::string_view kVideoLabel = "catro.video.v1";
 constexpr std::string_view kStreamAudioLabel =
     "catro.stream-audio.v1";
+// A dropped signaling socket is rejoined with backoff for this long. It outlasts the server's 45 s
+// read timeout, which keeps a half-open old socket (and so this peer id) registered.
+constexpr auto kReconnectWindow = std::chrono::seconds{60};
+constexpr auto kReconnectAttemptTimeout = std::chrono::seconds{12};
+constexpr auto kReconnectMaxDelay = std::chrono::milliseconds{4000};
 
 [[nodiscard]] bool starts_with(
     std::string_view value,
@@ -112,6 +119,9 @@ struct RoomMeshTransport::Impl {
             callbacks_ = std::move(next_callbacks);
             stopping_.store(
                 false, std::memory_order_release);
+            joined_once_ = false;
+            lost_ = false;
+            reclaim_screen_ = false;
             state_.store(
                 RoomTransportState::connecting,
                 std::memory_order_release);
@@ -119,56 +129,8 @@ struct RoomMeshTransport::Impl {
         publish_state(RoomTransportState::connecting);
 
         try {
-            ::rtc::WebSocket::Configuration ws_config;
-            ws_config.connectionTimeout =
-                std::chrono::seconds{10};
-            ws_config.pingInterval =
-                std::chrono::seconds{15};
-            ws_config.maxOutstandingPings = 3;
-            ws_config.maxMessageSize =
-                kMaximumSignalMessage;
-
-            auto websocket =
-                std::make_shared<::rtc::WebSocket>(
-                    ws_config);
-
-            websocket->onOpen(
-                [this] {
-                    send_join();
-                });
-            websocket->onMessage(
-                [this](::rtc::message_variant message) {
-                    if (const auto* text =
-                            std::get_if<std::string>(
-                                &message)) {
-                        handle_signal(*text);
-                    }
-                });
-            websocket->onError(
-                [this](std::string error) {
-                    fail(
-                        RoomTransportErrorCode::
-                            signaling_failed,
-                        error);
-                });
-            websocket->onClosed(
-                [this] {
-                    if (!stopping_.load(
-                            std::memory_order_acquire)) {
-                        fail(
-                            RoomTransportErrorCode::
-                                signaling_failed,
-                            "signaling connection closed");
-                    }
-                });
-
-            std::string url;
-            {
-                std::scoped_lock lock(mutex_);
-                websocket_ = websocket;
-                url = config_.signaling_url;
-            }
-            websocket->open(url);
+            open_signaling();
+            supervisor_ = std::thread([this] { supervise(); });
         } catch (const std::exception& error) {
             stop();
             return RoomTransportError{
@@ -185,8 +147,16 @@ struct RoomMeshTransport::Impl {
     }
 
     void stop() noexcept {
-        stopping_.store(
-            true, std::memory_order_release);
+        {
+            std::scoped_lock lock(mutex_);
+            stopping_.store(
+                true, std::memory_order_release);
+        }
+        reconnect_cv_.notify_all();
+        // Joined first so no rejoin attempt can install a new socket after this point.
+        if (supervisor_.joinable()) {
+            supervisor_.join();
+        }
 
         std::shared_ptr<::rtc::WebSocket> websocket;
         std::vector<std::shared_ptr<Peer>> peers;
@@ -442,15 +412,28 @@ struct RoomMeshTransport::Impl {
                 }
             });
         connection->onStateChange(
-            [this, peer_id](
+            [this, peer_id, initiator](
                 ::rtc::PeerConnection::State state) {
-                if (state ==
-                        ::rtc::PeerConnection::State::
-                            Failed ||
-                    state ==
-                        ::rtc::PeerConnection::State::
-                            Closed) {
-                    remove_peer(peer_id);
+                using State = ::rtc::PeerConnection::State;
+                if (state != State::Failed &&
+                    state != State::Closed) {
+                    return;
+                }
+                // remove_peer resets this callback, so nothing captured is used after it.
+                auto* const self = this;
+                const auto id = peer_id;
+                const bool reoffer =
+                    initiator && state == State::Failed;
+                if (self->remove_peer(id) && reoffer &&
+                    !self->stopping_.load(
+                        std::memory_order_acquire) &&
+                    self->state_.load(
+                        std::memory_order_acquire) ==
+                        RoomTransportState::joined) {
+                    try {
+                        (void)self->ensure_peer(id, true);
+                    } catch (...) {
+                    }
                 }
             });
 
@@ -606,12 +589,26 @@ struct RoomMeshTransport::Impl {
                 message.value("type", "");
 
             if (type == "joined") {
-                set_screen_owner(
-                    message.value(
-                        "screen_owner", ""));
-                state_.store(
-                    RoomTransportState::joined,
-                    std::memory_order_release);
+                bool reclaim = false;
+                {
+                    std::scoped_lock lock(mutex_);
+                    joined_once_ = true;
+                    reclaim = std::exchange(
+                        reclaim_screen_, false);
+                    state_.store(
+                        RoomTransportState::joined,
+                        std::memory_order_release);
+                }
+                reconnect_cv_.notify_all();
+                const auto owner =
+                    message.value("screen_owner", "");
+                if (reclaim && owner.empty()) {
+                    // The drop released this share; claim it back so viewers keep watching.
+                    (void)send_json(
+                        Json{{"type", "screen_claim"}});
+                } else {
+                    set_screen_owner(owner);
+                }
                 publish_state(
                     RoomTransportState::joined);
 
@@ -670,6 +667,12 @@ struct RoomMeshTransport::Impl {
             }
 
             if (type == "error") {
+                {
+                    std::scoped_lock lock(mutex_);
+                    if (joined_once_) {
+                        return;
+                    }
+                }
                 fail(
                     RoomTransportErrorCode::
                         signaling_failed,
@@ -692,6 +695,7 @@ struct RoomMeshTransport::Impl {
             }
 
             if (kind == "offer") {
+                remove_peer(from);
                 const auto peer =
                     ensure_peer(from, false);
                 if (!peer) {
@@ -737,6 +741,177 @@ struct RoomMeshTransport::Impl {
             fail(
                 RoomTransportErrorCode::rtc_failed,
                 "RTC signaling message failed");
+        }
+    }
+
+    // Opens a signaling socket and makes it current. Events of replaced sockets are ignored.
+    void open_signaling() {
+        ::rtc::WebSocket::Configuration ws_config;
+        ws_config.connectionTimeout =
+            std::chrono::seconds{10};
+        ws_config.pingInterval =
+            std::chrono::seconds{15};
+        ws_config.maxOutstandingPings = 3;
+        ws_config.maxMessageSize =
+            kMaximumSignalMessage;
+
+        auto websocket =
+            std::make_shared<::rtc::WebSocket>(
+                ws_config);
+        std::uint64_t generation = 0;
+        std::shared_ptr<::rtc::WebSocket> previous;
+        std::string url;
+        {
+            std::scoped_lock lock(mutex_);
+            generation = ++generation_;
+            previous = std::exchange(websocket_, websocket);
+            url = config_.signaling_url;
+        }
+        if (previous) {
+            try {
+                previous->resetCallbacks();
+                previous->close();
+            } catch (...) {
+            }
+        }
+
+        websocket->onOpen(
+            [this, generation] {
+                if (current(generation)) {
+                    send_join();
+                }
+            });
+        websocket->onMessage(
+            [this, generation](::rtc::message_variant message) {
+                if (const auto* text =
+                        std::get_if<std::string>(
+                            &message);
+                    text != nullptr && current(generation)) {
+                    handle_signal(*text);
+                }
+            });
+        websocket->onError(
+            [this, generation](std::string error) {
+                connection_lost(generation, error);
+            });
+        websocket->onClosed(
+            [this, generation] {
+                connection_lost(
+                    generation,
+                    "signaling connection closed");
+            });
+        websocket->open(url);
+    }
+
+    [[nodiscard]] bool current(
+        std::uint64_t generation) const noexcept {
+        std::scoped_lock lock(mutex_);
+        return generation == generation_;
+    }
+
+    // Before the first join a lost socket fails the room. After it, the room drops its peers and
+    // the supervisor rejoins, like Discord's "RTC Connecting"; peers are rebuilt from the new join.
+    void connection_lost(
+        std::uint64_t generation,
+        std::string_view message) noexcept {
+        std::vector<std::shared_ptr<Peer>> peers;
+        bool rejoin = false;
+        {
+            std::scoped_lock lock(mutex_);
+            if (generation != generation_ ||
+                stopping_.load(std::memory_order_acquire) ||
+                state_.load(std::memory_order_acquire) ==
+                    RoomTransportState::failed) {
+                return;
+            }
+            rejoin = joined_once_;
+            if (rejoin) {
+                if (state_.load(std::memory_order_acquire) ==
+                    RoomTransportState::joined) {
+                    reclaim_screen_ =
+                        !screen_owner_.empty() &&
+                        screen_owner_ == config_.user_id;
+                }
+                lost_ = true;
+                state_.store(
+                    RoomTransportState::connecting,
+                    std::memory_order_release);
+                for (auto& [id, peer] : peers_) {
+                    (void)id;
+                    peers.push_back(std::move(peer));
+                }
+                peers_.clear();
+            }
+        }
+        if (!rejoin) {
+            fail(
+                RoomTransportErrorCode::signaling_failed,
+                message);
+            return;
+        }
+        for (const auto& peer : peers) {
+            close_peer(peer);
+        }
+        publish_state(RoomTransportState::connecting);
+        reconnect_cv_.notify_all();
+    }
+
+    void supervise() noexcept {
+        std::unique_lock lock(mutex_);
+        const auto stopping = [this] {
+            return stopping_.load(std::memory_order_acquire);
+        };
+        while (true) {
+            reconnect_cv_.wait(
+                lock, [&] { return stopping() || lost_; });
+            if (stopping()) {
+                return;
+            }
+            const auto deadline =
+                std::chrono::steady_clock::now() +
+                kReconnectWindow;
+            auto delay = std::chrono::milliseconds{250};
+            while (lost_) {
+                if (reconnect_cv_.wait_for(
+                        lock, delay, stopping)) {
+                    return;
+                }
+                if (std::chrono::steady_clock::now() >=
+                    deadline) {
+                    lost_ = false;
+                    lock.unlock();
+                    fail(
+                        RoomTransportErrorCode::
+                            signaling_failed,
+                        "signaling connection lost");
+                    lock.lock();
+                    break;
+                }
+                delay = std::min(
+                    delay * 2, kReconnectMaxDelay);
+                lost_ = false;
+                lock.unlock();
+                try {
+                    open_signaling();
+                } catch (...) {
+                }
+                lock.lock();
+                // The attempt ends when it joins or its socket drops (which sets lost_ again).
+                reconnect_cv_.wait_for(
+                    lock, kReconnectAttemptTimeout, [&] {
+                        return stopping() || lost_ ||
+                               state_.load(
+                                   std::memory_order_acquire) ==
+                                   RoomTransportState::joined;
+                    });
+                if (stopping()) {
+                    return;
+                }
+                if (state_.load(std::memory_order_acquire) !=
+                    RoomTransportState::joined) {
+                    lost_ = true;
+                }
+            }
         }
     }
 
@@ -801,10 +976,10 @@ struct RoomMeshTransport::Impl {
         }
     }
 
-    void remove_peer(
+    bool remove_peer(
         std::string_view peer_id) noexcept {
         if (peer_id.empty()) {
-            return;
+            return false;
         }
         std::shared_ptr<Peer> peer;
         {
@@ -812,12 +987,13 @@ struct RoomMeshTransport::Impl {
             const auto found =
                 peers_.find(std::string{peer_id});
             if (found == peers_.end()) {
-                return;
+                return false;
             }
             peer = std::move(found->second);
             peers_.erase(found);
         }
         close_peer(peer);
+        return true;
     }
 
     static void close_peer(
@@ -911,6 +1087,13 @@ struct RoomMeshTransport::Impl {
     std::atomic<RoomTransportState> state_{
         RoomTransportState::idle};
     std::atomic_bool stopping_{true};
+    // Rejoin state, guarded by mutex_.
+    std::condition_variable reconnect_cv_;
+    std::thread supervisor_;
+    std::uint64_t generation_ = 0;
+    bool joined_once_ = false;
+    bool lost_ = false;
+    bool reclaim_screen_ = false;
 };
 
 RoomMeshTransport::RoomMeshTransport()

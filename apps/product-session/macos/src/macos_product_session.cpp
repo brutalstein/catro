@@ -667,8 +667,15 @@ struct ProductSession::Impl {
         } else if (voice.state == CATRO_VOICE_FAILED) {
             stop_share();
             fail_voice(std::string{"Voice stopped: "} + voice.error);
+        } else if (room.state == CATRO_ROOM_CONNECTING) {
+            // The room transport is rejoining after a dropped signaling connection.
+            media.status = kReconnecting;
+        } else if (media.status == kReconnecting) {
+            media.status = "Voice connected";
         }
     }
+
+    static constexpr std::string_view kReconnecting = "Reconnecting...";
 
     void load_sources() {
         auto result = deps_.enumerate_sources();

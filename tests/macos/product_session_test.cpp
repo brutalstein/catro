@@ -199,6 +199,7 @@ struct FakeMedia {
     std::string owner;             // room screen owner reported now
     std::string owner_after_claim; // owner reported once a claim succeeds
     std::string room_error;
+    bool room_reconnecting = false;
     std::uint32_t peers = 1;
     std::string signaling_url;
     std::string user_id;
@@ -267,7 +268,9 @@ product::ProductMediaApi fake_media_api() {
     api.screen.snapshot = [](CatroRoomRuntimeHandle) noexcept {
         std::scoped_lock lock(g_media->mutex);
         CatroRoomRuntimeSnapshot snapshot{};
-        snapshot.state = g_media->room_error.empty() ? CATRO_ROOM_JOINED : CATRO_ROOM_FAILED;
+        snapshot.state = !g_media->room_error.empty() ? CATRO_ROOM_FAILED
+                         : g_media->room_reconnecting ? CATRO_ROOM_CONNECTING
+                                                      : CATRO_ROOM_JOINED;
         snapshot.peer_count = g_media->peers;
         g_media->owner.copy(snapshot.screen_owner, sizeof(snapshot.screen_owner) - 1);
         g_media->room_error.copy(snapshot.error, sizeof(snapshot.error) - 1);
@@ -706,6 +709,32 @@ TEST_CASE("macOS product session joins voice through provisioning, room, voice a
     std::scoped_lock lock(media.mutex);
     CHECK(std::count(media.calls.begin(), media.calls.end(), "room_start") == 1);
     CHECK(media.calls.back() == "room_destroy");
+}
+
+TEST_CASE("macOS product session shows a rejoining room without leaving voice") {
+    MediaScope scope;
+    auto& media = scope.media;
+    product::ProductSession session(online(seeded_directory()), {});
+    session.start();
+    REQUIRE(wait_until(session, synchronized_with_messages));
+    session.join_voice();
+    REQUIRE(wait_until(session, joined));
+
+    {
+        std::scoped_lock lock(media.mutex);
+        media.room_reconnecting = true;
+    }
+    poll_once(session);
+    CHECK(session.snapshot().media.status == "Reconnecting...");
+    CHECK(session.snapshot().media.phase == product::VoicePhase::joined);
+
+    {
+        std::scoped_lock lock(media.mutex);
+        media.room_reconnecting = false;
+    }
+    poll_once(session);
+    CHECK(session.snapshot().media.status == "Voice connected");
+    session.stop();
 }
 
 TEST_CASE("macOS product session reports voice join failures and requires online services") {
