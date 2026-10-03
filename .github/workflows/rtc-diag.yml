@@ -27,3 +27,18 @@ jobs:
             fi
             echo "run $i ok"
           done
+      - name: Repeat two/five-person WebRTC test
+        run: |
+          exe=$(find out/build/macos-clang -name catro_rtc_two_peer_test -type f -perm -u+x | head -1)
+          echo "cpus: $(sysctl -n hw.ncpu)"
+          fails=0
+          for i in $(seq 1 30); do
+            start=$(date +%s)
+            if ! "$exe" --order rand --rng-seed $i > run.log 2>&1; then
+              fails=$((fails+1)); echo "run $i FAILED ($(( $(date +%s)-start ))s)"; tail -c 4000 run.log
+            else
+              echo "run $i ok ($(( $(date +%s)-start ))s)"
+            fi
+          done
+          echo "failures: $fails/30"
+          [ "$fails" -eq 0 ]
