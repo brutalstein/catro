@@ -78,6 +78,9 @@ struct CaptureSource {
     std::uint32_t height = 0;
     bool primary = false;
     bool fullscreen_like = false;
+    // A window of a game Windows knows (Game Bar's game list) or one installed in a Steam or Xbox
+    // game library.
+    bool game = false;
 
     friend bool operator==(const CaptureSource&, const CaptureSource&) = default;
 };

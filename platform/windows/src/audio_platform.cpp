@@ -9,6 +9,7 @@
 #include <ks.h>
 #include <ksmedia.h>
 #include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
 #include <mmreg.h>
 #include <wrl/client.h>
 
@@ -363,6 +364,48 @@ audio::OpenResult WasapiAudioPlatform::open_capture(const std::optional<caps::Au
 audio::OpenResult WasapiAudioPlatform::open_render(const std::optional<caps::AudioEndpointId>& device,
                                                    audio::RenderSource& source, audio::StreamFailure failure) {
     return open(Direction::render, device, nullptr, &source, std::move(failure));
+}
+
+std::vector<AudioDeviceName> list_audio_devices(audio::DeviceDirection direction) {
+    // The caller may already be in an apartment; only undo an initialization made here.
+    const auto apartment = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    std::vector<AudioDeviceName> result;
+    {
+        ComPtr<IMMDeviceEnumerator> devices;
+        ComPtr<IMMDeviceCollection> collection;
+        UINT count = 0;
+        const auto flow = direction == audio::DeviceDirection::capture ? eCapture : eRender;
+        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&devices))) &&
+            SUCCEEDED(devices->EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE, &collection)) &&
+            SUCCEEDED(collection->GetCount(&count))) {
+            for (UINT index = 0; index < count; ++index) {
+                ComPtr<IMMDevice> device;
+                ComPtr<IPropertyStore> store;
+                LPWSTR raw_id = nullptr;
+                if (FAILED(collection->Item(index, &device)) || FAILED(device->GetId(&raw_id))) {
+                    continue;
+                }
+                AudioDeviceName entry{std::string(kEndpointPrefix) + utf8(raw_id), {}};
+                CoTaskMemFree(raw_id);
+                PROPVARIANT value;
+                PropVariantInit(&value);
+                if (SUCCEEDED(device->OpenPropertyStore(STGM_READ, &store)) &&
+                    SUCCEEDED(store->GetValue(PKEY_Device_FriendlyName, &value)) && value.vt == VT_LPWSTR &&
+                    value.pwszVal != nullptr) {
+                    entry.name = utf8(value.pwszVal);
+                }
+                PropVariantClear(&value);
+                if (entry.name.empty()) {
+                    entry.name = "Audio device";
+                }
+                result.push_back(std::move(entry));
+            }
+        }
+    }
+    if (SUCCEEDED(apartment)) {
+        CoUninitialize();
+    }
+    return result;
 }
 
 std::optional<caps::AudioEndpointId> WasapiAudioPlatform::default_device(audio::DeviceDirection direction) {

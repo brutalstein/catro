@@ -2,7 +2,19 @@
 
 #include <catro/audio/engine.hpp>
 
+#include <string>
+#include <vector>
+
 namespace catro::platform::windows {
+
+struct AudioDeviceName {
+    // "mmdevice:<id>", accepted wherever an AudioEndpointId value is.
+    std::string id;
+    std::string name;
+};
+
+// Active endpoints of one direction with their friendly names, for device pickers.
+[[nodiscard]] std::vector<AudioDeviceName> list_audio_devices(audio::DeviceDirection direction);
 
 // WASAPI shared-mode, event-driven streams. Each stream owns an MTA thread registered with MMCSS
 // ("Pro Audio"); activation, initialization, the real-time loop, and shutdown all run on it.

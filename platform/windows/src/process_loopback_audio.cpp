@@ -117,6 +117,7 @@ private:
 
 [[nodiscard]] HRESULT activate_process_loopback(
     std::uint32_t process_id,
+    bool exclude_target,
     HANDLE completed,
     ComPtr<IAudioClient>& client) noexcept {
     AUDIOCLIENT_ACTIVATION_PARAMS activation{};
@@ -125,7 +126,9 @@ private:
     activation.ProcessLoopbackParams.TargetProcessId =
         static_cast<DWORD>(process_id);
     activation.ProcessLoopbackParams.ProcessLoopbackMode =
-        PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE;
+        exclude_target
+            ? PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE
+            : PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE;
 
     PROPVARIANT parameters{};
     parameters.vt = VT_BLOB;
@@ -206,7 +209,8 @@ void publish_error(
 struct ProcessLoopbackAudioCapture::Impl {
     std::optional<StreamAudioError> start(
         std::uint32_t process_id,
-        Sink next_sink) {
+        Sink next_sink,
+        bool exclude_target) {
         stop();
 
         if (process_id == 0 || !next_sink) {
@@ -232,8 +236,9 @@ struct ProcessLoopbackAudioCapture::Impl {
             worker_ = std::thread(
                 [this,
                  process_id,
+                 exclude_target,
                  ready = std::move(ready)]() mutable {
-                    run(process_id, std::move(ready));
+                    run(process_id, exclude_target, std::move(ready));
                 });
         } catch (...) {
             sink_ = {};
@@ -265,6 +270,7 @@ struct ProcessLoopbackAudioCapture::Impl {
 
     void run(
         std::uint32_t process_id,
+        bool exclude_target,
         std::promise<
             std::optional<StreamAudioError>> ready) noexcept {
         const auto apartment =
@@ -305,6 +311,7 @@ struct ProcessLoopbackAudioCapture::Impl {
         ComPtr<IAudioClient> client;
         auto result = activate_process_loopback(
             process_id,
+            exclude_target,
             activation_event.get(),
             client);
         if (FAILED(result)) {
@@ -537,9 +544,10 @@ ProcessLoopbackAudioCapture::
 std::optional<StreamAudioError>
 ProcessLoopbackAudioCapture::start(
     std::uint32_t process_id,
-    Sink sink) {
+    Sink sink,
+    bool exclude_target) {
     return impl_->start(
-        process_id, std::move(sink));
+        process_id, std::move(sink), exclude_target);
 }
 
 void ProcessLoopbackAudioCapture::stop() noexcept {

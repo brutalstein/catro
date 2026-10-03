@@ -10,8 +10,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 
 namespace catro::screen {
@@ -30,8 +32,9 @@ struct ScreenShareConfig {
     std::uint32_t fps = 30;
     std::uint32_t bitrate = 6'000'000;
 
-    // Window shares can capture only the selected process tree's rendered audio. The production
-    // room transport carries it independently from microphone voice.
+    // A window share captures its process tree's audio; a display share captures computer audio
+    // except Catro itself, so voices are never sent twice. The production room transport carries
+    // it independently from microphone voice.
     bool share_audio = true;
     std::int32_t stream_audio_bitrate = 128'000;
 
@@ -72,6 +75,13 @@ public:
     // Receiving RTP is room state; decoding/presentation is viewer state. Keeping these separate
     // means a user can stay in voice while choosing whether to spend GPU time watching a stream.
     void set_remote_viewing_enabled(bool enabled) noexcept;
+
+    // Playback volume of the watched stream's audio: 0 silences, 1 is unchanged, 2 doubles.
+    void set_stream_volume(float volume) noexcept;
+
+    // Receives stream audio this PC plays or shares, for the voice echo canceller. Set before
+    // start_listening; called from media threads.
+    void set_echo_sink(std::function<void(std::span<const float>)> sink);
 
     // Stops both directions and releases the transport.
     void stop() noexcept;

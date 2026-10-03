@@ -71,9 +71,12 @@ public:
     ProcessLoopbackAudioCapture& operator=(
         const ProcessLoopbackAudioCapture&) = delete;
 
+    // Captures the process tree of process_id, or with exclude_target everything the system renders
+    // except that tree (computer audio without Catro's own voice playback).
     [[nodiscard]] std::optional<StreamAudioError> start(
         std::uint32_t process_id,
-        Sink sink);
+        Sink sink,
+        bool exclude_target = false);
     void stop() noexcept;
 
     [[nodiscard]] StreamAudioStatistics statistics()

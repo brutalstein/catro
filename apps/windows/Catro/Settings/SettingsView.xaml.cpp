@@ -5,6 +5,8 @@
 #include "Settings/Performance.hpp"
 #include "Settings/Voice.hpp"
 
+#include <catro/platform/windows/audio_platform.hpp>
+
 #include <chrono>
 #if __has_include("SettingsView.g.cpp")
 #include "SettingsView.g.cpp"
@@ -44,6 +46,35 @@ std::wstring key_name(std::uint32_t key) {
     return L"Key " + std::to_wstring(key);
 }
 
+// Default first, then every active device; a saved device that is unplugged stays listed so the
+// choice survives until it returns.
+void fill_devices(Microsoft::UI::Xaml::Controls::ComboBox const& box, std::vector<std::string>& ids,
+                  catro::audio::DeviceDirection direction, std::string const& selected) {
+    ids.assign(1, std::string{});
+    box.Items().Clear();
+    box.Items().Append(box_value(hstring{L"Default"}));
+    int32_t index = 0;
+    for (auto& device : catro::platform::windows::list_audio_devices(direction)) {
+        if (device.id == selected) {
+            index = static_cast<int32_t>(ids.size());
+        }
+        box.Items().Append(box_value(to_hstring(device.name)));
+        ids.push_back(std::move(device.id));
+    }
+    if (!selected.empty() && index == 0) {
+        index = static_cast<int32_t>(ids.size());
+        box.Items().Append(box_value(hstring{L"Disconnected device"}));
+        ids.push_back(selected);
+    }
+    box.SelectedIndex(index);
+}
+
+std::string chosen(Microsoft::UI::Xaml::Controls::ComboBox const& box, std::vector<std::string> const& ids) {
+    const auto index = box.SelectedIndex();
+    return index > 0 && static_cast<std::size_t>(index) < ids.size() ? ids[static_cast<std::size_t>(index)]
+                                                                      : std::string{};
+}
+
 } // namespace
 
 void SettingsView::LoadVoicePreferences() {
@@ -56,6 +87,9 @@ void SettingsView::LoadVoicePreferences() {
     EchoToggle().IsOn(preferences.echo_cancellation);
     NoiseToggle().IsOn(preferences.noise_suppression);
     GainToggle().IsOn(preferences.automatic_gain);
+    SoundsToggle().IsOn(preferences.sounds);
+    fill_devices(InputDeviceBox(), input_ids_, catro::audio::DeviceDirection::capture, preferences.input_device);
+    fill_devices(OutputDeviceBox(), output_ids_, catro::audio::DeviceDirection::render, preferences.output_device);
     PushToTalkRow().Visibility(preferences.push_to_talk ? Microsoft::UI::Xaml::Visibility::Visible
                                                         : Microsoft::UI::Xaml::Visibility::Collapsed);
     ShowPushToTalkKey();
@@ -77,6 +111,9 @@ void SettingsView::SaveVoicePreferences() {
     preferences.echo_cancellation = EchoToggle().IsOn();
     preferences.noise_suppression = NoiseToggle().IsOn();
     preferences.automatic_gain = GainToggle().IsOn();
+    preferences.sounds = SoundsToggle().IsOn();
+    preferences.input_device = chosen(InputDeviceBox(), input_ids_);
+    preferences.output_device = chosen(OutputDeviceBox(), output_ids_);
     catro::shell::save_voice_preferences(preferences);
     SensitivitySlider().IsEnabled(!preferences.automatic_sensitivity);
     PushToTalkRow().Visibility(preferences.push_to_talk ? Microsoft::UI::Xaml::Visibility::Visible
@@ -89,6 +126,11 @@ void SettingsView::OnInputModeChanged(IInspectable const&,
 }
 
 void SettingsView::OnVoiceToggleChanged(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&) {
+    SaveVoicePreferences();
+}
+
+void SettingsView::OnDeviceChanged(IInspectable const&,
+                                   Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&) {
     SaveVoicePreferences();
 }
 

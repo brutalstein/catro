@@ -43,6 +43,8 @@ void SettingsView::OnAppearanceTab(IInspectable const&, xaml::RoutedEventArgs co
 }
 
 void SettingsView::OnVoiceTab(IInspectable const&, xaml::RoutedEventArgs const&) {
+    // Re-reads devices so a headset plugged in since the page opened is listed.
+    LoadVoicePreferences();
     ShowPanel(Panel::voice);
 }
 

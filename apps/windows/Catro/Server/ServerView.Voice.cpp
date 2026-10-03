@@ -2,6 +2,7 @@
 
 #include "Server/ServerView.xaml.h"
 #include "Server/ServerView.RuntimeConfig.hpp"
+#include "Settings/Voice.hpp"
 
 #include <chrono>
 #include <string>
@@ -43,6 +44,7 @@ void ServerView::OnMuteVoice(IInspectable const&, xaml::RoutedEventArgs const&) 
     }
     muted_ = !muted_;
     catro_voice_runtime_set_muted(voice_runtime_, muted_ ? 1U : 0U);
+    PlayCue(muted_ ? L"Speech Sleep.wav" : L"Windows Navigation Start.wav");
     UpdateVoiceUi();
 }
 
@@ -52,6 +54,8 @@ void ServerView::OnDeafenVoice(IInspectable const&, xaml::RoutedEventArgs const&
     }
     deafened_ = !deafened_;
     catro_voice_runtime_set_deafened(voice_runtime_, deafened_ ? 1U : 0U);
+    ApplyStreamVolume();
+    PlayCue(deafened_ ? L"Speech Sleep.wav" : L"Windows Navigation Start.wav");
     UpdateVoiceUi();
 }
 
@@ -175,10 +179,14 @@ void ServerView::StartVoice(
 
     const auto direct =
         direct_voice_config();
+    // Settings pick the devices; the environment still overrides them for testing.
+    const auto& preferences = catro::shell::voice_preferences();
     const auto input =
-        environment("CATRO_VOICE_INPUT");
+        environment("CATRO_VOICE_INPUT").value_or(preferences.input_device);
     const auto output =
-        environment("CATRO_VOICE_OUTPUT");
+        environment("CATRO_VOICE_OUTPUT").value_or(preferences.output_device);
+    applied_input_device_ = preferences.input_device;
+    applied_output_device_ = preferences.output_device;
 
     room_mode_active_ = false;
     room_peer_id_.clear();
@@ -310,14 +318,13 @@ void ServerView::StartVoice(
         .stream_id = LocalStreamId(),
         .jitter_packets = 3,
         .bitrate = 48'000,
-        .input_endpoint =
-            input ? input->c_str() : nullptr,
-        .output_endpoint =
-            output ? output->c_str() : nullptr,
+        .input_endpoint = input.c_str(),
+        .output_endpoint = output.c_str(),
     };
 
     muted_ = false;
     deafened_ = false;
+    ApplyStreamVolume();
     ApplyVoicePreferences();
     if (catro_voice_runtime_start(
             voice_runtime_,
@@ -398,10 +405,27 @@ void ServerView::StopVoice() {
     workspace_state_.share_screen.enable();
     muted_ = false;
     deafened_ = false;
+    ApplyStreamVolume();
     if (voice_timer_) {
         voice_timer_.Stop();
     }
     UpdateVoiceUi();
+}
+
+void ServerView::OnStreamVolumeChanged(
+    IInspectable const&, controls::Primitives::RangeBaseValueChangedEventArgs const& args) {
+    // XAML sets the initial value before the runtime exists.
+    if (!screen_runtime_) {
+        return;
+    }
+    auto preferences = catro::shell::voice_preferences();
+    const auto volume = static_cast<float>(args.NewValue() / 100.0);
+    if (std::abs(volume - preferences.stream_volume) < 0.001F) {
+        return;
+    }
+    preferences.stream_volume = volume;
+    catro::shell::save_voice_preferences(preferences);
+    ApplyStreamVolume();
 }
 
 

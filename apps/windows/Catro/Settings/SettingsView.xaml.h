@@ -4,6 +4,8 @@
 #include <catro/community/model.hpp>
 #include <functional>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace winrt::Catro::implementation {
 
@@ -21,6 +23,7 @@ struct SettingsView : SettingsViewT<SettingsView> {
     void OnSensitivityChanged(
         IInspectable const&, Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const&);
     void OnRecordPushToTalk(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnDeviceChanged(IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
     void OnSaveProfile(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnCopyIdentity(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnPreviewChanged(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
@@ -37,6 +40,9 @@ private:
     winrt::fire_and_forget SaveProfile();
     Microsoft::UI::Dispatching::DispatcherQueueTimer record_timer_{nullptr};
     bool loading_voice_ = false;
+    // Endpoint ids behind the device pickers; index 0 is the Windows default (empty).
+    std::vector<std::string> input_ids_;
+    std::vector<std::string> output_ids_;
     std::optional<catro::community::LocalState> local_state_;
     std::function<void(catro::community::LocalState const&)> profile_changed_;
     bool saving_ = false;

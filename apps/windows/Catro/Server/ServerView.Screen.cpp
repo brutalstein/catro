@@ -65,10 +65,11 @@ struct ViewportSize {
 std::wstring capture_source_label(
     const catro::platform::windows::CaptureSource& source) {
     std::wstring label =
-        source.kind == catro::platform::windows::CaptureSourceKind::display
+        source.game ? L"Game — "
+        : source.kind == catro::platform::windows::CaptureSourceKind::display
             ? L"Display — "
             : L"Window — ";
-    if (source.fullscreen_like &&
+    if (source.fullscreen_like && !source.game &&
         source.kind == catro::platform::windows::CaptureSourceKind::window) {
         label += L"Fullscreen/game — ";
     }
@@ -324,35 +325,39 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
 
         controls::ToggleSwitch share_audio_box;
         share_audio_box.Header(
-            box_value(hstring{L"Share application audio"}));
+            box_value(hstring{L"Share audio"}));
         share_audio_box.OnContent(
             box_value(hstring{L"On"}));
         share_audio_box.OffContent(
             box_value(hstring{L"Off"}));
-        const auto first_audio_available =
-            room_mode_active_ &&
-            sources.front().kind ==
-                catro::platform::windows::CaptureSourceKind::window &&
-            sources.front().process_id != 0;
-        share_audio_box.IsEnabled(
-            first_audio_available);
-        share_audio_box.IsOn(
-            first_audio_available);
+        // Like Discord: an app or game share includes its sound; computer audio for a whole
+        // display is opt-in and never includes Catro's own voices.
+        const auto audio_for = [this](const catro::platform::windows::CaptureSource& source) {
+            return room_mode_active_ &&
+                   (source.kind == catro::platform::windows::CaptureSourceKind::display ||
+                    source.process_id != 0);
+        };
+        const auto audio_default = [](const catro::platform::windows::CaptureSource& source) {
+            return source.kind == catro::platform::windows::CaptureSourceKind::window;
+        };
+        share_audio_box.IsEnabled(audio_for(sources.front()));
+        share_audio_box.IsOn(audio_for(sources.front()) && audio_default(sources.front()));
         form.Children().Append(share_audio_box);
 
         controls::TextBlock audio_note;
         audio_note.Text(
             room_mode_active_
-                ? L"Application audio captures only the selected window's process tree at 48 kHz stereo. Display shares never capture all system audio automatically."
-                : L"Application audio is enabled for secure RTC rooms; local direct-peer engineering mode carries video only.");
+                ? L"A window or game shares only its own sound. A display can share computer audio; voices in Catro are never included."
+                : L"Stream audio is enabled for secure RTC rooms; local direct-peer engineering mode carries video only.");
         audio_note.TextWrapping(
             xaml::TextWrapping::Wrap);
         audio_note.FontSize(11);
         form.Children().Append(audio_note);
 
         source_box.SelectionChanged(
-            [this,
-             &sources,
+            [&sources,
+             audio_for,
+             audio_default,
              browser_note,
              game_note,
              share_audio_box](auto const& sender, auto const&) {
@@ -388,16 +393,11 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
                         : xaml::Visibility::Collapsed);
 
                 const bool audio_available =
-                    source != nullptr &&
-                    room_mode_active_ &&
-                    source->kind ==
-                        catro::platform::windows::
-                            CaptureSourceKind::window &&
-                    source->process_id != 0;
+                    source != nullptr && audio_for(*source);
                 share_audio_box.IsEnabled(
                     audio_available);
                 share_audio_box.IsOn(
-                    audio_available);
+                    audio_available && audio_default(*source));
             });
 
         controls::ToggleSwitch borderless_box;
@@ -457,8 +457,17 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         fps_box.Minimum(1);
         fps_box.Maximum(120);
         fps_box.SmallChange(1);
-        fps_box.Value(30);
+        // Games move fast; 60 FPS keeps motion smooth and the bitrate adapts to the network.
+        fps_box.Value(sources.front().game ? 60 : 30);
         form.Children().Append(fps_box);
+        source_box.SelectionChanged(
+            [&sources, fps_box](auto const& sender, auto const&) {
+                const auto selected = sender.as<controls::ComboBox>().SelectedIndex();
+                if (selected >= 0 && static_cast<std::size_t>(selected) < sources.size() &&
+                    sources[static_cast<std::size_t>(selected)].game) {
+                    fps_box.Value(60);
+                }
+            });
 
         controls::NumberBox bitrate_box;
         bitrate_box.Header(box_value(hstring{L"Bitrate (Mbps)"}));

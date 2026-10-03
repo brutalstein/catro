@@ -53,6 +53,13 @@ void ServerView::InitializeComponent() {
     voice_runtime_ = catro_voice_runtime_create();
     screen_runtime_ =
         std::make_unique<catro::screen::WindowsScreenShareRuntime>();
+    // Stream audio heard or shared here is removed from the microphone, so it never reaches
+    // friends twice or mixes into voices. The screen runtime stops before the voice runtime.
+    screen_runtime_->set_echo_sink([voice = voice_runtime_](std::span<const float> pcm) {
+        catro_voice_runtime_add_echo_reference(voice, pcm.data(), pcm.size());
+    });
+    ApplyStreamVolume();
+    StreamVolumeSlider().Value(catro::shell::voice_preferences().stream_volume * 100.0);
 
     screen_timer_ = DispatcherQueue().CreateTimer();
     screen_timer_.Interval(250ms);

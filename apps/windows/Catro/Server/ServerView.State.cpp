@@ -5,8 +5,12 @@
 
 #include <cmath>
 
+#include <mmsystem.h>
+
 #include <algorithm>
 #include <string>
+
+#pragma comment(lib, "winmm.lib")
 
 namespace winrt::Catro::implementation {
 
@@ -118,6 +122,34 @@ void ServerView::ApplyVoicePreferences() {
                                        preferences.automatic_gain ? 1U : 0U);
     catro_voice_runtime_set_input_threshold(
         voice_runtime_, preferences.automatic_sensitivity ? NAN : preferences.sensitivity_db);
+    if (preferences.input_device != applied_input_device_ ||
+        preferences.output_device != applied_output_device_) {
+        applied_input_device_ = preferences.input_device;
+        applied_output_device_ = preferences.output_device;
+        catro_voice_runtime_set_devices(
+            voice_runtime_, applied_input_device_.c_str(), applied_output_device_.c_str());
+    }
+    ApplyStreamVolume();
+}
+
+void ServerView::PlayCue(wchar_t const* file) const {
+    if (!catro::shell::voice_preferences().sounds) {
+        return;
+    }
+    wchar_t windows[MAX_PATH]{};
+    const auto length = GetWindowsDirectoryW(windows, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) {
+        return;
+    }
+    const auto path = std::wstring{windows} + L"\\Media\\" + file;
+    (void)PlaySoundW(path.c_str(), nullptr, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+}
+
+void ServerView::ApplyStreamVolume() {
+    if (screen_runtime_) {
+        screen_runtime_->set_stream_volume(
+            deafened_ ? 0.0F : catro::shell::voice_preferences().stream_volume);
+    }
 }
 
 void ServerView::UpdatePushToTalk(bool joined) {
@@ -168,6 +200,19 @@ void ServerView::UpdateVoiceUi() {
         snapshot.state == CATRO_VOICE_JOINED &&
         room_ready;
     UpdatePushToTalk(joined);
+    // Discord-style cues with Windows' own sounds. A reconnect keeps the call, so it stays quiet.
+    if (joined && !cue_joined_) {
+        PlayCue(L"Speech On.wav");
+        cue_joined_ = true;
+        cue_peers_ = room.peer_count;
+    } else if (!active && cue_joined_) {
+        PlayCue(L"Speech Off.wav");
+        cue_joined_ = false;
+    } else if (joined && room_mode_active_ && room.peer_count != cue_peers_) {
+        PlayCue(room.peer_count > cue_peers_ ? L"Windows Hardware Insert.wav"
+                                             : L"Windows Hardware Remove.wav");
+        cue_peers_ = room.peer_count;
+    }
     const bool another_participant_sharing =
         room_mode_active_ &&
         room.screen_owner[0] != '\0' &&
@@ -262,7 +307,7 @@ void ServerView::UpdateVoiceUi() {
     }
     if (room_mode_active_ &&
         room.state == CATRO_ROOM_CONNECTING) {
-        VoiceStateText().Text(L"Connecting room");
+        VoiceStateText().Text(cue_joined_ ? L"Reconnecting…" : L"Connecting room");
         return;
     }
     if (snapshot.state == CATRO_VOICE_STARTING) {

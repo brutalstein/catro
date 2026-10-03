@@ -18,6 +18,13 @@ struct VoicePreferences {
     bool echo_cancellation = true;
     bool noise_suppression = true;
     bool automatic_gain = true;
+    // "mmdevice:<id>" endpoints; empty follows the Windows default.
+    std::string input_device;
+    std::string output_device;
+    // Join, leave, mute and deafen sounds.
+    bool sounds = true;
+    // Watched stream audio: 0 silences, 1 is unchanged, 2 doubles.
+    float stream_volume = 1.0F;
 };
 
 inline std::filesystem::path voice_preferences_path() {
@@ -53,6 +60,14 @@ inline VoicePreferences& voice_preferences() {
                     loaded.noise_suppression = on;
                 } else if (key == "automatic-gain") {
                     loaded.automatic_gain = on;
+                } else if (key == "input-device") {
+                    loaded.input_device = text;
+                } else if (key == "output-device") {
+                    loaded.output_device = text;
+                } else if (key == "sounds") {
+                    loaded.sounds = on;
+                } else if (key == "stream-volume") {
+                    loaded.stream_volume = std::clamp(std::stof(text), 0.0F, 2.0F);
                 }
             } catch (...) {
                 // A damaged value keeps its default.
@@ -85,7 +100,11 @@ inline bool save_voice_preferences(const VoicePreferences& preferences) {
            << "sensitivity-db=" << preferences.sensitivity_db << '\n'
            << "echo-cancellation=" << flag(preferences.echo_cancellation) << '\n'
            << "noise-suppression=" << flag(preferences.noise_suppression) << '\n'
-           << "automatic-gain=" << flag(preferences.automatic_gain) << '\n';
+           << "automatic-gain=" << flag(preferences.automatic_gain) << '\n'
+           << "input-device=" << preferences.input_device << '\n'
+           << "output-device=" << preferences.output_device << '\n'
+           << "sounds=" << flag(preferences.sounds) << '\n'
+           << "stream-volume=" << preferences.stream_volume << '\n';
     output.close();
     return static_cast<bool>(output);
 }

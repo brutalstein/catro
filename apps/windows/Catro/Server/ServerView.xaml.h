@@ -42,6 +42,8 @@ struct ServerView : ServerViewT<ServerView> {
     void OnLeaveStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnPopOutStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnFullScreenStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnStreamVolumeChanged(
+        IInspectable const&, Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const&);
     void OnSizeChanged(IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
     void OnMessageContainerChanging(
         Microsoft::UI::Xaml::Controls::ListViewBase const&,
@@ -68,6 +70,10 @@ private:
     // Sends saved voice preferences to the runtime when they changed since the last call.
     void ApplyVoicePreferences();
     void UpdatePushToTalk(bool joined);
+    // Plays a Windows sound from %WINDIR%\Media unless voice sounds are off.
+    void PlayCue(wchar_t const* file) const;
+    // Watched stream audio follows the saved volume, and deafen silences it.
+    void ApplyStreamVolume();
     Microsoft::UI::Xaml::Controls::Flyout MemberVolumeFlyout();
     winrt::fire_and_forget BeginMemberRefresh();
     void ResetAccessRequests();
@@ -126,6 +132,12 @@ private:
     Microsoft::UI::Dispatching::DispatcherQueueTimer push_to_talk_timer_{nullptr};
     std::uint32_t applied_voice_preferences_ = ~0U;
     bool push_to_talk_down_ = false;
+    // Devices last sent to the voice runtime, so unrelated preference saves never reopen audio.
+    std::string applied_input_device_;
+    std::string applied_output_device_;
+    // Call state behind join/leave sounds and the reconnecting label.
+    bool cue_joined_ = false;
+    std::uint32_t cue_peers_ = 0;
     Microsoft::UI::Dispatching::DispatcherQueueTimer message_timer_{nullptr};
     Microsoft::UI::Dispatching::DispatcherQueueTimer member_timer_{nullptr};
     Microsoft::UI::Dispatching::DispatcherQueueTimer access_timer_{nullptr};

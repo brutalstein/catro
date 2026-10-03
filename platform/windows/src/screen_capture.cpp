@@ -443,7 +443,14 @@ std::string utf8(std::wstring_view wide) {
     return converted == required ? output : std::string{};
 }
 
-std::string process_image_name(DWORD process_id) noexcept {
+void lowercase(std::wstring& text) noexcept {
+    if (!text.empty()) {
+        (void)CharLowerBuffW(text.data(), static_cast<DWORD>(text.size()));
+    }
+}
+
+// Lowercase full executable path, empty when the process cannot be queried.
+std::wstring process_image_path(DWORD process_id) {
     if (process_id == 0) {
         return {};
     }
@@ -459,15 +466,60 @@ std::string process_image_name(DWORD process_id) noexcept {
         return {};
     }
     path.resize(static_cast<std::size_t>(length));
+    lowercase(path);
+    return path;
+}
+
+std::string image_name(std::wstring_view path) {
     const auto separator = path.find_last_of(L"\\/");
-    const std::wstring_view base =
-        separator == std::wstring::npos ? std::wstring_view{path}
-                                        : std::wstring_view{path}.substr(separator + 1U);
-    auto result = utf8(base);
-    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char value) {
-        return static_cast<char>(std::tolower(value));
-    });
-    return result;
+    return utf8(separator == std::wstring_view::npos ? path : path.substr(separator + 1U));
+}
+
+// Executables Game Bar recognized as games for this user, lowercase.
+std::vector<std::wstring> known_game_paths() {
+    std::vector<std::wstring> paths;
+    HKEY children = nullptr;
+    if (RegOpenKeyExW(
+            HKEY_CURRENT_USER, L"System\\GameConfigStore\\Children", 0, KEY_READ, &children) !=
+        ERROR_SUCCESS) {
+        return paths;
+    }
+    std::array<wchar_t, 256> name{};
+    std::wstring path(1024, L'\0');
+    for (DWORD index = 0;; ++index) {
+        DWORD name_length = static_cast<DWORD>(name.size());
+        const auto status = RegEnumKeyExW(
+            children, index, name.data(), &name_length, nullptr, nullptr, nullptr, nullptr);
+        if (status == ERROR_MORE_DATA) {
+            continue;
+        }
+        if (status != ERROR_SUCCESS) {
+            break;
+        }
+        DWORD bytes = static_cast<DWORD>(path.size() * sizeof(wchar_t));
+        if (RegGetValueW(
+                children, name.data(), L"MatchedExeFullPath", RRF_RT_REG_SZ, nullptr,
+                path.data(), &bytes) != ERROR_SUCCESS ||
+            bytes < 2 * sizeof(wchar_t)) {
+            continue;
+        }
+        std::wstring value(path.data(), bytes / sizeof(wchar_t) - 1U);
+        lowercase(value);
+        paths.push_back(std::move(value));
+    }
+    RegCloseKey(children);
+    return paths;
+}
+
+[[nodiscard]] bool is_game(std::wstring_view path, const std::vector<std::wstring>& known) {
+    if (path.empty()) {
+        return false;
+    }
+    if (path.find(L"\\steamapps\\common\\") != std::wstring_view::npos ||
+        path.find(L"\\xboxgames\\") != std::wstring_view::npos) {
+        return true;
+    }
+    return std::find(known.begin(), known.end(), path) != known.end();
 }
 
 std::variant<capture::GraphicsCaptureItem, ScreenCaptureError> capture_item_for_monitor(
@@ -1154,6 +1206,10 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
             },
             reinterpret_cast<LPARAM>(&sources));
 
+        struct WindowScan {
+            std::vector<CaptureSource>& output;
+            std::vector<std::wstring> games;
+        } scan{sources, known_game_paths()};
         (void)EnumWindows(
             [](HWND window, LPARAM opaque) -> BOOL {
                 if (!IsWindowVisible(window) ||
@@ -1197,27 +1253,32 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
                 const bool fullscreen_like =
                     window_is_fullscreen_like(window, monitor);
 
-                auto& output =
-                    *reinterpret_cast<std::vector<CaptureSource>*>(opaque);
-                output.push_back(CaptureSource{
+                auto& state = *reinterpret_cast<WindowScan*>(opaque);
+                const auto path = process_image_path(process_id);
+                state.output.push_back(CaptureSource{
                     .kind = CaptureSourceKind::window,
                     .native_handle = reinterpret_cast<std::uintptr_t>(window),
                     .monitor_handle = reinterpret_cast<std::uintptr_t>(monitor),
                     .title = utf8(title),
-                    .process_name = process_image_name(process_id),
+                    .process_name = image_name(path),
                     .process_id = static_cast<std::uint32_t>(process_id),
                     .width = static_cast<std::uint32_t>(width),
                     .height = static_cast<std::uint32_t>(height),
                     .primary = false,
                     .fullscreen_like = fullscreen_like,
+                    .game = is_game(path, state.games),
                 });
                 return TRUE;
             },
-            reinterpret_cast<LPARAM>(&sources));
+            reinterpret_cast<LPARAM>(&scan));
 
+        // Running games first, like Discord's "Stream <game>", then displays, then windows.
         std::stable_sort(
             sources.begin(), sources.end(),
             [](const CaptureSource& left, const CaptureSource& right) {
+                if (left.game != right.game) {
+                    return left.game;
+                }
                 if (left.kind != right.kind) {
                     return left.kind == CaptureSourceKind::display;
                 }

@@ -99,22 +99,14 @@
                 <Border Style="{StaticResource CatroCardStyle}" Padding="20">
                     <StackPanel Spacing="16">
                         <TextBlock Text="Audio" Style="{StaticResource CatroSectionTitleTextStyle}" />
-                        <Grid ColumnSpacing="20">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <TextBlock Text="Microphone" Style="{StaticResource CatroBodyTextStyle}" />
-                            <TextBlock Grid.Column="1" Text="Default" Style="{StaticResource CatroSecondaryTextStyle}" />
-                            <TextBlock Grid.Row="1" Text="Output" Margin="0,12,0,0" Style="{StaticResource CatroBodyTextStyle}" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="Default" Margin="0,12,0,0" Style="{StaticResource CatroSecondaryTextStyle}" />
-                        </Grid>
-                        <TextBlock Text="Uses your Windows default devices. Device diagnostics are available in System."
+                        <ComboBox x:Name="InputDeviceBox" Header="Microphone" HorizontalAlignment="Stretch"
+                                  SelectionChanged="OnDeviceChanged" AutomationProperties.Name="Microphone" />
+                        <ComboBox x:Name="OutputDeviceBox" Header="Output" HorizontalAlignment="Stretch"
+                                  SelectionChanged="OnDeviceChanged" AutomationProperties.Name="Output device" />
+                        <TextBlock Text="Changes apply right away, even during a call. Default follows Windows when you plug in a headset."
                                    FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                        <ToggleSwitch x:Name="SoundsToggle" Header="Join, leave, mute and deafen sounds"
+                                      Toggled="OnVoiceToggleChanged" AutomationProperties.Name="Voice sounds" />
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource CatroCardStyle}" Padding="20">

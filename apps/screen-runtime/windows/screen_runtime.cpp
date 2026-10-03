@@ -358,12 +358,13 @@ struct WindowsScreenShareRuntime::Impl {
             sender_worker_ = std::thread(
                 [this, config] { run_sender_guarded(config); });
 
+            // A window shares its app's audio; a display shares computer audio without Catro.
             const bool can_stream_audio =
                 config.share_audio &&
                 config.room_runtime != nullptr &&
-                config.source.kind ==
-                    platform::windows::CaptureSourceKind::window &&
-                config.source.process_id != 0;
+                (config.source.kind ==
+                     platform::windows::CaptureSourceKind::display ||
+                 config.source.process_id != 0);
             stream_audio_enabled_.store(
                 can_stream_audio,
                 std::memory_order_release);
@@ -522,6 +523,15 @@ struct WindowsScreenShareRuntime::Impl {
         local_preview_enabled_.store(enabled, std::memory_order_release);
     }
 
+    void set_stream_volume(float volume) noexcept {
+        counters_.remote_stream_volume.store(
+            std::clamp(volume, 0.0F, 2.0F), std::memory_order_relaxed);
+    }
+
+    void set_echo_sink(std::function<void(std::span<const float>)> sink) {
+        counters_.echo_sink = std::move(sink);
+    }
+
     void set_remote_viewing_enabled(bool enabled) noexcept {
         counters_.remote_viewing_enabled.store(enabled, std::memory_order_release);
         if (!enabled) {
@@ -662,8 +672,11 @@ struct WindowsScreenShareRuntime::Impl {
 
     void run_stream_audio_sender(
         const ScreenShareConfig& config) {
+        const bool display =
+            config.source.kind ==
+            platform::windows::CaptureSourceKind::display;
         if (config.room_runtime == nullptr ||
-            config.source.process_id == 0) {
+            (!display && config.source.process_id == 0)) {
             return;
         }
 
@@ -681,11 +694,14 @@ struct WindowsScreenShareRuntime::Impl {
             capture;
         const auto capture_failure =
             capture.start(
-                config.source.process_id,
+                display ? static_cast<std::uint32_t>(
+                              GetCurrentProcessId())
+                        : config.source.process_id,
                 [&bridge](
                     std::span<const float> samples) noexcept {
                     bridge.on_captured(samples);
-                });
+                },
+                display);
         if (capture_failure) {
             set_stream_audio_error(
                 platform::windows::name(
@@ -713,6 +729,10 @@ struct WindowsScreenShareRuntime::Impl {
                 continue;
             }
             sender.send(pcm);
+            // Shared audio also plays on this PC's speakers.
+            if (counters_.echo_sink) {
+                counters_.echo_sink(pcm);
+            }
         }
         capture.stop();
         counters_.stream_audio_capture_drops.store(
@@ -1400,6 +1420,16 @@ void WindowsScreenShareRuntime::set_local_preview_enabled(
 void WindowsScreenShareRuntime::set_remote_viewing_enabled(
     bool enabled) noexcept {
     impl_->set_remote_viewing_enabled(enabled);
+}
+
+void WindowsScreenShareRuntime::set_stream_volume(
+    float volume) noexcept {
+    impl_->set_stream_volume(volume);
+}
+
+void WindowsScreenShareRuntime::set_echo_sink(
+    std::function<void(std::span<const float>)> sink) {
+    impl_->set_echo_sink(std::move(sink));
 }
 
 void WindowsScreenShareRuntime::stop() noexcept {
