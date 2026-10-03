@@ -283,6 +283,40 @@ bool VideoSender::keyframe_requested() noexcept {
     return true;
 }
 
+std::uint32_t VideoSender::bitrate(std::uint32_t target) const noexcept {
+    return bitrate_ != 0 ? std::min(bitrate_, target) : target;
+}
+
+std::uint32_t VideoSender::adapt_bitrate(std::uint32_t target, std::int64_t now_ns) noexcept {
+    const auto requests =
+        room_ != nullptr && api_.keyframe_requests != nullptr ? api_.keyframe_requests(room_) : 0;
+    const auto backpressure = counters_.backpressure_events.load(std::memory_order_relaxed);
+    if (bitrate_ == 0) {
+        bitrate_ = target;
+        adapt_last_ns_ = now_ns;
+        adapt_requests_ = requests;
+        adapt_backpressure_ = backpressure;
+        return 0;
+    }
+    if (now_ns - adapt_last_ns_ < std::chrono::nanoseconds(kBitrateAdaptInterval).count()) {
+        return 0;
+    }
+    // A single request is a viewer joining or one stray loss; a second one within the interval
+    // means the picture keeps breaking.
+    const bool congested = requests - adapt_requests_ >= 2 || backpressure != adapt_backpressure_;
+    adapt_last_ns_ = now_ns;
+    adapt_requests_ = requests;
+    adapt_backpressure_ = backpressure;
+    const auto floor = std::max<std::uint32_t>(target / 4, std::min<std::uint32_t>(target, 128'000));
+    const auto next = congested ? std::max(floor, bitrate_ / 4 * 3)
+                                : std::min(target, bitrate_ + bitrate_ / 12);
+    if (next == bitrate_) {
+        return 0;
+    }
+    bitrate_ = next;
+    return next;
+}
+
 VideoSendResult VideoSender::send(std::span<const std::byte> annex_b, std::uint32_t timestamp_90khz) noexcept {
     soft_drop_ = false;
     room_failed_ = false;

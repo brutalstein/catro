@@ -480,6 +480,16 @@ struct WindowsH264HardwareEncoder::Impl {
         return std::nullopt;
     }
 
+    void set_bitrate(std::uint32_t bitrate) noexcept {
+        if (!running_) {
+            return;
+        }
+        if (ComPtr<ICodecAPI> codec; SUCCEEDED(transform_.As(&codec)) && codec &&
+            set_codec_uint32(*codec.Get(), CODECAPI_AVEncCommonMeanBitRate, bitrate)) {
+            config_.bitrate = bitrate;
+        }
+    }
+
     void stop() noexcept {
         running_ = false;
 
@@ -963,6 +973,10 @@ std::optional<HardwareEncoderError> WindowsH264HardwareEncoder::start(
 std::optional<HardwareEncoderError> WindowsH264HardwareEncoder::encode(
     const GpuCaptureFrame& source, EncodedAccessUnit& output, bool force_keyframe) {
     return impl_->encode(source, output, force_keyframe);
+}
+
+void WindowsH264HardwareEncoder::set_bitrate(std::uint32_t bitrate) noexcept {
+    impl_->set_bitrate(bitrate);
 }
 
 void WindowsH264HardwareEncoder::stop() noexcept {

@@ -168,6 +168,11 @@ public:
         return std::nullopt;
     }
 
+    bool set_bitrate(std::uint32_t bitrate) noexcept override {
+        return session_ != nullptr &&
+               set_number(kVTCompressionPropertyKey_AverageBitRate, bitrate);
+    }
+
     void stop() noexcept override {
         if (session_ != nullptr) {
             VTCompressionSessionCompleteFrames(session_, kCMTimeInvalid);
@@ -433,6 +438,19 @@ std::optional<VideoEncoderError> MacH264HardwareEncoder::encode(
         ++impl_->stats.input_failures;
     }
     return error;
+}
+
+void MacH264HardwareEncoder::set_bitrate(std::uint32_t bitrate) noexcept {
+    {
+        std::scoped_lock lock(impl_->mutex);
+        if (!impl_->active) {
+            return;
+        }
+    }
+    if (impl_->adapter->set_bitrate(bitrate)) {
+        std::scoped_lock lock(impl_->mutex);
+        impl_->config.bitrate = bitrate;
+    }
 }
 
 void MacH264HardwareEncoder::stop() noexcept {

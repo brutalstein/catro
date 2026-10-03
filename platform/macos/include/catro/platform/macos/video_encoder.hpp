@@ -98,6 +98,11 @@ public:
     [[nodiscard]] virtual std::optional<VideoEncoderError> encode(
         const NativeVideoFrame& frame,
         bool force_keyframe) noexcept = 0;
+    // Changes the target bitrate of a running session; false when unsupported.
+    [[nodiscard]] virtual bool set_bitrate(std::uint32_t bitrate) noexcept {
+        (void)bitrate;
+        return false;
+    }
     virtual void stop() noexcept = 0;
 };
 
@@ -123,6 +128,8 @@ public:
     [[nodiscard]] std::optional<VideoEncoderError> encode(
         const NativeVideoFrame& frame,
         bool force_keyframe = false) noexcept;
+    // Changes the average bitrate of a running encoder without restarting it.
+    void set_bitrate(std::uint32_t bitrate) noexcept;
     void stop() noexcept;
 
     [[nodiscard]] bool running() const noexcept;

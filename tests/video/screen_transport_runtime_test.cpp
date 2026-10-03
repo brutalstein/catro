@@ -274,6 +274,42 @@ TEST_CASE("screen viewers request keyframes after a fresh start and after loss")
     CHECK_FALSE(worker.stop().has_value());
 }
 
+TEST_CASE("screen senders back off while viewers lose frames and recover slowly") {
+    FakeRoom sender_room;
+    FakeRoom listener;
+    sender_room.peer = &listener;
+    ScreenTransportCounters counters;
+    VideoSender sender(fake_api(), &sender_room, nullptr, rtp(31), counters);
+    constexpr std::uint32_t target = 8'000'000;
+    constexpr std::int64_t second = 1'000'000'000;
+
+    CHECK(sender.adapt_bitrate(target, 0) == 0);
+    CHECK(sender.bitrate(target) == target);
+    // One request is a viewer joining, not congestion.
+    listener.keyframe_requests = 1;
+    CHECK(sender.adapt_bitrate(target, second) == 0);
+    // Repeated requests mean viewers keep losing frames; decisions wait for the interval.
+    listener.keyframe_requests = 3;
+    CHECK(sender.adapt_bitrate(target, second + second / 2) == 0);
+    CHECK(sender.adapt_bitrate(target, 2 * second) == 6'000'000);
+    CHECK(sender.bitrate(target) == 6'000'000);
+
+    // Sustained loss stops at a quarter of the target.
+    for (std::int64_t step = 3; step < 12; ++step) {
+        listener.keyframe_requests += 2;
+        (void)sender.adapt_bitrate(target, step * second);
+    }
+    CHECK(sender.bitrate(target) == 2'000'000);
+
+    // Clean seconds climb back about 8% at a time and never pass the target.
+    CHECK(sender.adapt_bitrate(target, 12 * second) == 2'166'666);
+    for (std::int64_t step = 13; step < 40; ++step) {
+        (void)sender.adapt_bitrate(target, step * second);
+    }
+    CHECK(sender.bitrate(target) == target);
+    CHECK(sender.adapt_bitrate(target, 40 * second) == 0);
+}
+
 TEST_CASE("screen receive rejects malformed packets and a second stream while the owner is active") {
     FakeRoom owner_room;
     FakeRoom intruder_room;

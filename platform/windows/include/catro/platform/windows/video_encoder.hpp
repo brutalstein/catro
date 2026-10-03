@@ -142,6 +142,9 @@ public:
     [[nodiscard]] std::optional<HardwareEncoderError> encode(
         const GpuCaptureFrame& source, EncodedAccessUnit& output, bool force_keyframe = false);
 
+    // Changes the mean bitrate of a running encoder without restarting it.
+    void set_bitrate(std::uint32_t bitrate) noexcept;
+
     void stop() noexcept;
 
     [[nodiscard]] bool running() const noexcept;

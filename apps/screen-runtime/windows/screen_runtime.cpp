@@ -896,7 +896,7 @@ struct WindowsScreenShareRuntime::Impl {
             encoder_config.height = extent->height;
             encoder_config.frame_rate_numerator = config.fps;
             encoder_config.frame_rate_denominator = 1;
-            encoder_config.bitrate = config.bitrate;
+            encoder_config.bitrate = video_sender.bitrate(config.bitrate);
             encoder_config.gop_frames = config.fps * 2U;
             encoder_config.max_access_unit_bytes =
                 config.max_access_unit_bytes;
@@ -1018,6 +1018,9 @@ struct WindowsScreenShareRuntime::Impl {
                 }
             }
 
+            if (const auto bitrate = video_sender.adapt_bitrate(config.bitrate, steady_now_ns())) {
+                encoder.set_bitrate(bitrate);
+            }
             if (const auto error =
                     encoder.encode(frame, access_unit, video_sender.keyframe_requested())) {
                 fail_share(

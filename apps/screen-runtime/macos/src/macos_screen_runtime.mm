@@ -519,7 +519,7 @@ struct MacScreenShareRuntime::Impl {
             encoder_config.width = frame.width;
             encoder_config.height = frame.height;
             encoder_config.frame_rate = config.fps;
-            encoder_config.bitrate = config.bitrate;
+            encoder_config.bitrate = video_sender.bitrate(config.bitrate);
             encoder_config.gop_frames = config.fps * 2U;
             encoder_config.max_access_unit_bytes = config.max_access_unit_bytes;
             encoder_config.require_hardware = true;
@@ -563,6 +563,9 @@ struct MacScreenShareRuntime::Impl {
             }
             update_preview(frame);
             frame.pts_100ns = elapsed_100ns(started);
+            if (const auto bitrate = video_sender.adapt_bitrate(config.bitrate, steady_now_ns())) {
+                encoder.set_bitrate(bitrate);
+            }
             if (const auto error = encoder.encode(frame, video_sender.keyframe_requested())) {
                 fail_share(platform::macos::name(error->code), error->native_code);
                 return false;

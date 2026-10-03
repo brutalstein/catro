@@ -122,6 +122,8 @@ inline constexpr std::chrono::seconds kRemoteInactiveTimeout{2};
 // Viewers repeat keyframe requests at this pace while they wait, and a sharer forces at most one
 // IDR per interval, so loss recovery takes about one round trip instead of a 2 s GOP.
 inline constexpr std::chrono::milliseconds kKeyframeRequestInterval{250};
+// Senders re-evaluate their encoder bitrate this often.
+inline constexpr std::chrono::seconds kBitrateAdaptInterval{1};
 inline constexpr std::chrono::milliseconds kReceiveWait{20};
 inline constexpr std::size_t kReceiveDatagramBytes = 1500;
 inline constexpr std::size_t kReceiveDrainLimit = 512;
@@ -230,6 +232,12 @@ public:
     // True when a viewer asked for a keyframe since the last IDR this returned true for. Requests
     // from several viewers within kKeyframeRequestInterval share one IDR.
     [[nodiscard]] bool keyframe_requested() noexcept;
+    // Congestion control. Viewers that keep asking for keyframes keep losing frames, so the
+    // bitrate drops 25% (never below a quarter of target) and climbs back about 8% per clean
+    // second. Call before each encode; returns the new encoder bitrate, or 0 when it stays.
+    [[nodiscard]] std::uint32_t adapt_bitrate(std::uint32_t target, std::int64_t now_ns) noexcept;
+    // The bitrate a restarted encoder should use.
+    [[nodiscard]] std::uint32_t bitrate(std::uint32_t target) const noexcept;
 
 private:
     static bool send_packet(void* context, const video::RtpPacketSlice& packet) noexcept;
@@ -242,6 +250,10 @@ private:
     std::uint16_t next_sequence_ = 1;
     std::uint64_t keyframe_requests_seen_ = 0;
     std::int64_t last_forced_keyframe_ns_ = 0;
+    std::uint32_t bitrate_ = 0;
+    std::int64_t adapt_last_ns_ = 0;
+    std::uint64_t adapt_requests_ = 0;
+    std::uint64_t adapt_backpressure_ = 0;
     bool soft_drop_ = false;
     bool room_failed_ = false;
     std::optional<transport::UdpError> fatal_error_;
