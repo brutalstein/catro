@@ -289,6 +289,11 @@ struct RoomMeshTransport::Impl {
         std::size_t channel_count = 0;
         {
             std::scoped_lock lock(mutex_);
+            // Receivers also enforce ownership. Reject other publishers before fan-out so they
+            // cannot spend bandwidth and queue capacity on media every receiver would discard.
+            if (label != kVoiceLabel && screen_owner_ != config_.user_id) {
+                return 0;
+            }
             for (const auto& [id, peer] : peers_) {
                 (void)id;
                 const auto channel =

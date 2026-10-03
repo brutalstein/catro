@@ -50,6 +50,8 @@ struct SourcePicker: View {
                 }
             }
             Form {
+                Toggle("Show my preview", isOn: $model.localPreviewEnabled)
+                    .help("Preview only changes what you see here. You can turn it on or off while sharing.")
                 Picker("Resolution", selection: $settings.resolution) {
                     ForEach(ShareSettings.Resolution.allCases) { Text($0.rawValue).tag($0) }
                 }

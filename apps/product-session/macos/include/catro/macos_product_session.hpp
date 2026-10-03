@@ -79,6 +79,11 @@ struct MediaSnapshot {
     std::uint32_t peer_count = 0;
     // This client is sharing its screen.
     bool sharing = false;
+    std::string share_source_title;
+    std::uint32_t encoded_width = 0;
+    std::uint32_t encoded_height = 0;
+    std::uint64_t frames_sent = 0;
+    bool stream_audio_active = false;
     // Room peer id of the current sharer; empty when nobody shares.
     std::string screen_owner;
     bool remote_available = false;
@@ -196,6 +201,8 @@ public:
     void start_share(ShareRequest request);
     void stop_share();
     void set_watching(bool watching);
+    // Presentation only; never restarts capture, audio, or transport.
+    void set_local_preview_enabled(bool enabled) noexcept;
     // Main thread. Volume of the watched stream's audio: 0 silences, 1 unchanged, 2 doubles.
     void set_stream_volume(float volume);
     // Main thread only; forwards a caller-owned CALayer* (nullptr detaches) to the screen runtime.

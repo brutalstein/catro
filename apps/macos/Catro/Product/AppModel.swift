@@ -22,6 +22,21 @@ final class AppModel: ObservableObject {
     }
     // The stream shows in its own window instead of the workspace.
     @Published var streamPoppedOut = false
+    @Published var localPreviewEnabled = UserDefaults.standard.bool(forKey: "localPreviewEnabled") {
+        didSet {
+            UserDefaults.standard.set(localPreviewEnabled, forKey: "localPreviewEnabled")
+            if !localPreviewEnabled {
+                _ = bridge.attachPreview(nil)
+                previewLayer = nil
+                previewVisible = false
+                if snapshot?.sharing == true {
+                    streamFullScreenRequested = false
+                    streamPoppedOut = false
+                }
+            }
+            applyLocalPreview()
+        }
+    }
     // Set by "Full Screen"; the stream window consumes it once it has a window.
     var streamFullScreenRequested = false
 
@@ -33,6 +48,7 @@ final class AppModel: ObservableObject {
     // The layers the runtime renders into now; a view only detaches its own layer.
     private weak var remoteLayer: CALayer?
     private weak var previewLayer: CALayer?
+    private var previewVisible = false
 
     var connected: Bool { snapshot?.connection == .synchronized }
 
@@ -53,6 +69,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in self?.apply(snapshot) }
         }
         applyAudioDevices()
+        applyLocalPreview()
         streamVolume = UserDefaults.standard.double(forKey: VoicePreferenceKey.streamVolume)
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.bridge.poll() }
@@ -232,14 +249,34 @@ final class AppModel: ObservableObject {
     }
 
     func attachPreview(_ layer: CALayer) -> String? {
+        guard localPreviewEnabled else { return nil }
+        let failure = bridge.attachPreview(layer)
+        if let failure {
+            notice = "Preview unavailable: \(failure)"
+            return failure
+        }
         previewLayer = layer
-        return bridge.attachPreview(layer)
+        previewVisible = false
+        applyLocalPreview()
+        return nil
     }
 
     func detachPreview(_ layer: CALayer?) {
         guard layer === previewLayer else { return }
         previewLayer = nil
+        previewVisible = false
+        applyLocalPreview()
         _ = bridge.attachPreview(nil)
+    }
+
+    private func applyLocalPreview() {
+        bridge.setLocalPreviewEnabled(localPreviewEnabled && previewLayer != nil && previewVisible)
+    }
+
+    func setPreviewVisible(_ layer: CALayer, visible: Bool) {
+        guard layer === previewLayer else { return }
+        previewVisible = visible
+        applyLocalPreview()
     }
 
     func copy(_ text: String) {

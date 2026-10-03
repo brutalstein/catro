@@ -19,7 +19,7 @@
 #include <variant>
 #include <vector>
 
-// Two people in one room over real WebRTC (ICE, DTLS, SCTP data channels) on this machine, through
+// Two to five people over real WebRTC (ICE, DTLS, SCTP data channels) on this machine, through
 // an in-process relay that follows services/signaling: they talk, one goes live, the other watches
 // the stream and hears its audio, and loss recovery reaches only the sharer.
 using namespace catro::rtc;
@@ -132,10 +132,17 @@ struct Person {
     std::atomic<int> keyframe_requests{0};
     std::mutex mutex;
     std::string owner;
+    std::map<std::string, std::size_t, std::less<>> heard;
+
+    ~Person() { transport.stop(); }
 
     void join(const std::string& id, std::uint16_t port) {
         RoomTransportCallbacks callbacks;
-        callbacks.on_voice_datagram = [this](std::string_view, std::span<const std::byte>) { ++voice; };
+        callbacks.on_voice_datagram = [this](std::string_view peer, std::span<const std::byte>) {
+            ++voice;
+            std::scoped_lock lock(mutex);
+            ++heard[std::string{peer}];
+        };
         callbacks.on_video_datagram = [this](std::string_view, std::span<const std::byte>) { ++video; };
         callbacks.on_stream_audio_datagram = [this](std::string_view, std::span<const std::byte>) {
             ++stream_audio;
@@ -161,6 +168,20 @@ struct Person {
     [[nodiscard]] std::string screen_owner() {
         std::scoped_lock lock(mutex);
         return owner;
+    }
+
+    [[nodiscard]] bool hears_four_peers() {
+        std::scoped_lock lock(mutex);
+        if (heard.size() != 4) {
+            return false;
+        }
+        for (const auto& [peer, count] : heard) {
+            (void)peer;
+            if (count < 10) {
+                return false;
+            }
+        }
+        return true;
     }
 };
 
@@ -230,4 +251,52 @@ TEST_CASE("two people talk and watch a stream with its audio over real WebRTC") 
 
     bob.transport.stop();
     alice.transport.stop();
+}
+
+TEST_CASE("five people talk while four watch one screen and its audio over real WebRTC") {
+    Relay relay;
+    std::array<Person, 5> people;
+    std::array<std::byte, 128> voice{};
+    std::array<std::byte, 1200> video{};
+    std::array<std::byte, 512> audio{};
+    voice[0] = video[0] = audio[0] = std::byte{0x80};
+
+    for (std::size_t index = 0; index < people.size(); ++index) {
+        people[index].join("person-" + std::to_string(index), relay.port());
+        REQUIRE(eventually([&] { return people[index].transport.state() == RoomTransportState::joined; }));
+    }
+    auto& sharer = people.front();
+    REQUIRE(sharer.transport.claim_screen());
+    REQUIRE(eventually([&] {
+        for (auto& person : people) {
+            if (person.screen_owner() != "person-0" || person.transport.peer_count() != 4) {
+                return false;
+            }
+        }
+        return true;
+    }));
+
+    // Every participant must hear all four other identities while all viewers receive both
+    // screen lanes. Bounded wait tolerates ICE setup and unordered no-retransmit packet loss.
+    REQUIRE(eventually([&] {
+        for (auto& person : people) {
+            (void)person.transport.send_voice(voice);
+        }
+        (void)sharer.transport.send_video(video);
+        (void)sharer.transport.send_stream_audio(audio);
+        for (std::size_t index = 0; index < people.size(); ++index) {
+            if (!people[index].hears_four_peers() ||
+                (index > 0 && (people[index].video.load() < 10 || people[index].stream_audio.load() < 10))) {
+                return false;
+            }
+        }
+        return true;
+    }));
+
+    for (std::size_t index = 1; index < people.size(); ++index) {
+        CHECK(people[index].transport.send_video(video) == 0);
+        CHECK(people[index].transport.send_stream_audio(audio) == 0);
+    }
+    CHECK(sharer.video.load() == 0);
+    CHECK(sharer.stream_audio.load() == 0);
 }

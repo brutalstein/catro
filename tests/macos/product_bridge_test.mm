@@ -64,6 +64,11 @@ TEST_CASE("macOS product bridge delivers immutable snapshots on the main thread"
     CHECK(latest.servers.firstObject.owner);
     CHECK([latest.activeServerID isEqualToString:latest.servers.firstObject.identifier]);
     CHECK(latest.voicePhase == CatroVoicePhaseIdle);
+    CHECK([latest.shareSourceTitle isEqualToString:@""]);
+    CHECK(latest.framesSent == 0);
+    CHECK(latest.encodedWidth == 0);
+    CHECK(latest.encodedHeight == 0);
+    CHECK_FALSE(latest.streamAudioActive);
     CHECK(latest.lookup == nil);
     [bridge stop];
 }
@@ -91,6 +96,8 @@ TEST_CASE("macOS product bridge commands are safe before start and surfaces deta
     CatroProductBridge* bridge = [[CatroProductBridge alloc] initWithDependencies:local_only()];
     [bridge poll];
     [bridge joinVoice];
+    [bridge setLocalPreviewEnabled:YES];
+    [bridge setLocalPreviewEnabled:NO];
     CHECK([bridge attachRemoteLayer:nil] != nil);
 
     NSMutableArray<CatroProductSnapshot*>* received = [NSMutableArray array];
@@ -102,6 +109,13 @@ TEST_CASE("macOS product bridge commands are safe before start and surfaces deta
     CHECK([bridge attachRemoteLayer:host] == nil);
     CHECK([bridge attachRemoteLayer:nil] == nil);
     CHECK([bridge attachPreviewLayer:host] == nil);
+    [bridge setLocalPreviewEnabled:YES];
+    [bridge setLocalPreviewEnabled:NO];
+    // Changing presentation preference must not stop the session or detach the caller's layer.
+    CHECK(host.sublayers.count == 1);
+    [bridge setLocalPreviewEnabled:YES];
+    CHECK(host.sublayers.count == 1);
     CHECK([bridge attachPreviewLayer:nil] == nil);
     [bridge stop];
+    [bridge setLocalPreviewEnabled:NO];
 }

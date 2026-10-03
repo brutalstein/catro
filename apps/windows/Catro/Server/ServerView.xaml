@@ -545,7 +545,7 @@
                                 Padding="24" Style="{StaticResource CatroCardStyle}">
                             <StackPanel Spacing="10">
                                 <TextBlock Text="Your screen is being shared" Style="{StaticResource CatroSectionTitleTextStyle}" TextWrapping="Wrap" />
-                                <TextBlock Text="Self-preview is off to save GPU work. Your friends still see your stream. Enable preview in Settings if you want to see it here."
+                                <TextBlock Text="Preview is paused to save GPU work. Your stream continues. Use Show my preview below to choose whether to see it here."
                                            Style="{StaticResource CatroSecondaryTextStyle}" />
                             </StackPanel>
                         </Border>
@@ -579,6 +579,9 @@
                                     Orientation="Horizontal"
                                     HorizontalAlignment="Center"
                                     Spacing="8">
+                            <ToggleSwitch x:Name="LocalPreviewToggle" Header="Show my preview"
+                                          Toggled="OnLocalPreviewChanged"
+                                          AutomationProperties.Name="Show my screen-share preview" />
                             <TextBlock x:Name="ShareSourceText"
                                        FontSize="11"
                                        FontWeight="SemiBold"

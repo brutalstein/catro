@@ -19,23 +19,27 @@ concurrency:
 # artifacts and never treated as evidence of hardware capability.
 jobs:
   windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
       - name: Prerequisites
         run: ./scripts/bootstrap.ps1
       - name: Build core, tools, tests, and shell
-        run: ./scripts/build.ps1 -Configuration Debug
+        run: ./scripts/build.ps1 -Configuration ${{ matrix.configuration }}
       - name: Test
-        run: ./scripts/test.ps1 -Configuration Debug
+        run: ./scripts/test.ps1 -Configuration ${{ matrix.configuration }}
       - name: Test Windows installer
         shell: powershell
         run: ./tests/installers/windows-installer-test.ps1
       - name: Capability report
-        run: ./scripts/run.ps1 -Report --format json --output out/capability-report.json
+        run: ./scripts/run.ps1 -Configuration ${{ matrix.configuration }} -Report --format json --output out/capability-report.json
       - uses: actions/upload-artifact@v4
         with:
-          name: capability-report-windows
+          name: capability-report-windows-${{ matrix.configuration }}
           path: out/capability-report.json
 
   macos:
@@ -54,6 +58,8 @@ jobs:
         run: scripts/test.sh Debug
       - name: Build release package
         run: scripts/package-macos.sh Release
+      - name: Test Release
+        run: scripts/test.sh Release
       - name: Test macOS installer and package
         env:
           CATRO_TEST_BUILT_APP: out/build/macos-clang/Release/Catro.app

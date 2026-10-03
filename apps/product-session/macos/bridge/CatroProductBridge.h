@@ -109,6 +109,11 @@ __attribute__((objc_subclassing_restricted))
 @property(nonatomic, readonly) BOOL deafened;
 @property(nonatomic, readonly) NSUInteger peerCount;
 @property(nonatomic, readonly) BOOL sharing;
+@property(nonatomic, readonly, copy) NSString* shareSourceTitle;
+@property(nonatomic, readonly) uint32_t encodedWidth;
+@property(nonatomic, readonly) uint32_t encodedHeight;
+@property(nonatomic, readonly) uint64_t framesSent;
+@property(nonatomic, readonly) BOOL streamAudioActive;
 // Empty when nobody shares.
 @property(nonatomic, readonly, copy) NSString* screenOwner;
 @property(nonatomic, readonly) BOOL remoteAvailable;
@@ -148,6 +153,7 @@ __attribute__((objc_subclassing_restricted))
              audio:(BOOL)audio NS_SWIFT_NAME(startShare(_:maxWidth:maxHeight:fps:bitrateMbps:audio:));
 - (void)stopShare;
 - (void)setWatching:(BOOL)watching;
+- (void)setLocalPreviewEnabled:(BOOL)enabled;
 // Main thread. Volume of the watched stream's audio: 0 silences, 1 unchanged, 2 doubles.
 - (void)setStreamVolume:(float)volume;
 // Main thread. Member identifiers speaking right now; empty outside voice.

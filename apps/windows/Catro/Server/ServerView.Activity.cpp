@@ -73,6 +73,7 @@ void ServerView::ApplyActivityPolicy() {
     schedule(voice_timer_, policy.voice, voice_active);
 
     if (screen_runtime_) {
+        LocalPreviewToggle().IsOn(catro::shell::local_preview_preference());
         const auto screen = screen_runtime_->snapshot();
         schedule(screen_timer_, policy.screen,
                  voice_active || screen.state != catro::screen::ScreenShareState::idle);
