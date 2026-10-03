@@ -16,6 +16,7 @@ public:
                                                  audio::CaptureSink& sink, audio::StreamFailure failure) override;
     [[nodiscard]] audio::OpenResult open_render(const std::optional<capabilities::AudioEndpointId>& device,
                                                 audio::RenderSource& source, audio::StreamFailure failure) override;
+    [[nodiscard]] std::optional<capabilities::AudioEndpointId> default_device(audio::DeviceDirection direction) override;
 };
 
 } // namespace catro::platform::macos

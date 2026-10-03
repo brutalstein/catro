@@ -449,4 +449,14 @@ audio::OpenResult CoreAudioPlatform::open_render(const std::optional<caps::Audio
     return open_stream(Direction::render, device, nullptr, &source, std::move(failure));
 }
 
+std::optional<caps::AudioEndpointId> CoreAudioPlatform::default_device(audio::DeviceDirection direction) {
+    const auto native = direction == audio::DeviceDirection::capture ? Direction::capture : Direction::render;
+    const auto device = resolve(std::nullopt, native);
+    const auto uid = device ? uid_of(*device) : std::nullopt;
+    if (!uid) {
+        return std::nullopt;
+    }
+    return caps::AudioEndpointId{"coreaudio:" + *uid + std::string(suffix_of(native)), caps::IdentityScope::persistent};
+}
+
 } // namespace catro::platform::macos

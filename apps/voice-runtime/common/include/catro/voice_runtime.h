@@ -53,6 +53,8 @@ struct CatroVoiceRuntimeSnapshot {
     char error[192];
     // Microphone level after processing in dBFS (-100 when silent), for sensitivity meters.
     float input_level;
+    // Times audio moved to a new default device or recovered from a lost one.
+    std::uint32_t audio_restarts;
 };
 
 CATRO_VOICE_API CatroVoiceRuntimeHandle catro_voice_runtime_create() noexcept;

@@ -249,6 +249,30 @@ TEST_CASE("room voice runtime reports an audio device failure without touching t
     CHECK(snapshot.sent_packets == 0);
 }
 
+TEST_CASE("room voice runtime follows a new default microphone and survives a lost device") {
+    FakeRoomBus bus;
+    auto& room = bus.join();
+    FakeAudioPlatform audio(0.1F);
+    VoiceRuntimeHost host(audio, kFakeRoomApi);
+
+    REQUIRE(host.start(room_config(room, 9)) == 0);
+    REQUIRE(wait_until([&] { return host.snapshot().state == CATRO_VOICE_JOINED; }));
+    CHECK(audio.capture_opens == 1);
+
+    // A headset becomes the system default: audio moves to it within the 1 s device check.
+    audio.set_default_capture("headset");
+    REQUIRE(wait_until([&] { return audio.capture_opens == 2; }));
+    CHECK(host.snapshot().audio_restarts == 1);
+
+    // The headset is unplugged: audio reopens instead of ending the call.
+    audio.lose_capture();
+    REQUIRE(wait_until([&] { return audio.capture_opens == 3; }));
+    const auto snapshot = host.snapshot();
+    CHECK(snapshot.state == CATRO_VOICE_JOINED);
+    CHECK(snapshot.audio_restarts == 2);
+    CHECK(snapshot.error[0] == '\0');
+}
+
 TEST_CASE("room voice runtime fails with the room error when the RTC room fails") {
     FakeRoomBus bus;
     auto& room = bus.join();

@@ -365,4 +365,26 @@ audio::OpenResult WasapiAudioPlatform::open_render(const std::optional<caps::Aud
     return open(Direction::render, device, nullptr, &source, std::move(failure));
 }
 
+std::optional<caps::AudioEndpointId> WasapiAudioPlatform::default_device(audio::DeviceDirection direction) {
+    // The caller may already be in an apartment; only undo an initialization made here.
+    const auto apartment = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    std::optional<caps::AudioEndpointId> result;
+    {
+        ComPtr<IMMDeviceEnumerator> devices;
+        ComPtr<IMMDevice> device;
+        LPWSTR raw_id = nullptr;
+        const auto flow = direction == audio::DeviceDirection::capture ? eCapture : eRender;
+        if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&devices))) &&
+            SUCCEEDED(devices->GetDefaultAudioEndpoint(flow, eCommunications, &device)) &&
+            SUCCEEDED(device->GetId(&raw_id))) {
+            result = caps::AudioEndpointId{std::string(kEndpointPrefix) + utf8(raw_id), caps::IdentityScope::persistent};
+            CoTaskMemFree(raw_id);
+        }
+    }
+    if (SUCCEEDED(apartment)) {
+        CoUninitialize();
+    }
+    return result;
+}
+
 } // namespace catro::platform::windows

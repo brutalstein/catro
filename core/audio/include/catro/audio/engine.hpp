@@ -82,10 +82,20 @@ using StreamFailure = std::function<void(AudioError)>;
 
 using OpenResult = std::variant<std::unique_ptr<AudioStream>, AudioError>;
 
+enum class DeviceDirection {
+    capture,
+    render,
+};
+
 // Implemented per platform. An absent device means the system default for communications.
 class AudioPlatform {
 public:
     virtual ~AudioPlatform() = default;
+    // The device open_* would pick for an absent device right now, in StreamInfo::device form, or
+    // nullopt when the platform cannot tell. Sessions on the default poll it to follow a new headset.
+    [[nodiscard]] virtual std::optional<capabilities::AudioEndpointId> default_device(DeviceDirection) {
+        return std::nullopt;
+    }
 
     [[nodiscard]] virtual OpenResult open_capture(const std::optional<capabilities::AudioEndpointId>& device,
                                                   CaptureSink& sink, StreamFailure failure) = 0;

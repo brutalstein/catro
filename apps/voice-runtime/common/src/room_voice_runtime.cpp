@@ -24,6 +24,27 @@ constexpr auto kRoomVoiceFrame = std::chrono::milliseconds{20};
 constexpr int kRoomEncodeDrain = 4;
 constexpr int kRoomReceiveDrain = 64;
 constexpr int kRoomPlayoutCatchup = 3;
+// Default devices are compared once a second; a lost device is reopened every 500 ms for 10 s.
+constexpr auto kDeviceCheck = std::chrono::seconds{1};
+constexpr auto kAudioRetry = std::chrono::milliseconds{500};
+constexpr int kAudioRetries = 20;
+
+// True when the session runs on a system default that is no longer the default, e.g. after a
+// headset was plugged in. Explicitly chosen devices are never switched.
+bool default_moved(audio::AudioPlatform& platform, const audio::ExternalAudioSession& session,
+                   const audio::ExternalSessionConfig& config) {
+    const auto statistics = session.statistics();
+    const auto moved = [&](const std::optional<capabilities::AudioEndpointId>& chosen,
+                           const std::optional<audio::StreamInfo>& running, audio::DeviceDirection direction) {
+        if (chosen || !running) {
+            return false;
+        }
+        const auto current = platform.default_device(direction);
+        return current && current->value != running->device.value;
+    };
+    return moved(config.input, statistics.input, audio::DeviceDirection::capture) ||
+           moved(config.output, statistics.output, audio::DeviceDirection::render);
+}
 
 bool valid_media(const CatroVoiceRuntimeConfig& config) noexcept {
     return config.stream_id != 0 && config.jitter_packets >= 1 && config.jitter_packets <= 10 &&
@@ -79,6 +100,18 @@ int run_room_voice(const tools::VoicePeerOptions& options,
         error_text = std::string{"audio: "} + std::string{audio::name(failure->code)};
         return tools::voice_peer_audio_failed;
     }
+    auto next_device_check = std::chrono::steady_clock::now() + kDeviceCheck;
+    auto next_audio_retry = std::chrono::steady_clock::time_point{};
+    int audio_retries = 0;
+    // Reopens both streams on the current devices; the call itself never drops.
+    const auto reopen_audio = [&]() -> bool {
+        audio_failed.store(false, std::memory_order_release);
+        if (audio_session.start(audio_config, pipeline->capture(), pipeline->render())) {
+            audio_failed.store(true, std::memory_order_release);
+            return false;
+        }
+        return true;
+    };
 
     control.media_started.store(true, std::memory_order_release);
 
@@ -127,10 +160,24 @@ int run_room_voice(const tools::VoicePeerOptions& options,
             exit_code = tools::voice_peer_network_failed;
             break;
         }
-        if (audio_failed.load(std::memory_order_acquire)) {
-            error_text = "audio session failed";
-            exit_code = tools::voice_peer_audio_failed;
-            break;
+        if (const auto now = std::chrono::steady_clock::now(); audio_failed.load(std::memory_order_acquire)) {
+            if (now >= next_audio_retry) {
+                if (++audio_retries > kAudioRetries) {
+                    error_text = "audio session failed";
+                    exit_code = tools::voice_peer_audio_failed;
+                    break;
+                }
+                next_audio_retry = now + kAudioRetry;
+                if (reopen_audio()) {
+                    audio_retries = 0;
+                    control.audio_restarts.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+        } else if (now >= next_device_check) {
+            next_device_check = now + kDeviceCheck;
+            if (default_moved(platform, audio_session, audio_config) && reopen_audio()) {
+                control.audio_restarts.fetch_add(1, std::memory_order_relaxed);
+            }
         }
 
         for (int drained = 0; drained < kRoomEncodeDrain; ++drained) {
@@ -245,6 +292,7 @@ std::int32_t VoiceRuntimeHost::start(const CatroVoiceRuntimeConfig& config) noex
     control_.sent_packets.store(0, std::memory_order_relaxed);
     control_.received_packets.store(0, std::memory_order_relaxed);
     control_.peer_unreachable_events.store(0, std::memory_order_relaxed);
+    control_.audio_restarts.store(0, std::memory_order_relaxed);
     control_.last_exit_code.store(-1, std::memory_order_relaxed);
     exit_code_.store(-1, std::memory_order_relaxed);
     state_.store(CATRO_VOICE_STARTING, std::memory_order_release);
@@ -321,6 +369,7 @@ CatroVoiceRuntimeSnapshot VoiceRuntimeHost::snapshot() const noexcept {
     result.peer_seen = result.received_packets > 0 ? 1U : 0U;
     result.speaking = streams_.local_speaking() ? 1U : 0U;
     result.input_level = streams_.local_level();
+    result.audio_restarts = static_cast<std::uint32_t>(control_.audio_restarts.load(std::memory_order_relaxed));
 
     std::scoped_lock error_lock(error_mutex_);
     if (!error_.empty()) {

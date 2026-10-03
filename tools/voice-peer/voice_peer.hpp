@@ -44,6 +44,8 @@ struct VoicePeerControl {
     std::atomic<std::uint64_t> sent_packets{0};
     std::atomic<std::uint64_t> received_packets{0};
     std::atomic<std::uint64_t> peer_unreachable_events{0};
+    // Audio reopened after a lost device or a new system default.
+    std::atomic<std::uint64_t> audio_restarts{0};
     std::atomic<int> last_exit_code{-1};
 };
 
