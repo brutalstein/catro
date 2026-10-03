@@ -4,6 +4,7 @@
 #include <catro/voice_runtime.h>
 
 #include <catro/audio/engine.hpp>
+#include <catro/voice/stream_controls.hpp>
 
 #include "voice_peer.hpp"
 
@@ -46,6 +47,8 @@ public:
     void set_muted(bool value) noexcept;
     void set_deafened(bool value) noexcept;
     [[nodiscard]] CatroVoiceRuntimeSnapshot snapshot() const noexcept;
+    void set_user_volume(const char* user_id, float volume) noexcept;
+    [[nodiscard]] bool user_speaking(const char* user_id) const noexcept;
 
 private:
     void stop_locked() noexcept;
@@ -55,6 +58,7 @@ private:
     RoomVoiceApi room_;
     DirectPeerRunner direct_;
     tools::VoicePeerControl control_;
+    voice::StreamControls streams_;
     std::mutex lifecycle_mutex_;
     mutable std::mutex error_mutex_;
     std::thread worker_;

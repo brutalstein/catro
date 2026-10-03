@@ -4,6 +4,7 @@
 #include <catro/voice/codec.hpp>
 #include <catro/voice/jitter.hpp>
 #include <catro/voice/packet.hpp>
+#include <catro/voice/stream_controls.hpp>
 #include <catro/voice/voice_processor.hpp>
 
 #include <array>
@@ -31,6 +32,8 @@ struct VoicePipelineConfig {
     EncoderConfig encoder;
     // Echo cancellation, noise suppression, and gain control. Off unless a runtime asks for it.
     std::optional<VoiceProcessingConfig> processing;
+    // Per-user volume in, speaking state out. Must outlive the pipeline; null disables both.
+    StreamControls* controls = nullptr;
 };
 
 struct OutboundDatagram {
@@ -121,6 +124,7 @@ private:
     RenderBridge render_;
     std::unique_ptr<Encoder> encoder_;
     std::unique_ptr<VoiceProcessor> processor_;
+    StreamControls* controls_ = nullptr;
     std::array<std::unique_ptr<RemoteStream>, kMaxRemoteVoiceStreams> remotes_{};
     std::uint16_t jitter_target_packets_ = kDefaultJitterTargetPackets;
     PcmFrame capture_frame_{};
@@ -144,6 +148,7 @@ private:
     std::atomic<std::uint64_t> limiter_frames_{0};
     std::uint64_t playout_tick_ = 0;
     float limiter_gain_ = 1.0F;
+    std::uint16_t local_speaking_hangover_ = 0;
 };
 
 } // namespace catro::voice

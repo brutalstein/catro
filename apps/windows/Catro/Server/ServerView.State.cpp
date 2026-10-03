@@ -111,6 +111,7 @@ void ServerView::UpdateVoiceUi() {
         VoiceStateText().Text(L"Unavailable");
         return;
     }
+    RenderMemberRows();
 
     const auto snapshot =
         catro_voice_runtime_snapshot(

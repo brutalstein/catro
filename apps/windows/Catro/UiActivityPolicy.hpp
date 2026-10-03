@@ -25,7 +25,8 @@ inline constexpr UiRefreshPolicy ui_refresh_policy(
     if (activity == WindowActivity::background) {
         return {5s, 30s, 2s, 1s, voice_channel};
     }
-    return {1s, 5s, 500ms, 250ms, voice_channel};
+    // 250 ms voice keeps speaking indicators in step with the 300 ms speech hangover.
+    return {1s, 5s, 250ms, 250ms, voice_channel};
 }
 
 } // namespace catro::shell

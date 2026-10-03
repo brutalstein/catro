@@ -1355,8 +1355,12 @@ std::uint32_t ServerView::LocalStreamId() const noexcept {
                     std::to_integer<std::uint8_t>(local_state_->identity.id.bytes[index]);
         }
     }
-    const auto direct = direct_voice_config();
-    value ^= static_cast<std::uint32_t>(direct.bind.port);
+    // Rooms identify a speaker by identity alone (catro::voice::user_stream_id), the same on every
+    // platform. Two engineering direct peers on one machine share an identity, so the port tells
+    // them apart.
+    if (!room_mode_active_) {
+        value ^= static_cast<std::uint32_t>(direct_voice_config().bind.port);
+    }
     return value == 0 ? 1U : value;
 }
 

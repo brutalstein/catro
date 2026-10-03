@@ -27,12 +27,7 @@ struct MemberSidebar: View {
             }
             Section("Members") {
                 ForEach(model.snapshot?.members ?? [], id: \.identifier) { member in
-                    Label {
-                        Text(member.isSelf ? "\(member.displayName) (you)" : member.displayName)
-                    } icon: {
-                        Image(systemName: member.owner ? "crown" : "person")
-                    }
-                    .accessibilityLabel("\(member.displayName)\(member.owner ? ", owner" : "")\(member.isSelf ? ", you" : "")")
+                    MemberRow(model: model, member: member)
                 }
             }
         }
@@ -41,6 +36,43 @@ struct MemberSidebar: View {
                 Text(model.connected ? "Loading members…" : "Members need online services")
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+// A green ring shows who is talking; right-click a friend for their volume, like Discord.
+private struct MemberRow: View {
+    @ObservedObject var model: AppModel
+    let member: CatroMember
+    @State private var showVolume = false
+
+    var body: some View {
+        let speaking = model.speaking.contains(member.identifier)
+        Label {
+            Text(member.isSelf ? "\(member.displayName) (you)" : member.displayName)
+        } icon: {
+            Image(systemName: member.owner ? "crown" : "person")
+                .padding(3)
+                .overlay(Circle().stroke(Color.green, lineWidth: 2).opacity(speaking ? 1 : 0))
+        }
+        .accessibilityLabel("\(member.displayName)\(member.owner ? ", owner" : "")\(member.isSelf ? ", you" : "")\(speaking ? ", speaking" : "")")
+        .contextMenu {
+            if !member.isSelf {
+                Button("User Volume…") { showVolume = true }
+            }
+        }
+        .popover(isPresented: $showVolume) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("User volume").font(.headline)
+                Slider(value: Binding(get: { model.volume(for: member.identifier) },
+                                      set: { model.setVolume($0, for: member.identifier) }),
+                       in: 0...200, step: 1)
+                Text("\(Int(model.volume(for: member.identifier)))%")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .frame(width: 240)
         }
     }
 }

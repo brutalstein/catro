@@ -72,6 +72,8 @@ ProductMediaApi native_media_api() noexcept {
     api.voice_set_muted = catro_voice_runtime_set_muted;
     api.voice_set_deafened = catro_voice_runtime_set_deafened;
     api.voice_snapshot = catro_voice_runtime_snapshot;
+    api.voice_set_user_volume = catro_voice_runtime_set_user_volume;
+    api.voice_user_speaking = catro_voice_runtime_user_speaking;
     return api;
 }
 
@@ -117,6 +119,7 @@ struct ProductSession::Impl {
         }
         // The worker is gone, so media teardown runs here without racing a command.
         leave_voice();
+        live_voice_.store(nullptr, std::memory_order_release);
         if (voice_ != nullptr) {
             deps_.media.voice_destroy(voice_);
             voice_ = nullptr;
@@ -478,6 +481,7 @@ struct ProductSession::Impl {
         }
         if (voice_ == nullptr) {
             voice_ = deps_.media.voice_create();
+            live_voice_.store(voice_, std::memory_order_release);
         }
         if (room_ == nullptr || voice_ == nullptr) {
             fail_voice("Voice runtime is unavailable.");
@@ -678,6 +682,8 @@ struct ProductSession::Impl {
     std::unique_ptr<screen::MacScreenShareRuntime> screen_;
     CatroRoomRuntimeHandle room_ = nullptr;
     CatroVoiceRuntimeHandle voice_ = nullptr;
+    // Published for main-thread speaking and volume calls; created once, cleared before destroy.
+    std::atomic<CatroVoiceRuntimeHandle> live_voice_{nullptr};
     std::string peer_id_;
     ProductSnapshot state_;
     std::unique_ptr<platform::macos::DirectoryHttpTransport> transport_;
@@ -892,6 +898,34 @@ void ProductSession::stop() noexcept {
 ProductSnapshot ProductSession::snapshot() const {
     std::scoped_lock lock(impl_->published_mutex_);
     return impl_->published_;
+}
+
+std::vector<std::string> ProductSession::speaking_members() const {
+    std::vector<std::string> speaking;
+    const auto voice = impl_->live_voice_.load(std::memory_order_acquire);
+    const auto& media = impl_->deps_.media;
+    if (voice == nullptr || media.voice_user_speaking == nullptr) {
+        return speaking;
+    }
+    std::scoped_lock lock(impl_->published_mutex_);
+    if (impl_->published_.media.phase != VoicePhase::joined) {
+        return speaking;
+    }
+    for (const auto& member : impl_->published_.members) {
+        const bool talking = member.is_self ? media.voice_snapshot(voice).speaking != 0
+                                            : media.voice_user_speaking(voice, member.user_id.c_str()) != 0;
+        if (talking) {
+            speaking.push_back(member.user_id);
+        }
+    }
+    return speaking;
+}
+
+void ProductSession::set_member_volume(const std::string& user_id, float volume) {
+    const auto voice = impl_->live_voice_.load(std::memory_order_acquire);
+    if (voice != nullptr && impl_->deps_.media.voice_set_user_volume != nullptr) {
+        impl_->deps_.media.voice_set_user_volume(voice, user_id.c_str(), volume);
+    }
 }
 
 } // namespace catro::product

@@ -207,6 +207,10 @@ struct FakeMedia {
     std::int32_t voice_bitrate = 0;
     std::uint8_t muted = 0;
     std::uint8_t deafened = 0;
+    std::uint8_t self_speaking = 0;
+    std::string speaking_user;
+    std::string volume_user;
+    float volume = 1.0F;
     int room_storage = 0;
     int voice_storage = 0;
 
@@ -301,7 +305,17 @@ product::ProductMediaApi fake_media_api() {
         snapshot.state = CATRO_VOICE_JOINED;
         snapshot.muted = g_media->muted;
         snapshot.deafened = g_media->deafened;
+        snapshot.speaking = g_media->self_speaking;
         return snapshot;
+    };
+    api.voice_set_user_volume = [](CatroVoiceRuntimeHandle, const char* user_id, float volume) noexcept {
+        std::scoped_lock lock(g_media->mutex);
+        g_media->volume_user = user_id;
+        g_media->volume = volume;
+    };
+    api.voice_user_speaking = [](CatroVoiceRuntimeHandle, const char* user_id) noexcept -> std::uint8_t {
+        std::scoped_lock lock(g_media->mutex);
+        return g_media->speaking_user == user_id ? 1U : 0U;
     };
     return api;
 }
@@ -616,6 +630,27 @@ TEST_CASE("macOS product session joins voice through provisioning, room, voice a
         CHECK(media.voice_bitrate == 48'000);
     }
     CHECK(session.snapshot().media.voice_server_id == "server-1");
+
+    // Speaking indicators and per-user volume go straight to the voice runtime.
+    REQUIRE(wait_until(session, [](const auto& s) { return s.members.size() == 2; }));
+    CHECK(session.speaking_members().empty());
+    {
+        std::scoped_lock lock(media.mutex);
+        media.speaking_user = "user-2";
+        media.self_speaking = 1;
+    }
+    auto speaking = session.speaking_members();
+    std::sort(speaking.begin(), speaking.end());
+    REQUIRE(speaking.size() == 2);
+    CHECK(speaking[1] == "user-2");
+    session.set_member_volume("user-2", 0.5F);
+    {
+        std::scoped_lock lock(media.mutex);
+        CHECK(media.volume_user == "user-2");
+        CHECK(media.volume == 0.5F);
+        media.speaking_user.clear();
+        media.self_speaking = 0;
+    }
 
     session.set_muted(true);
     session.set_deafened(true);

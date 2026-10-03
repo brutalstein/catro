@@ -8,9 +8,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var snapshot: CatroProductSnapshot?
     // The latest one-shot notice; the view clears it when dismissed.
     @Published var notice: String?
+    // Members speaking now, refreshed four times a second while in voice.
+    @Published private(set) var speaking: Set<String> = []
+    // Per-member volume in percent (0-200) for this session.
+    @Published private(set) var memberVolumes: [String: Double] = [:]
 
     private let bridge = CatroProductBridge()
     private var timer: Timer?
+    private var speakingTimer: Timer?
 
     var connected: Bool { snapshot?.connection == .synchronized }
 
@@ -37,6 +42,8 @@ final class AppModel: ObservableObject {
     func stop() {
         timer?.invalidate()
         timer = nil
+        speakingTimer?.invalidate()
+        speakingTimer = nil
         bridge.stop()
     }
 
@@ -45,6 +52,35 @@ final class AppModel: ObservableObject {
         if !snapshot.notice.isEmpty {
             notice = snapshot.notice
         }
+        updateSpeakingTimer()
+    }
+
+    // Speaking reads are lock-free atomics, so the timer only runs while joined.
+    private func updateSpeakingTimer() {
+        let joined = snapshot?.voicePhase == .joined
+        if joined, speakingTimer == nil {
+            speakingTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.refreshSpeaking() }
+            }
+        } else if !joined, let speakingTimer {
+            speakingTimer.invalidate()
+            self.speakingTimer = nil
+            speaking = []
+        }
+    }
+
+    private func refreshSpeaking() {
+        let now = Set(bridge.speakingMembers())
+        if now != speaking {
+            speaking = now
+        }
+    }
+
+    func volume(for identifier: String) -> Double { memberVolumes[identifier] ?? 100 }
+
+    func setVolume(_ percent: Double, for identifier: String) {
+        memberVolumes[identifier] = percent
+        bridge.setVolume(Float(percent / 100), forMember: identifier)
     }
 
     func select(server identifier: String) { bridge.selectServer(identifier) }

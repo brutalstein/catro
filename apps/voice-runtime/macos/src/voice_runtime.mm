@@ -63,6 +63,16 @@ void catro_voice_runtime_set_deafened(CatroVoiceRuntimeHandle handle, std::uint8
     }
 }
 
+void catro_voice_runtime_set_user_volume(CatroVoiceRuntimeHandle handle, const char* user_id, float volume) noexcept {
+    if (handle != nullptr) {
+        host(handle).set_user_volume(user_id, volume);
+    }
+}
+
+std::uint8_t catro_voice_runtime_user_speaking(CatroVoiceRuntimeHandle handle, const char* user_id) noexcept {
+    return handle != nullptr && host(handle).user_speaking(user_id) ? 1U : 0U;
+}
+
 CatroVoiceRuntimeSnapshot catro_voice_runtime_snapshot(CatroVoiceRuntimeHandle handle) noexcept {
     if (handle == nullptr) {
         CatroVoiceRuntimeSnapshot result{};

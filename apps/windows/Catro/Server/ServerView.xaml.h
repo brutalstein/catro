@@ -12,6 +12,7 @@
 #include <catro/screen_runtime.hpp>
 #include <catro/voice_runtime.h>
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -62,6 +63,9 @@ private:
     void ShowLocalMemberFallback();
     void ApplyMemberRoster(
         const std::vector<catro::platform::windows::DirectoryMember>& members);
+    // Rebuilds member rows with live speaking state; unchanged rows are left alone.
+    void RenderMemberRows();
+    Microsoft::UI::Xaml::Controls::Flyout MemberVolumeFlyout();
     winrt::fire_and_forget BeginMemberRefresh();
     void ResetAccessRequests();
     void UpdateAccessUi();
@@ -133,6 +137,11 @@ private:
     bool stream_window_fullscreen_ = false;
     bool stream_window_topmost_ = false;
 
+    std::vector<catro::platform::windows::DirectoryMember> roster_;
+    // Per-user volume in percent (0-200) by user id, for this session.
+    std::map<std::string, double> member_volumes_;
+    std::string member_volume_user_;
+    Microsoft::UI::Xaml::Controls::Flyout member_volume_flyout_{nullptr};
     std::uint64_t member_generation_ = 1;
     std::uint64_t member_refresh_generation_ = 0;
     std::uint64_t access_generation_ = 1;

@@ -28,7 +28,7 @@ TEST_CASE("foreground restores responsive polling and only previews the voice pa
     const auto policy = ui_refresh_policy(WindowActivity::foreground, true, true);
     CHECK(policy.messages == 1s);
     CHECK(policy.roster == 5s);
-    CHECK(policy.voice == 500ms);
+    CHECK(policy.voice == 250ms);
     CHECK(policy.screen == 250ms);
     CHECK(policy.local_preview);
     CHECK_FALSE(ui_refresh_policy(WindowActivity::foreground, true, false).local_preview);

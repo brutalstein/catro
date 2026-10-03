@@ -146,6 +146,10 @@ __attribute__((objc_subclassing_restricted))
              audio:(BOOL)audio NS_SWIFT_NAME(startShare(_:maxWidth:maxHeight:fps:bitrateMbps:audio:));
 - (void)stopShare;
 - (void)setWatching:(BOOL)watching;
+// Main thread. Member identifiers speaking right now; empty outside voice.
+- (NSArray<NSString*>*)speakingMembers;
+// 0 silences, 1 is unchanged, 2 doubles.
+- (void)setVolume:(float)volume forMember:(NSString*)identifier NS_SWIFT_NAME(setVolume(_:forMember:));
 
 // Main thread only. Hosts the local preview / remote stream inside a caller-owned layer; nil
 // detaches. Returns nil on success, otherwise the failure.

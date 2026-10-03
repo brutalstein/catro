@@ -15,6 +15,14 @@ TEST_CASE("macOS voice runtime C ABI has deterministic idle control semantics") 
     snapshot = catro_voice_runtime_snapshot(handle);
     CHECK(snapshot.muted == 1);
     CHECK(snapshot.deafened == 1);
+    CHECK(snapshot.speaking == 0);
+
+    // Volume and speaking state are safe before any media starts, and null ids are ignored.
+    catro_voice_runtime_set_user_volume(handle, "ab01ff10", 0.5F);
+    catro_voice_runtime_set_user_volume(handle, nullptr, 0.5F);
+    CHECK(catro_voice_runtime_user_speaking(handle, "ab01ff10") == 0);
+    CHECK(catro_voice_runtime_user_speaking(handle, nullptr) == 0);
+    CHECK(catro_voice_runtime_user_speaking(nullptr, "ab01ff10") == 0);
 
     catro_voice_runtime_stop(handle);
     CHECK(catro_voice_runtime_snapshot(handle).state == CATRO_VOICE_IDLE);

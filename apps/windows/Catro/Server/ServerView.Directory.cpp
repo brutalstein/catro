@@ -88,15 +88,70 @@ void ServerView::OnMemberContainerChanging(
     if (args.InRecycleQueue() || !root) {
         return;
     }
+    // Row: user id, flags (s = speaking, y = you), display name, role.
     const auto row = unbox_value<hstring>(args.Item());
-    const auto [name, role] = split_line(row);
+    const auto [user_id, rest] = split_line(row);
+    const auto [flags, labels_text] = split_line(rest);
+    const auto [name, role] = split_line(labels_text);
+    const bool speaking = flags.find(L's') != std::wstring_view::npos;
+    const bool self = flags.find(L'y') != std::wstring_view::npos;
     const auto avatar = root.Children().GetAt(0).as<controls::Border>();
     avatar.Child().as<controls::TextBlock>().Text(
         name.empty() ? hstring{} : hstring{name.substr(0, 1)});
+    if (speaking) {
+        avatar.BorderBrush(xaml::Application::Current().Resources().Lookup(
+            box_value(L"CatroSageBrush")).as<Microsoft::UI::Xaml::Media::Brush>());
+    } else {
+        avatar.ClearValue(controls::Border::BorderBrushProperty());
+    }
     const auto labels = root.Children().GetAt(1).as<controls::StackPanel>();
     text_at(labels, 0).Text(hstring{name});
     text_at(labels, 1).Text(hstring{role});
+    // Right-click a friend to change how loud they are, like Discord's user volume.
+    const auto container = args.ItemContainer();
+    container.Tag(box_value(hstring{user_id}));
+    if (self || user_id.empty()) {
+        container.ClearValue(xaml::UIElement::ContextFlyoutProperty());
+    } else {
+        container.ContextFlyout(MemberVolumeFlyout());
+    }
     args.Handled(true);
+}
+
+controls::Flyout ServerView::MemberVolumeFlyout() {
+    if (member_volume_flyout_) {
+        return member_volume_flyout_;
+    }
+    controls::Slider slider;
+    slider.Header(box_value(L"User volume"));
+    slider.Minimum(0);
+    slider.Maximum(200);
+    slider.StepFrequency(1);
+    slider.Width(220);
+    slider.ValueChanged([this](auto&&, controls::Primitives::RangeBaseValueChangedEventArgs const& args) {
+        if (member_volume_user_.empty()) {
+            return;
+        }
+        member_volumes_[member_volume_user_] = args.NewValue();
+        if (voice_runtime_ != nullptr) {
+            catro_voice_runtime_set_user_volume(
+                voice_runtime_, member_volume_user_.c_str(), static_cast<float>(args.NewValue() / 100.0));
+        }
+    });
+    controls::Flyout flyout;
+    flyout.Content(slider);
+    flyout.Opening([this](IInspectable const& sender, auto&&) {
+        const auto opened = sender.as<controls::Flyout>();
+        const auto target = opened.Target();
+        // Clear first so moving the slider to the stored value does not write it back.
+        member_volume_user_.clear();
+        const auto id = target ? to_string(unbox_value_or<hstring>(target.Tag(), hstring{})) : std::string{};
+        const auto stored = member_volumes_.find(id);
+        opened.Content().as<controls::Slider>().Value(stored == member_volumes_.end() ? 100.0 : stored->second);
+        member_volume_user_ = id;
+    });
+    member_volume_flyout_ = flyout;
+    return flyout;
 }
 
 void ServerView::ResetMembers() {
@@ -104,6 +159,7 @@ void ServerView::ResetMembers() {
         member_generation_ = 1;
     }
     MemberList().Items().Clear();
+    roster_.clear();
 }
 
 void ServerView::ShowLocalMemberFallback() {
@@ -113,8 +169,8 @@ void ServerView::ShowLocalMemberFallback() {
         return;
     }
 
-    std::wstring row = to_hstring(
-        local_state_->identity.display_name).c_str();
+    std::wstring row = L"\ny\n";
+    row += to_hstring(local_state_->identity.display_name).c_str();
     row += L"\nOwner · You";
     MemberList().Items().Append(
         box_value(hstring{row}));
@@ -124,6 +180,21 @@ void ServerView::ShowLocalMemberFallback() {
 void ServerView::ApplyMemberRoster(
     const std::vector<
         catro::platform::windows::DirectoryMember>& members) {
+    roster_ = members;
+    RenderMemberRows();
+
+    std::wstring count = L"MEMBERS — ";
+    count += std::to_wstring(members.size());
+    MemberCountLabel().Text(hstring{count});
+}
+
+void ServerView::RenderMemberRows() {
+    if (roster_.empty()) {
+        return; // the local fallback row stays until a roster arrives
+    }
+    const auto voice = voice_runtime_ != nullptr ? catro_voice_runtime_snapshot(voice_runtime_)
+                                                 : CatroVoiceRuntimeSnapshot{};
+    const bool in_voice = room_mode_active_ && voice.state == CATRO_VOICE_JOINED;
     std::string local_id;
     if (local_state_) {
         local_id =
@@ -133,14 +204,26 @@ void ServerView::ApplyMemberRoster(
 
     auto items = MemberList().Items();
     uint32_t index = 0;
-    for (const auto& member : members) {
-        std::wstring row = to_hstring(member.display_name).c_str();
+    for (const auto& member : roster_) {
+        const bool self = !local_id.empty() && member.user_id == local_id;
+        const bool speaking = in_voice &&
+            (self ? voice.speaking != 0
+                  : catro_voice_runtime_user_speaking(voice_runtime_, member.user_id.c_str()) != 0);
+        std::wstring row = to_hstring(member.user_id).c_str();
+        row += L"\n";
+        if (speaking) {
+            row += L"s";
+        }
+        if (self) {
+            row += L"y";
+        }
+        row += L"\n";
+        row += to_hstring(member.display_name).c_str();
         row += L"\n";
         row += member.role == "owner"
             ? L"Owner"
             : L"Member";
-        if (!local_id.empty() &&
-            member.user_id == local_id) {
+        if (self) {
             row += L" · You";
         }
         const hstring value{row};
@@ -154,10 +237,6 @@ void ServerView::ApplyMemberRoster(
     while (items.Size() > index) {
         items.RemoveAtEnd();
     }
-
-    std::wstring count = L"MEMBERS — ";
-    count += std::to_wstring(members.size());
-    MemberCountLabel().Text(hstring{count});
 }
 
 winrt::fire_and_forget

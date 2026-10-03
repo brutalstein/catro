@@ -112,6 +112,8 @@ struct ProductMediaApi {
     void (*voice_set_muted)(CatroVoiceRuntimeHandle, std::uint8_t) noexcept = nullptr;
     void (*voice_set_deafened)(CatroVoiceRuntimeHandle, std::uint8_t) noexcept = nullptr;
     CatroVoiceRuntimeSnapshot (*voice_snapshot)(CatroVoiceRuntimeHandle) noexcept = nullptr;
+    void (*voice_set_user_volume)(CatroVoiceRuntimeHandle, const char*, float) noexcept = nullptr;
+    std::uint8_t (*voice_user_speaking)(CatroVoiceRuntimeHandle, const char*) noexcept = nullptr;
 };
 
 [[nodiscard]] ProductMediaApi native_media_api() noexcept;
@@ -197,6 +199,12 @@ public:
     void stop() noexcept;
 
     [[nodiscard]] ProductSnapshot snapshot() const;
+
+    // Main thread. Read straight from the voice runtime's atomics, so speaking indicators stay
+    // live even while the worker waits on the network.
+    [[nodiscard]] std::vector<std::string> speaking_members() const;
+    // 0 silences, 1 is unchanged, 2 doubles; kept until the session stops.
+    void set_member_volume(const std::string& user_id, float volume);
 
 private:
     struct Impl;

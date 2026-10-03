@@ -417,6 +417,23 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
     return failure ? copy_string(failure->message) : nil;
 }
 
+- (NSArray<NSString*>*)speakingMembers {
+    if (!_session) {
+        return @[];
+    }
+    NSMutableArray<NSString*>* result = [NSMutableArray array];
+    for (const auto& identifier : _session->speaking_members()) {
+        [result addObject:copy_string(identifier)];
+    }
+    return result;
+}
+
+- (void)setVolume:(float)volume forMember:(NSString*)identifier {
+    if (_session) {
+        _session->set_member_volume(utf8(identifier), volume);
+    }
+}
+
 - (nullable NSString*)attachRemoteLayer:(nullable CALayer*)layer {
     if (!_session) {
         return @"Session is not running";

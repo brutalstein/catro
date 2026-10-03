@@ -11,6 +11,24 @@ namespace {
 constexpr std::uint64_t kRemoteIdlePlayoutTicks = 100; // 2 s at 20 ms.
 constexpr float kLimiterCeiling = 0.98F;
 constexpr float kLimiterReleasePerFrame = 0.02F;
+// A frame louder than -45 dBFS RMS is speech; the indicator then holds for 300 ms of quiet so it
+// does not flicker between words.
+constexpr float kSpeakingMeanSquare = 3.2e-5F;
+constexpr std::uint16_t kSpeakingHangoverFrames = 15;
+
+// Returns true while the stream counts as speaking.
+[[nodiscard]] bool track_speaking(std::uint16_t& hangover, const PcmFrame& frame) noexcept {
+    float energy = 0.0F;
+    for (const auto sample : frame) {
+        energy += sample * sample;
+    }
+    if (energy > kSpeakingMeanSquare * static_cast<float>(frame.size())) {
+        hangover = kSpeakingHangoverFrames;
+    } else if (hangover > 0) {
+        --hangover;
+    }
+    return hangover > 0;
+}
 
 void accumulate_jitter(
     JitterStatistics& total,
@@ -50,6 +68,7 @@ struct VoicePipeline::RemoteStream {
     std::unique_ptr<Decoder> decoder;
     PcmFrame decoded{};
     std::uint64_t last_packet_tick = 0;
+    std::uint16_t speaking_hangover = 0;
 };
 
 VoicePipeline::VoicePipeline(
@@ -60,12 +79,23 @@ VoicePipeline::VoicePipeline(
       render_(config.render_queue_frames),
       encoder_(std::move(encoder)),
       processor_(std::move(processor)),
+      controls_(config.controls),
       jitter_target_packets_(config.jitter_target_packets),
       stream_id_(config.local_stream_id),
       next_sequence_(config.initial_sequence),
       next_timestamp_(config.initial_timestamp) {}
 
-VoicePipeline::~VoicePipeline() = default;
+VoicePipeline::~VoicePipeline() {
+    if (controls_ == nullptr) {
+        return;
+    }
+    controls_->set_local_speaking(false);
+    for (const auto& remote : remotes_) {
+        if (remote) {
+            controls_->set_speaking(remote->stream_id, false);
+        }
+    }
+}
 
 VoicePipeline::CreateResult VoicePipeline::create(
     const VoicePipelineConfig& config) noexcept {
@@ -158,6 +188,9 @@ VoicePipeline::encode_next(
             1, std::memory_order_relaxed);
     } else if (processor_) {
         processor_->process_capture(capture_frame_);
+    }
+    if (controls_ != nullptr) {
+        controls_->set_local_speaking(track_speaking(local_speaking_hangover_, capture_frame_));
     }
 
     auto output =
@@ -326,6 +359,9 @@ VoicePipeline::decode_next() noexcept {
         if (playout_tick_ >
                 remote->last_packet_tick +
                     kRemoteIdlePlayoutTicks) {
+            if (controls_ != nullptr) {
+                controls_->set_speaking(remote->stream_id, false);
+            }
             remote.reset();
         }
     }
@@ -437,13 +473,21 @@ VoicePipeline::decode_next() noexcept {
             1, std::memory_order_relaxed);
         decoded_any = true;
 
+        auto volume = 1.0F;
+        if (controls_ != nullptr) {
+            // Speaking follows the sender's level, not the local volume, like Discord.
+            controls_->set_speaking(
+                remote->stream_id,
+                track_speaking(remote->speaking_hangover, remote->decoded));
+            volume = controls_->volume(remote->stream_id);
+        }
         for (std::size_t sample = 0;
              sample < mix_frame_.size();
              ++sample) {
             const auto value =
                 remote->decoded[sample];
             if (std::isfinite(value)) {
-                mix_frame_[sample] += value;
+                mix_frame_[sample] += value * volume;
             }
         }
     }

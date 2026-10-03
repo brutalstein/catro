@@ -45,7 +45,8 @@ struct CatroVoiceRuntimeSnapshot {
     std::uint8_t muted;
     std::uint8_t deafened;
     std::uint8_t peer_seen;
-    std::uint8_t reserved;
+    // The local microphone is carrying speech right now (after mute and noise suppression).
+    std::uint8_t speaking;
     std::uint64_t sent_packets;
     std::uint64_t received_packets;
     std::uint64_t peer_unreachable_events;
@@ -64,5 +65,12 @@ CATRO_VOICE_API void catro_voice_runtime_set_deafened(
     CatroVoiceRuntimeHandle handle, std::uint8_t deafened) noexcept;
 CATRO_VOICE_API CatroVoiceRuntimeSnapshot catro_voice_runtime_snapshot(
     CatroVoiceRuntimeHandle handle) noexcept;
+// Per-user playback volume by hex user id: 0 silences, 1 is unchanged, 2 doubles. Kept across
+// rejoins for the lifetime of the handle.
+CATRO_VOICE_API void catro_voice_runtime_set_user_volume(
+    CatroVoiceRuntimeHandle handle, const char* user_id, float volume) noexcept;
+// 1 while the remote user with this hex user id is speaking.
+CATRO_VOICE_API std::uint8_t catro_voice_runtime_user_speaking(
+    CatroVoiceRuntimeHandle handle, const char* user_id) noexcept;
 
 } // extern "C"

@@ -3,6 +3,7 @@
 #include <catro/audio/external_session.hpp>
 #include <catro/voice/pipeline.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdio>
@@ -43,6 +44,7 @@ int run_room_voice(const tools::VoicePeerOptions& options,
                    const RoomVoiceApi& api,
                    audio::AudioPlatform& platform,
                    tools::VoicePeerControl& control,
+                   voice::StreamControls& streams,
                    std::string& error_text) {
     voice::VoicePipelineConfig media_config;
     media_config.local_stream_id = options.stream_id;
@@ -50,6 +52,7 @@ int run_room_voice(const tools::VoicePeerOptions& options,
     media_config.encoder.bitrate = options.bitrate;
     // Echo cancellation, noise suppression, and automatic gain, on by default like Discord.
     media_config.processing = voice::VoiceProcessingConfig{};
+    media_config.controls = &streams;
 
     auto pipeline_result = voice::VoicePipeline::create(media_config);
     if (const auto* failure = std::get_if<voice::CodecError>(&pipeline_result)) {
@@ -246,7 +249,7 @@ std::int32_t VoiceRuntimeHost::start(const CatroVoiceRuntimeConfig& config) noex
             std::string error;
             int code = tools::voice_peer_ok;
             if (room != nullptr) {
-                code = run_room_voice(options, room, room_, platform_, control_, error);
+                code = run_room_voice(options, room, room_, platform_, control_, streams_, error);
             } else {
                 std::ostringstream stream;
                 code = direct_(options, control_, stream);
@@ -297,6 +300,7 @@ CatroVoiceRuntimeSnapshot VoiceRuntimeHost::snapshot() const noexcept {
     result.received_packets = control_.received_packets.load(std::memory_order_relaxed);
     result.peer_unreachable_events = control_.peer_unreachable_events.load(std::memory_order_relaxed);
     result.peer_seen = result.received_packets > 0 ? 1U : 0U;
+    result.speaking = streams_.local_speaking() ? 1U : 0U;
 
     std::scoped_lock error_lock(error_mutex_);
     if (!error_.empty()) {
@@ -304,6 +308,23 @@ CatroVoiceRuntimeSnapshot VoiceRuntimeHost::snapshot() const noexcept {
                       error_.c_str());
     }
     return result;
+}
+
+void VoiceRuntimeHost::set_user_volume(const char* user_id, float volume) noexcept {
+    if (user_id != nullptr && user_id[0] != '\0') {
+        streams_.set_volume(voice::user_stream_id(user_id), volume);
+    }
+}
+
+bool VoiceRuntimeHost::user_speaking(const char* user_id) const noexcept {
+    if (user_id == nullptr || user_id[0] == '\0') {
+        return false;
+    }
+    const auto stream_id = voice::user_stream_id(user_id);
+    std::array<std::uint32_t, voice::kMaxControlledStreams> speaking{};
+    const auto count = streams_.speaking(speaking);
+    return std::find(speaking.begin(), speaking.begin() + static_cast<std::ptrdiff_t>(count), stream_id) !=
+           speaking.begin() + static_cast<std::ptrdiff_t>(count);
 }
 
 void VoiceRuntimeHost::stop_locked() noexcept {
