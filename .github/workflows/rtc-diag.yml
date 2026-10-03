@@ -13,17 +13,17 @@ jobs:
       - uses: actions/checkout@v4
       - run: scripts/bootstrap.sh
       - run: cmake --preset macos-clang && cmake --build out/build/macos-clang --config Release --target catro_rtc_two_peer_test
-      - name: Repeat two/five-person WebRTC test
+      - name: Dump threads of a stalled run
         run: |
           exe=$(find out/build/macos-clang -name catro_rtc_two_peer_test -type f -perm -u+x | head -1)
-          echo "cpus: $(sysctl -n hw.ncpu)"
-          fails=0
-          for i in $(seq 1 30); do
-            start=$(date +%s)
-            if ! "$exe" --order rand --rng-seed $i > run.log 2>&1; then
-              fails=$((fails+1)); echo "::group::run $i FAILED ($(( $(date +%s)-start ))s)"; tail -c 20000 run.log; echo "::endgroup::"
-            else
-              echo "run $i ok ($(( $(date +%s)-start ))s)"
+          for i in $(seq 1 10); do
+            "$exe" "five people*" > run.log 2>&1 &
+            pid=$!
+            for t in $(seq 1 25); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+            if kill -0 $pid 2>/dev/null; then
+              echo "run $i stalled"
+              lldb -p $pid --batch -o "thread backtrace all" 2>&1 | grep -E "^\* thread|^  thread|frame #" | cut -c1-220
+              kill -9 $pid; break
             fi
+            echo "run $i ok"
           done
-          echo "failures: $fails/30"
