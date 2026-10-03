@@ -17,7 +17,7 @@ final class AppModel: ObservableObject {
     @Published var streamVolume = UserDefaults.standard.double(forKey: VoicePreferenceKey.streamVolume) {
         didSet {
             UserDefaults.standard.set(streamVolume, forKey: VoicePreferenceKey.streamVolume)
-            bridge.setStreamVolume(Float(streamVolume / 100))
+            applyStreamVolume()
         }
     }
     // The stream shows in its own window instead of the workspace.
@@ -76,9 +76,17 @@ final class AppModel: ObservableObject {
         }
         updateSpeakingTimer()
         playCues(from: previous, to: snapshot)
+        if previous?.deafened != snapshot.deafened {
+            applyStreamVolume()
+        }
         if !snapshot.remoteAvailable && !snapshot.sharing {
             streamPoppedOut = false
         }
+    }
+
+    // Deafen silences watched streams too, like Discord; the saved volume comes back after.
+    private func applyStreamVolume() {
+        bridge.setStreamVolume(snapshot?.deafened == true ? 0 : Float(streamVolume / 100))
     }
 
     // Discord-style cues for joining, leaving, people coming and going, mute and deafen.
