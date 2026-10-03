@@ -260,9 +260,11 @@ bool interleave_stereo(
     if (sampleBuffer == nullptr || !CMSampleBufferIsValid(sampleBuffer)) {
         return;
     }
-    if (type == SCStreamOutputTypeAudio) {
-        [self handleAudio:sampleBuffer];
-        return;
+    if (@available(macOS 13.0, *)) {
+        if (type == SCStreamOutputTypeAudio) {
+            [self handleAudio:sampleBuffer];
+            return;
+        }
     }
     if (type == SCStreamOutputTypeScreen) {
         [self handleVideo:sampleBuffer];
@@ -417,7 +419,11 @@ public:
         AudioHandler on_audio,
         StopHandler on_stop) noexcept override {
         stop();
-        const bool captures_audio = static_cast<bool>(on_audio);
+        // ScreenCaptureKit captures audio from macOS 13; Monterey shares the picture only.
+        bool captures_audio = false;
+        if (@available(macOS 13.0, *)) {
+            captures_audio = static_cast<bool>(on_audio);
+        }
         if ([NSThread isMainThread]) {
             return ScreenCaptureError{ScreenCaptureErrorCode::wrong_thread, 0};
         }
@@ -471,14 +477,16 @@ public:
         native_config.showsCursor = config.shows_cursor;
         native_config.pixelFormat =
             kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
-        if (captures_audio) {
-            // ScreenCaptureKit mixes audio per application: a window filter yields its owning
-            // app, a display filter yields every app. Excluding Catro keeps voice and watched
-            // streams out of the share, so viewers never hear themselves echoed back.
-            native_config.capturesAudio = YES;
-            native_config.sampleRate = kCaptureAudioSampleRate;
-            native_config.channelCount = 2;
-            native_config.excludesCurrentProcessAudio = YES;
+        if (@available(macOS 13.0, *)) {
+            if (captures_audio) {
+                // ScreenCaptureKit mixes audio per application: a window filter yields its owning
+                // app, a display filter yields every app. Excluding Catro keeps voice and watched
+                // streams out of the share, so viewers never hear themselves echoed back.
+                native_config.capturesAudio = YES;
+                native_config.sampleRate = kCaptureAudioSampleRate;
+                native_config.channelCount = 2;
+                native_config.excludesCurrentProcessAudio = YES;
+            }
         }
 
         output_ = [[CatroScreenStreamOutput alloc]
@@ -501,19 +509,21 @@ public:
             return native_error(
                 add_error, ScreenCaptureErrorCode::capture_creation_failed);
         }
-        if (captures_audio) {
-            // Audio gets its own high-priority queue so a slow video callback never delays it.
-            audio_queue_ = dispatch_queue_create(
-                "com.catro.screen-audio",
-                dispatch_queue_attr_make_with_qos_class(
-                    DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE, 0));
-            if (![stream_ addStreamOutput:output_
-                                     type:SCStreamOutputTypeAudio
-                       sampleHandlerQueue:audio_queue_
-                                    error:&add_error]) {
-                stop();
-                return native_error(
-                    add_error, ScreenCaptureErrorCode::capture_creation_failed);
+        if (@available(macOS 13.0, *)) {
+            if (captures_audio) {
+                // Audio gets its own high-priority queue so a slow video callback never delays it.
+                audio_queue_ = dispatch_queue_create(
+                    "com.catro.screen-audio",
+                    dispatch_queue_attr_make_with_qos_class(
+                        DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE, 0));
+                if (![stream_ addStreamOutput:output_
+                                         type:SCStreamOutputTypeAudio
+                           sampleHandlerQueue:audio_queue_
+                                        error:&add_error]) {
+                    stop();
+                    return native_error(
+                        add_error, ScreenCaptureErrorCode::capture_creation_failed);
+                }
             }
         }
 
@@ -568,9 +578,12 @@ public:
                              error:&ignored];
         if (audio_queue_ != nil) {
             dispatch_sync(audio_queue_, ^{});
-            [stream_ removeStreamOutput:output_
-                                  type:SCStreamOutputTypeAudio
-                                 error:&ignored];
+            // audio_queue_ is only created on macOS 13 and later.
+            if (@available(macOS 13.0, *)) {
+                [stream_ removeStreamOutput:output_
+                                      type:SCStreamOutputTypeAudio
+                                     error:&ignored];
+            }
         }
         stream_ = nil;
         output_ = nil;

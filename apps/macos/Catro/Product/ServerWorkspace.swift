@@ -8,35 +8,56 @@ struct ServerWorkspace: View {
     @State private var picking = false
 
     var body: some View {
-        NavigationSplitView {
-            ChannelSidebar(model: model)
-                .navigationSplitViewColumnWidth(min: 200, ideal: 232)
-        } content: {
-            VStack(spacing: 0) {
-                if let notice = model.notice {
-                    NoticeBar(text: notice) { model.notice = nil }
-                }
-                ConnectionBar(snapshot: model.snapshot)
-                VoiceControls(model: model, picking: $picking)
-                if model.snapshot?.voicePhase == .joined {
-                    StreamViewer(model: model)
-                }
-                Divider()
-                messages
-                Divider()
-                composer
-            }
-            .navigationSplitViewColumnWidth(min: 420, ideal: 640)
-            .navigationTitle(model.activeServer?.name ?? "Catro")
-        } detail: {
-            MemberSidebar(model: model)
-                .navigationSplitViewColumnWidth(min: 180, ideal: 216)
-        }
+        columns
         .sheet(isPresented: $picking) {
             SourcePicker(model: model, isPresented: $picking)
         }
         .onAppear { model.start() }
         .onDisappear { model.stop() }
+    }
+
+    // NavigationSplitView needs macOS 13; Monterey gets the same three columns from NavigationView.
+    @ViewBuilder
+    private var columns: some View {
+        if #available(macOS 13.0, *) {
+            NavigationSplitView {
+                ChannelSidebar(model: model)
+                    .navigationSplitViewColumnWidth(min: 200, ideal: 232)
+            } content: {
+                center
+                    .navigationSplitViewColumnWidth(min: 420, ideal: 640)
+            } detail: {
+                MemberSidebar(model: model)
+                    .navigationSplitViewColumnWidth(min: 180, ideal: 216)
+            }
+        } else {
+            NavigationView {
+                ChannelSidebar(model: model)
+                    .frame(minWidth: 200, idealWidth: 232)
+                center
+                    .frame(minWidth: 420, idealWidth: 640)
+                MemberSidebar(model: model)
+                    .frame(minWidth: 180, idealWidth: 216)
+            }
+        }
+    }
+
+    private var center: some View {
+        VStack(spacing: 0) {
+            if let notice = model.notice {
+                NoticeBar(text: notice) { model.notice = nil }
+            }
+            ConnectionBar(snapshot: model.snapshot)
+            VoiceControls(model: model, picking: $picking)
+            if model.snapshot?.voicePhase == .joined {
+                StreamViewer(model: model)
+            }
+            Divider()
+            messages
+            Divider()
+            composer
+        }
+        .navigationTitle(model.activeServer?.name ?? "Catro")
     }
 
     private var messages: some View {

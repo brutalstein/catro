@@ -69,14 +69,14 @@ struct AudioView: View {
             if !audio.session.rows.isEmpty {
                 Section("Session") {
                     ForEach(Array(audio.session.rows.enumerated()), id: \.offset) { _, row in
-                        LabeledContent(row.label) {
+                        LabeledRow(row.label) {
                             Text(row.value).textSelection(.enabled)
                         }
                     }
                 }
             }
         }
-        .formStyle(.grouped)
+        .groupedForm()
         .onDisappear { audio.stop() }
     }
 

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main
@@ -8,8 +9,15 @@ struct CatroApp: App {
 
     private var colorScheme: ColorScheme? { Appearance(rawValue: appearance)?.colorScheme }
 
+    init() {
+        // One workspace window: no automatic tabs alongside the removed New Window command.
+        NSWindow.allowsAutomaticWindowTabbing = false
+    }
+
+    // The workspace is a WindowGroup and the other windows are AppWindows, because the Window
+    // scene needs macOS 13 and Catro supports macOS 12.3.
     var body: some Scene {
-        Window("Catro", id: "workspace") {
+        WindowGroup("Catro", id: "workspace") {
             ServerWorkspace(model: product)
                 .frame(minWidth: 960, minHeight: 600)
                 .tint(.catroAccent)
@@ -31,21 +39,15 @@ struct CatroApp: App {
                     .disabled(!(product.snapshot?.sharing ?? false))
             }
             CommandGroup(after: .windowArrangement) {
-                OpenDiagnosticsButton()
+                Button("Diagnostics") {
+                    AppWindows.show("diagnostics", title: "Catro Diagnostics", size: CGSize(width: 960, height: 620)) {
+                        DiagnosticsView(model: model)
+                            .frame(minWidth: 860, minHeight: 540)
+                            .preferredColorScheme(colorScheme)
+                    }
+                }
+                .keyboardShortcut("0", modifiers: [.command, .shift])
             }
-        }
-
-        Window("Stream", id: "stream") {
-            StreamWindow(model: product)
-                .preferredColorScheme(colorScheme)
-        }
-        .defaultSize(width: 1280, height: 720)
-
-        Window("Catro Diagnostics", id: "diagnostics") {
-            DiagnosticsView(model: model)
-                .frame(minWidth: 860, minHeight: 540)
-        }
-        .commands {
             CommandGroup(replacing: .saveItem) {
                 Button("Save Text Report…") { model.save(.text) }
                     .keyboardShortcut("s")
@@ -70,14 +72,5 @@ struct CatroApp: App {
                 .tint(.catroAccent)
                 .preferredColorScheme(colorScheme)
         }
-    }
-}
-
-private struct OpenDiagnosticsButton: View {
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        Button("Diagnostics") { openWindow(id: "diagnostics") }
-            .keyboardShortcut("0", modifiers: [.command, .shift])
     }
 }

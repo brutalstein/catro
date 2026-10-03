@@ -76,7 +76,7 @@ fi
 cat >"$staging/README.txt" <<'EOF'
 Catro for macOS
 
-Move Catro.app to Applications and open it. Requires macOS 13.0 or newer.
+Move Catro.app to Applications and open it. Requires macOS 12.3 or newer.
 
 Voice channels, screen and window sharing, and the #general text channel work with friends on
 Windows and macOS. macOS asks for Microphone access when you first join voice and for Screen

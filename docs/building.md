@@ -40,7 +40,7 @@ scripts/run.sh                                   # open Catro.app
 scripts/run.sh --report --format human
 ```
 
-`build.sh` configures the `macos-clang` preset (Xcode generator, deployment target 13.0) and
+`build.sh` configures the `macos-clang` preset (Xcode generator, deployment target 12.3) and
 builds every target. CMake generates the Xcode project for the SwiftUI shell, so no project
 file is checked in. The post-build step copies the probe helper into
 `Catro.app/Contents/MacOS/`.

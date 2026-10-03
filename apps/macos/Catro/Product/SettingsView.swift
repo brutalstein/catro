@@ -83,7 +83,7 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 if pushToTalk {
-                    LabeledContent("Shortcut") {
+                    LabeledRow("Shortcut") {
                         Button(recorder != nil ? "Press a key…" : (pushToTalkName.isEmpty ? "Record keybind" : pushToTalkName),
                                action: record)
                     }
@@ -92,7 +92,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Toggle("Automatically determine input sensitivity", isOn: $automaticSensitivity)
-                LabeledContent("Threshold") {
+                LabeledRow("Threshold") {
                     HStack {
                         Slider(value: $sensitivityDb, in: -100...0, step: 1)
                         Text("\(Int(sensitivityDb)) dB").monospacedDigit()
@@ -116,11 +116,11 @@ struct SettingsView: View {
                 Text("Turning preview off saves presentation work. Your stream continues at the selected quality.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                LabeledContent("Video encoding", value: "Hardware H.264")
-                LabeledContent("Stream bitrate", value: "Adapts to the network")
+                LabeledRow("Video encoding", value: "Hardware H.264")
+                LabeledRow("Stream bitrate", value: "Adapts to the network")
             }
         }
-        .formStyle(.grouped)
+        .groupedForm()
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
         .onAppear {
@@ -184,7 +184,7 @@ private struct InputMeter: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.1)) { _ in
             let level = Double(model.inputLevel())
-            LabeledContent("Input level") {
+            LabeledRow("Input level") {
                 ProgressView(value: min(max(level + 100, 0), 100), total: 100)
                     .tint(level >= threshold ? .green : .secondary)
                     .help(model.inVoice ? "\(Int(level)) dB" : "Join voice to test your microphone")

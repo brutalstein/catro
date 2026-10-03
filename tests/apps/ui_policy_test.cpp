@@ -425,7 +425,7 @@ TEST_CASE("macOS product shell stays native accessible and free of view-body med
     // Discord-style stream window: pop out and full screen, plus quality presets in the picker.
     CHECK(stream.find("\"Pop Out\"") != std::string::npos);
     CHECK(stream.find("toggleFullScreen") != std::string::npos);
-    CHECK(app.find("Window(\"Stream\", id: \"stream\")") != std::string::npos);
+    CHECK(stream.find("AppWindows.show(\"stream\"") != std::string::npos);
     CHECK(picker.find("Picker(\"Resolution\"") != std::string::npos);
     CHECK(picker.find("Picker(\"Frame rate\"") != std::string::npos);
 

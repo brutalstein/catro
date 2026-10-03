@@ -437,7 +437,12 @@ struct MacScreenShareRuntime::Impl {
         // Declared before the capture so both outlive its audio callbacks.
         StreamAudioCaptureBridge audio_bridge;
         std::optional<StreamAudioSender> audio_sender;
-        if (config.share_audio) {
+        // ScreenCaptureKit captures audio from macOS 13; on Monterey the stream carries no sound.
+        bool share_audio = false;
+        if (@available(macOS 13.0, *)) {
+            share_audio = config.share_audio;
+        }
+        if (share_audio) {
             audio_sender.emplace(api_, config.room_runtime, counters_);
             if (const auto failure = audio_sender->start(config.stream_audio_bitrate, config.ssrc)) {
                 set_stream_audio_error(voice::name(failure->code), failure->native_code);

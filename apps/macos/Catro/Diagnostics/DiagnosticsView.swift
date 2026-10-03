@@ -14,33 +14,7 @@ struct DiagnosticsView: View {
     ]
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selection) {
-                Label("Overview", systemImage: "square.grid.2x2").tag("overview")
-                ForEach(model.diagnostics?.sections ?? [], id: \.identifier) { section in
-                    Label(section.title, systemImage: Self.symbols[section.identifier] ?? "doc.text")
-                        .tag(section.identifier)
-                }
-                Section("Tools") {
-                    Label("Audio test", systemImage: "mic").tag("audio")
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 210)
-        } detail: {
-            VStack(spacing: 0) {
-                if let notice = model.notice {
-                    NoticeBanner(notice: notice) { model.notice = nil }
-                }
-                detail
-                Divider()
-                Text(model.status)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-            }
-        }
+        columns
         .toolbar {
             ToolbarItemGroup {
                 Button { model.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
@@ -57,6 +31,54 @@ struct DiagnosticsView: View {
         }
         .onAppear { model.start() }
         .onDisappear { model.stop() }
+    }
+
+    // NavigationSplitView needs macOS 13; Monterey gets the same columns from NavigationView.
+    @ViewBuilder
+    private var columns: some View {
+        if #available(macOS 13.0, *) {
+            NavigationSplitView {
+                sidebar
+                    .navigationSplitViewColumnWidth(min: 180, ideal: 210)
+            } detail: {
+                content
+            }
+        } else {
+            NavigationView {
+                sidebar
+                    .frame(minWidth: 180, idealWidth: 210)
+                content
+            }
+        }
+    }
+
+    private var sidebar: some View {
+        List(selection: $selection) {
+            Label("Overview", systemImage: "square.grid.2x2").tag("overview")
+            ForEach(model.diagnostics?.sections ?? [], id: \.identifier) { section in
+                Label(section.title, systemImage: Self.symbols[section.identifier] ?? "doc.text")
+                    .tag(section.identifier)
+            }
+            Section("Tools") {
+                Label("Audio test", systemImage: "mic").tag("audio")
+            }
+        }
+    }
+
+    private var content: some View {
+        VStack(spacing: 0) {
+            if let notice = model.notice {
+                NoticeBanner(notice: notice) { model.notice = nil }
+            }
+            detail
+            Divider()
+            Text(model.status)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+        }
     }
 
     @ViewBuilder

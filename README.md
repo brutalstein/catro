@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/brutalstein/catro/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/brutalstein/catro?style=flat-square&label=release&color=E08A5C&labelColor=2A1F1A"></a>
   <img alt="Windows 10 2004+ and Windows 11" src="https://img.shields.io/badge/Windows-10_2004%2B_%C2%B7_11-F6EBDD?style=flat-square&labelColor=2A1F1A">
-  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-F6EBDD?style=flat-square&labelColor=2A1F1A">
+  <img alt="macOS 12.3+" src="https://img.shields.io/badge/macOS-12.3%2B-F6EBDD?style=flat-square&labelColor=2A1F1A">
   <img alt="Native C++20, WinUI 3 and SwiftUI" src="https://img.shields.io/badge/native-C%2B%2B20_%C2%B7_WinUI_3_%C2%B7_SwiftUI-F6EBDD?style=flat-square&labelColor=2A1F1A">
   <a href="https://github.com/brutalstein/catro/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/brutalstein/catro/ci.yml?branch=main&style=flat-square&label=CI&labelColor=2A1F1A"></a>
 </p>
@@ -104,7 +104,7 @@ Signed and notarized builds are on the roadmap.
 
 | | Windows | Mac |
 | --- | --- | --- |
-| **OS** | Windows 11, or Windows 10 version 2004 (build 19041) or newer, 64-bit | macOS 13 Ventura or newer, Apple silicon or Intel |
+| **OS** | Windows 11, or Windows 10 version 2004 (build 19041) or newer, 64-bit | macOS 12.3 Monterey or newer, Apple silicon or Intel (sharing sound needs macOS 13) |
 | **Screen sharing** | A GPU with a hardware H.264 encoder (NVIDIA, AMD, or Intel from the last several years) and current drivers | Built in on every supported Mac |
 | **App audio in streams** | Windows build 20348 or newer | Every supported Mac (window shares send that app's audio; display shares can send all computer audio) |
 | **Network** | Any normal home connection. Catro relays through TURN automatically when a direct path is blocked. | Same |
@@ -146,7 +146,7 @@ machines is ongoing, so expect rough edges and please
 | Platform | Status |
 | --- | --- |
 | **Windows 10 / 11 x64** | ✅ Available — download above |
-| **macOS 13+ (Apple silicon and Intel)** | ✅ Available — download above |
+| **macOS 12.3+ (Apple silicon and Intel)** | ✅ Available — download above |
 
 **Roadmap:** code-signed and notarized builds, `winget` and Homebrew installs, automatic updates,
 more channels per server.

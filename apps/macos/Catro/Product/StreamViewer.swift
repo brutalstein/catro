@@ -5,7 +5,7 @@ import SwiftUI
 // into a layer this view hosts; attaching happens in NSView lifecycle, never in a view body.
 struct StreamViewer: View {
     @ObservedObject var model: AppModel
-    @Environment(\.openWindow) private var openWindow
+    @AppStorage("appearance") private var appearance = Appearance.system.rawValue
 
     var body: some View {
         let snapshot = model.snapshot
@@ -91,7 +91,10 @@ struct StreamViewer: View {
     private func popOut(fullScreen: Bool) {
         model.streamFullScreenRequested = fullScreen
         model.streamPoppedOut = true
-        openWindow(id: "stream")
+        AppWindows.show("stream", title: "Stream", size: CGSize(width: 1280, height: 720)) {
+            StreamWindow(model: model)
+                .preferredColorScheme(Appearance(rawValue: appearance)?.colorScheme)
+        }
     }
 }
 

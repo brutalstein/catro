@@ -33,7 +33,7 @@
       },
       "cacheVariables": {
         "CATRO_BUILD_TESTS": "ON",
-        "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0"
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "12.3"
       }
     },
     {

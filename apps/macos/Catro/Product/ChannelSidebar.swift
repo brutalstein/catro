@@ -101,7 +101,7 @@ private struct JoinServerSheet: View {
                 Button("Look Up") { model.lookup(trimmed(code)) }
                     .disabled(trimmed(code).isEmpty)
                 if let lookup = model.snapshot?.lookup {
-                    LabeledContent(lookup.name, value: "\(lookup.memberCount) members · \(lookup.relationship)")
+                    LabeledRow(lookup.name, value: "\(lookup.memberCount) members · \(lookup.relationship)")
                     TextField("Note to the owner (optional)", text: $note)
                         .help("Up to 280 bytes")
                     Button("Send Request") {
@@ -113,7 +113,7 @@ private struct JoinServerSheet: View {
                 }
             }
         }
-        .formStyle(.grouped)
+        .groupedForm()
         .frame(minWidth: 420, minHeight: 360)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

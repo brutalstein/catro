@@ -192,7 +192,7 @@ if [ -n "${CATRO_TEST_BUILT_APP:-}" ]; then
 
     archived_arch=$(lipo -archs "$package_check/Catro.app/Contents/MacOS/Catro")
     assert_eq "$host_arch" "$archived_arch" 'Archive executable architecture is wrong.'
-    grep -q 'macOS 13.0' "$package_check/README.txt"
+    grep -q 'macOS 12.3' "$package_check/README.txt"
     grep -qi 'Gatekeeper' "$package_check/README.txt"
     grep -qi 'voice channels' "$package_check/README.txt"
     grep -qi 'screen' "$package_check/README.txt"

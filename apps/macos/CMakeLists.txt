@@ -7,6 +7,7 @@ set(bridge_header ${CMAKE_CURRENT_SOURCE_DIR}/Catro/Bridge/CatroCapabilitiesBrid
 
 add_executable(catro_macos_app MACOSX_BUNDLE
     Catro/CatroApp.swift
+    Catro/Compatibility.swift
     Catro/Diagnostics/DiagnosticsView.swift
     Catro/Diagnostics/DiagnosticsViewModel.swift
     Catro/Audio/AudioView.swift
@@ -36,7 +37,9 @@ set_target_properties(catro_macos_app PROPERTIES
 target_include_directories(catro_macos_app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Catro/Bridge)
 target_compile_options(catro_macos_app PRIVATE
     "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-import-objc-header ${bridge_header}>"
-    "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+    "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>"
+    # Catro supports macOS 12.3; any newer API must sit behind @available.
+    "$<$<COMPILE_LANGUAGE:OBJCXX>:-Werror=unguarded-availability>")
 target_link_libraries(catro_macos_app PRIVATE catro_diagnostics Catro::Macos catro_product_bridge_macos
     "-framework AppKit" "-framework SwiftUI" "-framework QuartzCore")
 

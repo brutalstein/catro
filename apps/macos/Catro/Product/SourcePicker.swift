@@ -61,15 +61,21 @@ struct SourcePicker: View {
                 }
                 .pickerStyle(.segmented)
                 if let source = selectedSource {
-                    LabeledContent("Bitrate",
+                    LabeledRow("Bitrate",
                                    value: String(format: "%.1f Mbps", settings.bitrateMbps(for: source)))
                         .help("Set from resolution and frame rate; the hardware encoder holds it")
                 }
-                Toggle(sharesDisplay ? "Share computer audio" : "Share app audio", isOn: $settings.audio)
-                    .help(sharesDisplay
-                        ? "Everything this Mac plays except Catro, including notification sounds"
-                        : "Only the sound of the app you share")
-                    .disabled(selection == nil || sharesCamera)
+                if screenAudioCaptureAvailable {
+                    Toggle(sharesDisplay ? "Share computer audio" : "Share app audio", isOn: $settings.audio)
+                        .help(sharesDisplay
+                            ? "Everything this Mac plays except Catro, including notification sounds"
+                            : "Only the sound of the app you share")
+                        .disabled(selection == nil || sharesCamera)
+                } else {
+                    Text("Sharing sound needs macOS 13 or later; this Mac shares the picture only.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             HStack {
                 Button("Refresh") { model.loadSources() }
@@ -93,7 +99,7 @@ struct SourcePicker: View {
         // Like Discord: an app share includes its sound by default; whole-screen audio is opt-in
         // because it also carries notifications.
         .onChange(of: selection) { _ in
-            settings.audio = selectedSource?.window ?? false
+            settings.audio = screenAudioCaptureAvailable && (selectedSource?.window ?? false)
             // Games move fast; 60 FPS keeps motion smooth, and the bitrate follows.
             if selectedSource?.game == true {
                 settings.fps = .fps60
