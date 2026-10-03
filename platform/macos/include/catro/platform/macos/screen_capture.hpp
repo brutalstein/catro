@@ -70,6 +70,9 @@ struct CaptureSource {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     bool primary = false;
+    // A window of a game: its app declares a games category (LSApplicationCategoryType) or runs
+    // from a Steam library. Game windows list even while in another Space, e.g. full screen.
+    bool game = false;
 
     friend bool operator==(const CaptureSource&, const CaptureSource&) = default;
 };

@@ -9,7 +9,12 @@ struct SourcePicker: View {
     @State private var selection: UInt64?
     @State private var settings = ShareSettings()
 
-    private var sources: [CatroShareSource] { model.snapshot?.sources ?? [] }
+    // Running games first, like Discord's "Stream <game>".
+    private var sources: [CatroShareSource] {
+        let all = model.snapshot?.sources ?? []
+        return all.filter { $0.game } + all.filter { !$0.game }
+    }
+    private var firstGame: UInt64? { sources.first { $0.game }?.nativeID }
     private var selectedSource: CatroShareSource? { sources.first { $0.nativeID == selection } }
     private var sharesDisplay: Bool { selectedSource.map { !$0.window && !$0.camera } ?? false }
     private var sharesCamera: Bool { selectedSource?.camera ?? false }
@@ -77,9 +82,21 @@ struct SourcePicker: View {
         .padding(20)
         .frame(minWidth: 480, minHeight: 520)
         .onAppear { model.loadSources() }
+        // A detected game is picked for you; choosing anything else keeps your choice.
+        .onChange(of: firstGame) { game in
+            if selection == nil, let game {
+                selection = game
+            }
+        }
         // Like Discord: an app share includes its sound by default; whole-screen audio is opt-in
         // because it also carries notifications.
-        .onChange(of: selection) { _ in settings.audio = selectedSource?.window ?? false }
+        .onChange(of: selection) { _ in
+            settings.audio = selectedSource?.window ?? false
+            // Games move fast; 60 FPS keeps motion smooth, and the bitrate follows.
+            if selectedSource?.game == true {
+                settings.fps = .fps60
+            }
+        }
     }
 
     private func goLive() {
@@ -94,7 +111,7 @@ private struct SourceRow: View {
     let source: CatroShareSource
 
     private var detail: String {
-        let kind = source.camera ? "Camera" : source.window ? "Window" : "Display"
+        let kind = source.camera ? "Camera" : source.game ? "Game" : source.window ? "Window" : "Display"
         let main = source.primary ? " · Main display" : ""
         return "\(kind) · \(source.width)×\(source.height)\(main)"
     }
@@ -106,7 +123,8 @@ private struct SourceRow: View {
                 Text(detail).font(.caption).foregroundStyle(.secondary)
             }
         } icon: {
-            Image(systemName: source.camera ? "video" : source.window ? "macwindow" : "display")
+            Image(systemName: source.camera ? "video" : source.game ? "gamecontroller"
+                : source.window ? "macwindow" : "display")
         }
         .accessibilityElement(children: .combine)
     }

@@ -198,6 +198,7 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
         _height = item.height;
         _window = item.kind == macos::CaptureSourceKind::window;
         _camera = item.kind == macos::CaptureSourceKind::camera;
+        _game = item.game;
         _primary = item.primary;
     }
     return self;

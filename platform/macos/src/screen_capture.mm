@@ -17,6 +17,7 @@
 #include <functional>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 namespace catro::platform::macos {
@@ -27,6 +28,22 @@ namespace {
         return {};
     }
     return std::string{value.UTF8String};
+}
+
+// Native game detection, like Discord's: the app's own category, or a Steam library install.
+[[nodiscard]] bool is_game(SCRunningApplication* app) {
+    if (app == nil) {
+        return false;
+    }
+    NSURL* url = [NSRunningApplication runningApplicationWithProcessIdentifier:app.processID].bundleURL;
+    if (url == nil) {
+        return false;
+    }
+    if ([url.path containsString:@"/steamapps/common/"]) {
+        return true;
+    }
+    id category = [NSBundle bundleWithURL:url].infoDictionary[@"LSApplicationCategoryType"];
+    return [category isKindOfClass:NSString.class] && [(NSString*)category containsString:@"games"];
 }
 
 // Built-in, USB and Continuity cameras in system order.
@@ -323,7 +340,7 @@ public:
         __block NSError* failure = nil;
         [SCShareableContent
             getShareableContentExcludingDesktopWindows:YES
-                                   onScreenWindowsOnly:YES
+                                   onScreenWindowsOnly:NO
                                      completionHandler:^(
                                          SCShareableContent* value,
                                          NSError* error) {
@@ -357,18 +374,32 @@ public:
                 .primary = display.displayID == main_id,
             });
         }
+        std::unordered_map<pid_t, bool> games;
         for (SCWindow* window in content.windows) {
             if (window.windowID == 0 || window.frame.size.width < 2 ||
                 window.frame.size.height < 2) {
+                continue;
+            }
+            SCRunningApplication* app = window.owningApplication;
+            const pid_t pid = app != nil ? app.processID : 0;
+            auto found = games.find(pid);
+            if (found == games.end()) {
+                found = games.emplace(pid, is_game(app)).first;
+            }
+            // A full-screen game lives in its own Space, so it is off screen while Catro is open,
+            // and a borderless one may sit above the normal window layer. Other apps list only
+            // their visible normal windows, not menus, panels or status items.
+            if ((!window.onScreen || window.windowLayer != 0) && !found->second) {
                 continue;
             }
             result.sources.push_back(CaptureSource{
                 .kind = CaptureSourceKind::window,
                 .native_id = window.windowID,
                 .title = utf8(window.title),
-                .application_name = utf8(window.owningApplication.applicationName),
+                .application_name = utf8(app.applicationName),
                 .width = static_cast<std::uint32_t>(window.frame.size.width),
                 .height = static_cast<std::uint32_t>(window.frame.size.height),
+                .game = found->second,
             });
         }
         result.sources.insert(result.sources.end(), camera_list.begin(), camera_list.end());
@@ -658,7 +689,7 @@ private:
         __block NSError* failure = nil;
         [SCShareableContent
             getShareableContentExcludingDesktopWindows:YES
-                                   onScreenWindowsOnly:YES
+                                   onScreenWindowsOnly:NO
                                      completionHandler:^(
                                          SCShareableContent* value,
                                          NSError* error) {
