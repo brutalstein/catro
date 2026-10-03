@@ -80,6 +80,7 @@ ProductMediaApi native_media_api() noexcept {
     api.voice_set_input_threshold = catro_voice_runtime_set_input_threshold;
     api.voice_set_transmit = catro_voice_runtime_set_transmit;
     api.voice_set_devices = catro_voice_runtime_set_devices;
+    api.voice_add_echo_reference = catro_voice_runtime_add_echo_reference;
     return api;
 }
 
@@ -96,6 +97,14 @@ struct ProductSession::Impl {
         if (!deps_.enumerate_sources) {
             deps_.enumerate_sources = [] { return platform::macos::MacScreenCapture{}.enumerate_sources(); };
         }
+        // Stream audio feeds the voice echo canceller. Screen threads stop before voice does, and
+        // the voice runtime outlives every call.
+        screen_->set_echo_sink([this](std::span<const float> pcm) {
+            const auto voice = live_voice_.load(std::memory_order_acquire);
+            if (voice != nullptr && deps_.media.voice_add_echo_reference != nullptr) {
+                deps_.media.voice_add_echo_reference(voice, pcm.data(), pcm.size());
+            }
+        });
         worker_ = std::thread([this] { run(); });
     }
 

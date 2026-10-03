@@ -5,8 +5,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 
 namespace catro::screen {
 
@@ -49,6 +51,9 @@ public:
     void set_remote_viewing_enabled(bool enabled) noexcept;
     // 0 silences the watched stream's audio, 1 is unchanged, 2 doubles.
     void set_stream_volume(float volume) noexcept;
+    // Before the first start: receives stream audio this Mac plays or shares, for the voice echo
+    // canceller (48 kHz interleaved stereo).
+    void set_echo_sink(std::function<void(std::span<const float>)> sink);
     void stop() noexcept;
 
     [[nodiscard]] ScreenShareSnapshot snapshot() const;

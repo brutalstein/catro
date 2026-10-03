@@ -442,6 +442,8 @@ TEST_CASE("stream audio flows through Opus framing only while the stream is watc
     FakeRoom listener;
     sender_room.peer = &listener;
     ScreenTransportCounters counters;
+    std::atomic<std::size_t> echo_samples{0};
+    counters.echo_sink = [&](std::span<const float> pcm) { echo_samples += pcm.size(); };
     StreamAudioSender sender(fake_api(), &sender_room, counters);
     REQUIRE_FALSE(sender.start(128'000, 99).has_value());
     FakeOutput output;
@@ -453,6 +455,7 @@ TEST_CASE("stream audio flows through Opus framing only while the stream is watc
     }
     REQUIRE(eventually([&] { return counters.remote_stream_audio_packets.load() == 5; }));
     CHECK(output.starts.load() == 0);
+    CHECK(echo_samples.load() == 0);
     CHECK(counters.stream_audio_frames_encoded.load() == 5);
     CHECK(counters.stream_audio_packets_sent.load() == 5);
 
@@ -469,6 +472,8 @@ TEST_CASE("stream audio flows through Opus framing only while the stream is watc
     CHECK(counters.remote_stream_audio_frames.load() >= 10);
     CHECK(output.starts.load() == 1);
     CHECK(saw_active);
+    // What the viewer plays also feeds the voice echo canceller.
+    CHECK(echo_samples.load() >= kStreamAudioFrameSamples);
 
     const Datagram malformed{std::byte{0xFF}};
     listener.audio.push(malformed.data(), malformed.size());

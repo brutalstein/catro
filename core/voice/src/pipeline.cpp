@@ -559,8 +559,15 @@ VoicePipeline::decode_next() noexcept {
         return DecodeStep::render_queue_full;
     }
     if (processor_ && !render_.deafened()) {
-        // The echo canceller's reference is exactly the mix the speakers will play.
-        processor_->analyze_render(mix_frame_);
+        // The echo canceller's reference is exactly what the speakers will play: the voice mix
+        // plus any watched or shared stream audio.
+        // ponytail: stream audio only reaches the reference while a voice peer keeps playout
+        // ticking (peers send silence frames when quiet or muted, so in a call it always does).
+        reference_frame_ = mix_frame_;
+        if (controls_ != nullptr) {
+            controls_->mix_echo_reference(reference_frame_);
+        }
+        processor_->analyze_render(reference_frame_);
     }
 
     if (saw_packet) {

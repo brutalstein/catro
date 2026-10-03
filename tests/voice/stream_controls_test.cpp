@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cmath>
+#include <vector>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -156,4 +157,39 @@ TEST_CASE("voice activity gate sends quiet input as silence and reports the inpu
         (void)encode(*pipeline, tone(phase, 0.2F));
     }
     CHECK_FALSE(controls.local_speaking());
+}
+
+TEST_CASE("stream audio joins the echo reference as mono without growing latency") {
+    StreamControls controls;
+    std::vector<float> stereo(2 * kFrameSamples);
+    for (std::size_t frame = 0; frame < kFrameSamples; ++frame) {
+        stereo[2 * frame] = 0.5F;
+        stereo[2 * frame + 1] = 0.3F;
+    }
+    PcmFrame mix{};
+    mix.fill(0.25F);
+    controls.add_echo_reference(stereo);
+    controls.mix_echo_reference(mix);
+    CHECK(mix[0] == 0.25F + 0.4F);
+    CHECK(mix[kFrameSamples - 1] == 0.25F + 0.4F);
+
+    // Nothing pending: the voice mix stays as it is.
+    mix.fill(0.25F);
+    controls.mix_echo_reference(mix);
+    CHECK(mix[0] == 0.25F);
+
+    // A backlog from an idle mixer is skipped to the newest frame, and a full ring drops input
+    // instead of blocking the stream thread.
+    for (int frame = 0; frame < 20; ++frame) {
+        for (std::size_t sample = 0; sample < stereo.size(); ++sample) {
+            stereo[sample] = static_cast<float>(frame) / 100.0F;
+        }
+        controls.add_echo_reference(stereo);
+    }
+    mix.fill(0.0F);
+    controls.mix_echo_reference(mix);
+    CHECK(mix[0] == 0.07F);
+    mix.fill(0.0F);
+    controls.mix_echo_reference(mix);
+    CHECK(mix[0] == 0.0F);
 }

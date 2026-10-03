@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <span>
 #include <string_view>
 
@@ -36,12 +37,28 @@ public:
     void set_local_level(float dbfs) noexcept { local_level_.store(dbfs, std::memory_order_relaxed); }
     [[nodiscard]] float local_level() const noexcept { return local_level_.load(std::memory_order_relaxed); }
 
+    // Audio this device plays or shares outside the voice mix (watched or shared stream audio),
+    // 48 kHz interleaved stereo. The mixer adds it to the echo canceller's reference so speakers
+    // never leak it back into the microphone. Worker threads only, never an audio callback.
+    void add_echo_reference(std::span<const float> stereo) noexcept;
+    // Mixer only: adds up to frame.size() pending mono reference samples to frame. Backlog beyond
+    // three frames is stale (nobody was mixing) and is skipped.
+    void mix_echo_reference(std::span<float> frame) noexcept;
+
 private:
+    // 160 ms of 48 kHz mono.
+    static constexpr std::size_t kEchoReferenceCapacity = 7'680;
+
     // stream id in the high half, volume float bits in the low half; 0 marks a free slot.
     std::array<std::atomic<std::uint64_t>, kMaxControlledStreams> volumes_{};
     std::array<std::atomic<std::uint32_t>, kMaxControlledStreams> speaking_{};
     std::atomic_bool local_speaking_{false};
     std::atomic<float> local_level_{kSilenceDbfs};
+    // Producers serialize on the mutex; the mixer reads lock-free.
+    std::mutex echo_writer_;
+    std::array<float, kEchoReferenceCapacity> echo_ring_{};
+    std::atomic<std::size_t> echo_head_{0};
+    std::atomic<std::size_t> echo_tail_{0};
 };
 
 } // namespace catro::voice

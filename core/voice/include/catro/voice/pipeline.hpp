@@ -133,6 +133,7 @@ private:
     std::uint16_t jitter_target_packets_ = kDefaultJitterTargetPackets;
     PcmFrame capture_frame_{};
     PcmFrame mix_frame_{};
+    PcmFrame reference_frame_{};
     std::uint32_t stream_id_ = 0;
     std::uint16_t next_sequence_ = 0;
     std::uint32_t next_timestamp_ = 0;

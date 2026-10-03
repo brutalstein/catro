@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #if defined(_WIN32)
@@ -86,6 +87,10 @@ CATRO_VOICE_API void catro_voice_runtime_set_transmit(
 // Moves a running call to these devices without leaving it; null or empty picks the system default.
 CATRO_VOICE_API void catro_voice_runtime_set_devices(
     CatroVoiceRuntimeHandle handle, const char* input_endpoint, const char* output_endpoint) noexcept;
+// Stream audio this device plays or shares (48 kHz interleaved stereo, samples counts floats), so
+// the echo canceller removes it from the microphone. Not from an audio callback.
+CATRO_VOICE_API void catro_voice_runtime_add_echo_reference(
+    CatroVoiceRuntimeHandle handle, const float* stereo, std::size_t samples) noexcept;
 // 1 while the remote user with this hex user id is speaking.
 CATRO_VOICE_API std::uint8_t catro_voice_runtime_user_speaking(
     CatroVoiceRuntimeHandle handle, const char* user_id) noexcept;

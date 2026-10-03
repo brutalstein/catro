@@ -15,6 +15,7 @@
 #include <limits>
 #include <mutex>
 #include <ostream>
+#include <span>
 #include <string>
 #include <thread>
 
@@ -72,6 +73,7 @@ public:
     void set_input_threshold(float dbfs) noexcept;
     void set_transmit(bool transmit) noexcept;
     void set_devices(const char* input_endpoint, const char* output_endpoint) noexcept;
+    void add_echo_reference(std::span<const float> stereo) noexcept { streams_.add_echo_reference(stereo); }
 
 private:
     void stop_locked() noexcept;

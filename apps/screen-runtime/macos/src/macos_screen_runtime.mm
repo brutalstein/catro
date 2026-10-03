@@ -345,6 +345,10 @@ struct MacScreenShareRuntime::Impl {
         local_preview_enabled_.store(enabled, std::memory_order_release);
     }
 
+    void set_echo_sink(std::function<void(std::span<const float>)> sink) {
+        counters_.echo_sink = std::move(sink);
+    }
+
     void set_stream_volume(float volume) noexcept {
         counters_.remote_stream_volume.store(std::clamp(volume, 0.0F, 2.0F), std::memory_order_relaxed);
     }
@@ -422,6 +426,10 @@ struct MacScreenShareRuntime::Impl {
                 continue;
             }
             sender.send(pcm);
+            // Shared app or system audio also plays on this Mac's speakers.
+            if (counters_.echo_sink) {
+                counters_.echo_sink(pcm);
+            }
         }
     }
 
@@ -796,6 +804,10 @@ void MacScreenShareRuntime::set_remote_viewing_enabled(bool enabled) noexcept {
 
 void MacScreenShareRuntime::set_stream_volume(float volume) noexcept {
     impl_->set_stream_volume(volume);
+}
+
+void MacScreenShareRuntime::set_echo_sink(std::function<void(std::span<const float>)> sink) {
+    impl_->set_echo_sink(std::move(sink));
 }
 
 void MacScreenShareRuntime::stop() noexcept {

@@ -761,6 +761,8 @@ void run_stream_audio_receive_loop(const RoomScreenApi& api, CatroRoomRuntimeHan
         apply_stream_volume(pcm, counters.remote_stream_volume.load(std::memory_order_relaxed));
         if (!bridge.try_push(pcm)) {
             counters.remote_stream_audio_render_drops.fetch_add(1, std::memory_order_relaxed);
+        } else if (counters.echo_sink) {
+            counters.echo_sink(pcm);
         }
         counters.remote_stream_audio_frames.fetch_add(1, std::memory_order_relaxed);
         return true;

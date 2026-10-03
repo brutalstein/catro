@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -201,6 +202,9 @@ struct ScreenTransportCounters {
     std::atomic<std::int64_t> remote_stream_audio_last_ns{0};
     // Viewer-side stream volume (0 silences, 1 unchanged, 2 doubles); kept across streams.
     std::atomic<float> remote_stream_volume{1.0F};
+    // Receives stream audio this device plays (watched) or shares (captured), 48 kHz interleaved
+    // stereo, for the voice echo canceller. Set before any runtime thread starts; empty disables.
+    std::function<void(std::span<const float>)> echo_sink;
 
     void reset_local() noexcept;
     void reset_remote() noexcept;

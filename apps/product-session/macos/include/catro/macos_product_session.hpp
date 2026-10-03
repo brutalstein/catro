@@ -118,6 +118,7 @@ struct ProductMediaApi {
     void (*voice_set_input_threshold)(CatroVoiceRuntimeHandle, float) noexcept = nullptr;
     void (*voice_set_transmit)(CatroVoiceRuntimeHandle, std::uint8_t) noexcept = nullptr;
     void (*voice_set_devices)(CatroVoiceRuntimeHandle, const char*, const char*) noexcept = nullptr;
+    void (*voice_add_echo_reference)(CatroVoiceRuntimeHandle, const float*, std::size_t) noexcept = nullptr;
 };
 
 [[nodiscard]] ProductMediaApi native_media_api() noexcept;
