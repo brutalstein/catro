@@ -143,7 +143,7 @@ if((WIN32 AND MSVC) OR APPLE)
     FetchContent_Declare(
         libdatachannel
         GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
-        GIT_TAG 443f6934d9007eb7076ab7825ba330f355fcbead
+        GIT_TAG 6b1e2e620f1e37f0eafeee702eaea0043cb305fd # v0.24.6
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE
         GIT_SUBMODULES_RECURSE TRUE
