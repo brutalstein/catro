@@ -97,18 +97,26 @@ private:
     std::size_t pending_size_ = 0;
 };
 
-// Deltas are useless until the decoder has seen a keyframe. The gate also extends the 32-bit RTP
+// Deltas are useless until the decoder has seen a keyframe, and after a lost frame they would only
+// smear artifacts, so the picture holds until the next one. The gate also extends the 32-bit RTP
 // clock so presentation timestamps never move backwards across a wrap.
 class KeyframeGate final {
 public:
     void reset() noexcept { *this = KeyframeGate{}; }
 
     [[nodiscard]] bool awaiting_keyframe() const noexcept { return awaiting_keyframe_; }
+    [[nodiscard]] bool decoder_open() const noexcept { return decoder_open_; }
 
     void opened() noexcept {
         awaiting_keyframe_ = false;
-        have_timestamp_ = false;
+        if (!decoder_open_) {
+            have_timestamp_ = false;
+        }
+        decoder_open_ = true;
     }
+
+    // A lost frame broke the reference chain; the decoder and the clock stay.
+    void lost() noexcept { awaiting_keyframe_ = true; }
 
     [[nodiscard]] std::int64_t pts_100ns(std::uint32_t timestamp) noexcept {
         if (!have_timestamp_) {
@@ -123,6 +131,7 @@ public:
 
 private:
     bool awaiting_keyframe_ = true;
+    bool decoder_open_ = false;
     bool have_timestamp_ = false;
     std::uint32_t last_ = 0;
     std::uint64_t extended_ = 0;
@@ -258,6 +267,22 @@ VideoSender::VideoSender(const RoomScreenApi& api, CatroRoomRuntimeHandle room, 
                          video::H264RtpConfig rtp, ScreenTransportCounters& counters) noexcept
     : api_(api), room_(room), socket_(socket), rtp_(rtp), counters_(counters) {}
 
+bool VideoSender::keyframe_requested() noexcept {
+    if (room_ == nullptr || api_.keyframe_requests == nullptr) {
+        return false;
+    }
+    const auto requests = api_.keyframe_requests(room_);
+    const auto now = steady_now_ns();
+    if (requests == keyframe_requests_seen_ ||
+        now - last_forced_keyframe_ns_ <
+            std::chrono::duration_cast<std::chrono::nanoseconds>(kKeyframeRequestInterval).count()) {
+        return false;
+    }
+    keyframe_requests_seen_ = requests;
+    last_forced_keyframe_ns_ = now;
+    return true;
+}
+
 VideoSendResult VideoSender::send(std::span<const std::byte> annex_b, std::uint32_t timestamp_90khz) noexcept {
     soft_drop_ = false;
     room_failed_ = false;
@@ -359,6 +384,21 @@ std::optional<ScreenShareError> run_video_receive_loop(const VideoReceiveContext
     KeyframeGate gate;
     bool viewing_last = false;
     bool first_frame_traced = false;
+    std::int64_t last_keyframe_request_ns = 0;
+
+    // Asks the sharer for an IDR instead of waiting out its GOP; repeated while still waiting.
+    const auto request_keyframe = [&] {
+        if (config.room_runtime == nullptr || context.api.request_keyframe == nullptr) {
+            return;
+        }
+        const auto now = steady_now_ns();
+        if (now - last_keyframe_request_ns <
+            std::chrono::duration_cast<std::chrono::nanoseconds>(kKeyframeRequestInterval).count()) {
+            return;
+        }
+        last_keyframe_request_ns = now;
+        context.api.request_keyframe(config.room_runtime);
+    };
 
     const auto release_viewer = [&] {
         viewer.release();
@@ -406,13 +446,16 @@ std::optional<ScreenShareError> run_video_receive_loop(const VideoReceiveContext
         }
         if (gate.awaiting_keyframe()) {
             if (!frame.keyframe) {
+                request_keyframe();
                 return std::nullopt;
             }
-            if (auto failure = viewer.start_decoder()) {
-                counters.remote_decode_failures.fetch_add(1, std::memory_order_relaxed);
-                return failure;
+            if (!gate.decoder_open()) {
+                if (auto failure = viewer.start_decoder()) {
+                    counters.remote_decode_failures.fetch_add(1, std::memory_order_relaxed);
+                    return failure;
+                }
+                trace("receiver-decoder-started");
             }
-            trace("receiver-decoder-started");
             gate.opened();
         }
         auto failure = viewer.decode_and_present(frame.annex_b, gate.pts_100ns(frame.timestamp_90khz));
@@ -478,6 +521,10 @@ std::optional<ScreenShareError> run_video_receive_loop(const VideoReceiveContext
                 break;
             case video::H264ReassemblyStatus::frame_dropped:
                 counters.remote_frame_drops.fetch_add(1, std::memory_order_relaxed);
+                if (viewing_last && gate.decoder_open()) {
+                    gate.lost();
+                    request_keyframe();
+                }
                 break;
             case video::H264ReassemblyStatus::frame_ready:
                 fatal = handle_frame(reassembled.frame);

@@ -394,9 +394,14 @@ struct WindowsH264HardwareEncoder::Impl {
     }
 
     std::optional<HardwareEncoderError> encode(
-        const GpuCaptureFrame& source, EncodedAccessUnit& output) {
+        const GpuCaptureFrame& source, EncodedAccessUnit& output, bool force_keyframe) {
         if (!running_ || !source.texture) {
             return HardwareEncoderError{HardwareEncoderErrorCode::input_failed};
+        }
+        if (force_keyframe) {
+            if (ComPtr<ICodecAPI> codec; SUCCEEDED(transform_.As(&codec)) && codec) {
+                (void)set_codec_uint32(*codec.Get(), CODECAPI_AVEncVideoForceKeyFrame, 1);
+            }
         }
 
         // start() already resolved and pinned the exact capture D3D11 device. Per-frame adapter
@@ -956,8 +961,8 @@ std::optional<HardwareEncoderError> WindowsH264HardwareEncoder::start(
 }
 
 std::optional<HardwareEncoderError> WindowsH264HardwareEncoder::encode(
-    const GpuCaptureFrame& source, EncodedAccessUnit& output) {
-    return impl_->encode(source, output);
+    const GpuCaptureFrame& source, EncodedAccessUnit& output, bool force_keyframe) {
+    return impl_->encode(source, output, force_keyframe);
 }
 
 void WindowsH264HardwareEncoder::stop() noexcept {

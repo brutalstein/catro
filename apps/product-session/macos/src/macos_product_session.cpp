@@ -64,6 +64,8 @@ ProductMediaApi native_media_api() noexcept {
         .receive_video = catro_room_runtime_receive_video,
         .send_stream_audio = catro_room_runtime_send_stream_audio,
         .receive_stream_audio = catro_room_runtime_receive_stream_audio,
+        .request_keyframe = catro_room_runtime_request_keyframe,
+        .keyframe_requests = catro_room_runtime_keyframe_requests,
     };
     api.voice_create = catro_voice_runtime_create;
     api.voice_destroy = catro_voice_runtime_destroy;

@@ -102,4 +102,11 @@ CATRO_ROOM_API std::ptrdiff_t catro_room_runtime_receive_stream_audio(
 CATRO_ROOM_API CatroRoomRuntimeSnapshot catro_room_runtime_snapshot(
     CatroRoomRuntimeHandle handle) noexcept;
 
+// Viewer: asks the screen owner for a keyframe after loss or a fresh start.
+CATRO_ROOM_API void catro_room_runtime_request_keyframe(
+    CatroRoomRuntimeHandle handle) noexcept;
+// Sharer: keyframe requests received since start; the encoder sends an IDR when it moves.
+CATRO_ROOM_API std::uint64_t catro_room_runtime_keyframe_requests(
+    CatroRoomRuntimeHandle handle) noexcept;
+
 } // extern "C"

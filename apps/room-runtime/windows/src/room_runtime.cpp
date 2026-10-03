@@ -152,6 +152,7 @@ public:
             }
 
             stopping_.store(false, std::memory_order_release);
+            keyframe_requests_.store(0, std::memory_order_relaxed);
             state_.store(CATRO_ROOM_CONNECTING, std::memory_order_release);
             set_error({});
 
@@ -175,6 +176,10 @@ public:
             callbacks.on_screen_owner =
                 [this](std::string_view owner) {
                     set_screen_owner(owner);
+                };
+            callbacks.on_keyframe_request =
+                [this](std::string_view) {
+                    keyframe_requests_.fetch_add(1, std::memory_order_relaxed);
                 };
             callbacks.on_state =
                 [this](catro::rtc::RoomTransportState next) {
@@ -249,6 +254,14 @@ public:
             voice_sent_.fetch_add(1, std::memory_order_relaxed);
         }
         return peers;
+    }
+
+    void request_keyframe() noexcept {
+        (void)transport_.request_keyframe();
+    }
+
+    [[nodiscard]] std::uint64_t keyframe_requests() const noexcept {
+        return keyframe_requests_.load(std::memory_order_relaxed);
     }
 
     std::size_t send_video(std::span<const std::byte> data) noexcept {
@@ -387,6 +400,7 @@ private:
     std::atomic<std::uint64_t> video_received_{0};
     std::atomic<std::uint64_t> stream_audio_sent_{0};
     std::atomic<std::uint64_t> stream_audio_received_{0};
+    std::atomic<std::uint64_t> keyframe_requests_{0};
 
     mutable std::mutex screen_owner_mutex_;
     std::string screen_owner_;
@@ -448,6 +462,18 @@ std::size_t catro_room_runtime_send_voice(
     }
     return runtime(handle)->send_voice(
         std::span<const std::byte>(data, size));
+}
+
+void catro_room_runtime_request_keyframe(
+    CatroRoomRuntimeHandle handle) noexcept {
+    if (handle != nullptr) {
+        runtime(handle)->request_keyframe();
+    }
+}
+
+std::uint64_t catro_room_runtime_keyframe_requests(
+    CatroRoomRuntimeHandle handle) noexcept {
+    return handle != nullptr ? runtime(handle)->keyframe_requests() : 0;
 }
 
 std::size_t catro_room_runtime_send_video(

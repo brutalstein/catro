@@ -57,6 +57,8 @@ struct RoomTransportCallbacks {
     std::function<void(std::string_view, std::span<const std::byte>)>
         on_stream_audio_datagram;
     std::function<void(std::string_view)> on_screen_owner;
+    // A viewer asked this sharer for a keyframe.
+    std::function<void(std::string_view)> on_keyframe_request;
     std::function<void(RoomTransportState)> on_state;
     std::function<void(std::string_view)> on_error;
 };
@@ -89,6 +91,8 @@ public:
         std::span<const std::byte> datagram) noexcept;
 
     [[nodiscard]] bool claim_screen() noexcept;
+    // Asks the current screen owner for a keyframe; false when nobody is sharing.
+    bool request_keyframe() noexcept;
     void release_screen() noexcept;
     [[nodiscard]] std::string screen_owner() const;
 

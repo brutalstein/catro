@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -224,6 +225,52 @@ TEST_CASE("screen receive discards deltas until a keyframe after every viewer st
     REQUIRE(sender.send(access_unit(true), 15000).status == VideoSendStatus::sent);
     REQUIRE(eventually([&] { return viewer.frames.load() == 3; }));
     CHECK(viewer.decoder_starts.load() == 2);
+    CHECK_FALSE(worker.stop().has_value());
+}
+
+TEST_CASE("screen viewers request keyframes after a fresh start and after loss") {
+    FakeRoom sender_room;
+    FakeRoom listener;
+    FakeRoom capture;
+    sender_room.peer = &listener;
+    ScreenTransportCounters counters;
+    counters.remote_viewing_enabled = true;
+    FakeViewer viewer;
+    viewer.counters = &counters;
+    ReceiveWorker worker(listener, counters, viewer);
+    VideoSender sender(fake_api(), &sender_room, nullptr, rtp(31), counters);
+
+    // Joining mid-stream: the first delta asks the sharer for an IDR right away.
+    CHECK_FALSE(sender.keyframe_requested());
+    REQUIRE(sender.send(access_unit(false), 0).status == VideoSendStatus::sent);
+    REQUIRE(eventually([&] { return listener.keyframe_requests.load() == 1; }));
+    CHECK(sender.keyframe_requested());
+    CHECK_FALSE(sender.keyframe_requested());
+
+    REQUIRE(sender.send(access_unit(true), 3000).status == VideoSendStatus::sent);
+    REQUIRE(eventually([&] { return viewer.frames.load() == 1; }));
+
+    // A frame loses its first packet: the picture holds instead of decoding broken deltas, and the
+    // viewer asks again once the request interval has passed.
+    std::this_thread::sleep_for(kKeyframeRequestInterval);
+    sender_room.peer = &capture;
+    REQUIRE(sender.send(access_unit(false, 5000), 6000).status == VideoSendStatus::sent);
+    std::array<std::byte, 2048> packet{};
+    REQUIRE(capture.video.pop(packet.data(), packet.size(), 0) > 0);
+    for (std::ptrdiff_t size = 0; (size = capture.video.pop(packet.data(), packet.size(), 0)) > 0;) {
+        listener.video.push(packet.data(), static_cast<std::size_t>(size));
+    }
+    sender_room.peer = &listener;
+    REQUIRE(eventually([&] { return listener.keyframe_requests.load() == 2; }));
+    REQUIRE(sender.send(access_unit(false), 9000).status == VideoSendStatus::sent);
+    REQUIRE(eventually([&] { return counters.remote_frames.load() == 3; }));
+    std::this_thread::sleep_for(30ms);
+    CHECK(viewer.frames.load() == 1);
+
+    // The forced IDR resumes the picture on the same decoder.
+    REQUIRE(sender.send(access_unit(true), 12000).status == VideoSendStatus::sent);
+    REQUIRE(eventually([&] { return viewer.frames.load() == 2; }));
+    CHECK(viewer.decoder_starts.load() == 1);
     CHECK_FALSE(worker.stop().has_value());
 }
 

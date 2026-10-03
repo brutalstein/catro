@@ -59,6 +59,8 @@ struct AudioPump {
         .receive_video = &catro_room_runtime_receive_video,
         .send_stream_audio = &catro_room_runtime_send_stream_audio,
         .receive_stream_audio = &catro_room_runtime_receive_stream_audio,
+        .request_keyframe = &catro_room_runtime_request_keyframe,
+        .keyframe_requests = &catro_room_runtime_keyframe_requests,
     };
 }
 
@@ -557,7 +559,7 @@ struct MacScreenShareRuntime::Impl {
             }
             update_preview(frame);
             frame.pts_100ns = elapsed_100ns(started);
-            if (const auto error = encoder.encode(frame)) {
+            if (const auto error = encoder.encode(frame, video_sender.keyframe_requested())) {
                 fail_share(platform::macos::name(error->code), error->native_code);
                 return false;
             }

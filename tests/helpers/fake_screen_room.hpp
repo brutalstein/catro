@@ -76,6 +76,8 @@ struct FakeRoom {
     std::atomic<std::int32_t> state{CATRO_ROOM_JOINED};
     std::atomic<std::size_t> peers{1};
     FakeRoom* peer = nullptr;
+    // Keyframe requests this room's viewer sent; a sharer reads them from its peer.
+    std::atomic<std::uint64_t> keyframe_requests{0};
     Lane video;
     Lane audio;
 };
@@ -116,6 +118,13 @@ inline RoomScreenApi fake_api() {
         .receive_stream_audio = [](CatroRoomRuntimeHandle handle, std::byte* destination, std::size_t capacity,
                                    std::uint32_t timeout_ms) noexcept {
             return room(handle).audio.pop(destination, capacity, timeout_ms);
+        },
+        .request_keyframe = [](CatroRoomRuntimeHandle handle) noexcept {
+            room(handle).keyframe_requests.fetch_add(1);
+        },
+        .keyframe_requests = [](CatroRoomRuntimeHandle handle) noexcept -> std::uint64_t {
+            const auto* peer = room(handle).peer;
+            return peer != nullptr ? peer->keyframe_requests.load() : 0;
         },
     };
 }

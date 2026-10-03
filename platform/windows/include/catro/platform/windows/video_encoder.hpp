@@ -138,8 +138,9 @@ public:
     [[nodiscard]] std::optional<HardwareEncoderError> start(
         const HardwareEncoderConfig& config, ID3D11Texture2D& first_source);
 
+    // force_keyframe makes this frame an IDR, e.g. when a viewer lost a frame.
     [[nodiscard]] std::optional<HardwareEncoderError> encode(
-        const GpuCaptureFrame& source, EncodedAccessUnit& output);
+        const GpuCaptureFrame& source, EncodedAccessUnit& output, bool force_keyframe = false);
 
     void stop() noexcept;
 

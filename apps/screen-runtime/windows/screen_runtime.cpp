@@ -65,6 +65,8 @@ constexpr std::uint32_t kPreviewMaxFps = 10;
         .receive_video = &catro_room_runtime_receive_video,
         .send_stream_audio = &catro_room_runtime_send_stream_audio,
         .receive_stream_audio = &catro_room_runtime_receive_stream_audio,
+        .request_keyframe = &catro_room_runtime_request_keyframe,
+        .keyframe_requests = &catro_room_runtime_keyframe_requests,
     };
 }
 
@@ -1017,7 +1019,7 @@ struct WindowsScreenShareRuntime::Impl {
             }
 
             if (const auto error =
-                    encoder.encode(frame, access_unit)) {
+                    encoder.encode(frame, access_unit, video_sender.keyframe_requested())) {
                 fail_share(
                     ScreenShareErrorCode::encoder_failed,
                     platform::windows::name(error->code),

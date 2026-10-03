@@ -234,6 +234,27 @@ struct RoomMeshTransport::Impl {
             Json{{"type", "screen_claim"}});
     }
 
+    bool request_keyframe() noexcept {
+        std::shared_ptr<::rtc::DataChannel> channel;
+        {
+            std::scoped_lock lock(mutex_);
+            if (const auto found = peers_.find(screen_owner_);
+                found != peers_.end() && found->second) {
+                channel = found->second->video;
+            }
+        }
+        if (!channel || !channel->isOpen()) {
+            return false;
+        }
+        try {
+            return channel->send(
+                kKeyframeRequest.data(),
+                kKeyframeRequest.size());
+        } catch (...) {
+            return false;
+        }
+    }
+
     void release_screen() noexcept {
         if (state_.load(std::memory_order_acquire) ==
             RoomTransportState::joined) {
@@ -531,28 +552,42 @@ struct RoomMeshTransport::Impl {
                     return;
                 }
 
-                RoomTransportCallbacks callbacks;
-                bool media_allowed = voice;
-                {
-                    std::scoped_lock lock(mutex_);
-                    callbacks = callbacks_;
-                    if (!voice) {
-                        media_allowed =
-                            screen_media_allowed(
-                                screen_owner_,
-                                peer_id);
-                    }
-                }
-                if (!media_allowed) {
-                    return;
-                }
-
                 const auto bytes =
                     std::span<const std::byte>(
                         reinterpret_cast<
                             const std::byte*>(
                             data.data()),
                         data.size());
+                RoomTransportCallbacks callbacks;
+                bool media_allowed = voice;
+                bool keyframe_request = false;
+                {
+                    std::scoped_lock lock(mutex_);
+                    callbacks = callbacks_;
+                    if (video && is_keyframe_request(bytes)) {
+                        // Only the sharer acts on requests; anyone else drops them.
+                        keyframe_request =
+                            !screen_owner_.empty() &&
+                            screen_owner_ == config_.user_id;
+                        media_allowed = false;
+                    } else if (!voice) {
+                        media_allowed =
+                            screen_media_allowed(
+                                screen_owner_,
+                                peer_id);
+                    }
+                }
+                if (keyframe_request &&
+                    callbacks.on_keyframe_request) {
+                    try {
+                        callbacks.on_keyframe_request(peer_id);
+                    } catch (...) {
+                    }
+                }
+                if (!media_allowed) {
+                    return;
+                }
+
                 try {
                     if (voice &&
                         callbacks.on_voice_datagram) {
@@ -1133,6 +1168,10 @@ std::size_t RoomMeshTransport::send_stream_audio(
 
 bool RoomMeshTransport::claim_screen() noexcept {
     return impl_->claim_screen();
+}
+
+bool RoomMeshTransport::request_keyframe() noexcept {
+    return impl_->request_keyframe();
 }
 
 void RoomMeshTransport::release_screen() noexcept {

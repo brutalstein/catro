@@ -119,6 +119,9 @@ struct ScreenShareSnapshot {
 using Clock = std::chrono::steady_clock;
 
 inline constexpr std::chrono::seconds kRemoteInactiveTimeout{2};
+// Viewers repeat keyframe requests at this pace while they wait, and a sharer forces at most one
+// IDR per interval, so loss recovery takes about one round trip instead of a 2 s GOP.
+inline constexpr std::chrono::milliseconds kKeyframeRequestInterval{250};
 inline constexpr std::chrono::milliseconds kReceiveWait{20};
 inline constexpr std::size_t kReceiveDatagramBytes = 1500;
 inline constexpr std::size_t kReceiveDrainLimit = 512;
@@ -142,6 +145,9 @@ struct RoomScreenApi {
     std::size_t (*send_stream_audio)(CatroRoomRuntimeHandle, const std::byte*, std::size_t) noexcept = nullptr;
     std::ptrdiff_t (*receive_stream_audio)(CatroRoomRuntimeHandle, std::byte*, std::size_t,
                                            std::uint32_t) noexcept = nullptr;
+    // Optional keyframe feedback; null disables it (direct engineering transport, older fakes).
+    void (*request_keyframe)(CatroRoomRuntimeHandle) noexcept = nullptr;
+    std::uint64_t (*keyframe_requests)(CatroRoomRuntimeHandle) noexcept = nullptr;
 };
 
 [[nodiscard]] bool valid_media_bounds(std::uint8_t payload_type, std::uint16_t mtu_bytes,
@@ -219,6 +225,9 @@ public:
                 video::H264RtpConfig rtp, ScreenTransportCounters& counters) noexcept;
 
     [[nodiscard]] VideoSendResult send(std::span<const std::byte> annex_b, std::uint32_t timestamp_90khz) noexcept;
+    // True when a viewer asked for a keyframe since the last IDR this returned true for. Requests
+    // from several viewers within kKeyframeRequestInterval share one IDR.
+    [[nodiscard]] bool keyframe_requested() noexcept;
 
 private:
     static bool send_packet(void* context, const video::RtpPacketSlice& packet) noexcept;
@@ -229,6 +238,8 @@ private:
     video::H264RtpConfig rtp_;
     ScreenTransportCounters& counters_;
     std::uint16_t next_sequence_ = 1;
+    std::uint64_t keyframe_requests_seen_ = 0;
+    std::int64_t last_forced_keyframe_ns_ = 0;
     bool soft_drop_ = false;
     bool room_failed_ = false;
     std::optional<transport::UdpError> fatal_error_;
