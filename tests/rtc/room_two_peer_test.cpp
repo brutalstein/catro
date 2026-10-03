@@ -187,11 +187,39 @@ struct Person {
 
 // Peer connections need ICE and DTLS first; hosted runners can take several seconds.
 template <typename Predicate>
-[[nodiscard]] bool eventually(Predicate predicate) {
-    for (int attempt = 0; attempt < 750 && !predicate(); ++attempt) {
+[[nodiscard]] bool eventually(Predicate predicate, std::chrono::milliseconds budget = 15s) {
+    const auto deadline = std::chrono::steady_clock::now() + budget;
+    while (!predicate()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return predicate();
+        }
         std::this_thread::sleep_for(20ms);
     }
-    return predicate();
+    return true;
+}
+
+// Five people in one process run twenty peer connections, the work of five machines, on one
+// hosted runner (three vCPUs on Apple Silicon). Setup gets a matching budget.
+constexpr auto kFivePeopleBudget = 60s;
+
+template <std::size_t Count>
+[[nodiscard]] std::string describe(std::array<Person, Count>& people) {
+    std::string text;
+    for (std::size_t index = 0; index < people.size(); ++index) {
+        auto& person = people[index];
+        std::size_t heard = 0;
+        {
+            std::scoped_lock lock(person.mutex);
+            heard = person.heard.size();
+        }
+        text += "person-" + std::to_string(index) +
+                ": state=" + std::to_string(static_cast<int>(person.transport.state())) +
+                " peers=" + std::to_string(person.transport.peer_count()) +
+                " heard=" + std::to_string(heard) +
+                " video=" + std::to_string(person.video.load()) +
+                " stream_audio=" + std::to_string(person.stream_audio.load()) + "\n";
+    }
+    return text;
 }
 
 } // namespace
@@ -263,35 +291,48 @@ TEST_CASE("five people talk while four watch one screen and its audio over real 
 
     for (std::size_t index = 0; index < people.size(); ++index) {
         people[index].join("person-" + std::to_string(index), relay.port());
-        REQUIRE(eventually([&] { return people[index].transport.state() == RoomTransportState::joined; }));
+        if (!eventually([&] { return people[index].transport.state() == RoomTransportState::joined; },
+                        kFivePeopleBudget)) {
+            FAIL("person-" << index << " did not join\n" << describe(people));
+        }
     }
     auto& sharer = people.front();
     REQUIRE(sharer.transport.claim_screen());
-    REQUIRE(eventually([&] {
-        for (auto& person : people) {
-            if (person.screen_owner() != "person-0" || person.transport.peer_count() != 4) {
-                return false;
-            }
-        }
-        return true;
-    }));
+    if (!eventually(
+            [&] {
+                for (auto& person : people) {
+                    if (person.screen_owner() != "person-0" || person.transport.peer_count() != 4) {
+                        return false;
+                    }
+                }
+                return true;
+            },
+            kFivePeopleBudget)) {
+        FAIL("the mesh did not form\n" << describe(people));
+    }
 
     // Every participant must hear all four other identities while all viewers receive both
     // screen lanes. Bounded wait tolerates ICE setup and unordered no-retransmit packet loss.
-    REQUIRE(eventually([&] {
-        for (auto& person : people) {
-            (void)person.transport.send_voice(voice);
-        }
-        (void)sharer.transport.send_video(video);
-        (void)sharer.transport.send_stream_audio(audio);
-        for (std::size_t index = 0; index < people.size(); ++index) {
-            if (!people[index].hears_four_peers() ||
-                (index > 0 && (people[index].video.load() < 10 || people[index].stream_audio.load() < 10))) {
-                return false;
+    const bool flowing = eventually(
+        [&] {
+            for (auto& person : people) {
+                (void)person.transport.send_voice(voice);
             }
-        }
-        return true;
-    }));
+            (void)sharer.transport.send_video(video);
+            (void)sharer.transport.send_stream_audio(audio);
+            for (std::size_t index = 0; index < people.size(); ++index) {
+                if (!people[index].hears_four_peers() ||
+                    (index > 0 &&
+                     (people[index].video.load() < 10 || people[index].stream_audio.load() < 10))) {
+                    return false;
+                }
+            }
+            return true;
+        },
+        kFivePeopleBudget);
+    if (!flowing) {
+        FAIL("media did not reach everyone\n" << describe(people));
+    }
 
     for (std::size_t index = 1; index < people.size(); ++index) {
         CHECK(people[index].transport.send_video(video) == 0);

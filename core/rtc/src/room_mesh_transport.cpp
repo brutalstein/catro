@@ -129,6 +129,10 @@ struct RoomMeshTransport::Impl {
         publish_state(RoomTransportState::connecting);
 
         try {
+            // libdatachannel tears its globals down when the last connection closes, and that
+            // cleanup waits for every SCTP association to end. A leave followed by a quick rejoin
+            // would block on it; keeping the globals for the process makes rejoin immediate.
+            ::rtc::Preload();
             open_signaling();
             supervisor_ = std::thread([this] { supervise(); });
         } catch (const std::exception& error) {
