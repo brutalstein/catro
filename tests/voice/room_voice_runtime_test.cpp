@@ -261,15 +261,14 @@ TEST_CASE("room voice runtime follows a new default microphone and survives a lo
 
     // A headset becomes the system default: audio moves to it within the 1 s device check.
     audio.set_default_capture("headset");
-    REQUIRE(wait_until([&] { return audio.capture_opens == 2; }));
-    CHECK(host.snapshot().audio_restarts == 1);
+    // The restart is counted just after the device opens, so wait for both.
+    REQUIRE(wait_until([&] { return audio.capture_opens == 2 && host.snapshot().audio_restarts == 1; }));
 
     // The headset is unplugged: audio reopens instead of ending the call.
     audio.lose_capture();
-    REQUIRE(wait_until([&] { return audio.capture_opens == 3; }));
+    REQUIRE(wait_until([&] { return audio.capture_opens == 3 && host.snapshot().audio_restarts == 2; }));
     const auto snapshot = host.snapshot();
     CHECK(snapshot.state == CATRO_VOICE_JOINED);
-    CHECK(snapshot.audio_restarts == 2);
     CHECK(snapshot.error[0] == '\0');
 
     // Picking a microphone in Settings moves the running call to it.
