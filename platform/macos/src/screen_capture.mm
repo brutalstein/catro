@@ -55,7 +55,11 @@ namespace {
         // Needs NSCameraUseContinuityCameraDeviceType in Info.plist.
         [types addObject:AVCaptureDeviceTypeContinuityCamera];
     } else {
+        // The macOS 13 name; deprecated only from 14, where the branch above runs instead.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
         [types addObject:AVCaptureDeviceTypeExternalUnknown];
+#pragma clang diagnostic pop
     }
     return [AVCaptureDeviceDiscoverySession
                discoverySessionWithDeviceTypes:types
