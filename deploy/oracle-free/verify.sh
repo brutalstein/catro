@@ -144,7 +144,14 @@ wait_healthy() {
   return 1
 }
 
-for service in signaling caddy coturn; do
+# A shared-edge host runs its own reverse proxy instead of the bundled Caddy (see update.sh).
+services=(signaling coturn caddy)
+if [[ -f "$SCRIPT_DIR/compose.shared-edge.yaml" ]]; then
+  export COMPOSE_FILE="$SCRIPT_DIR/compose.yaml:$SCRIPT_DIR/compose.shared-edge.yaml"
+  services=(signaling coturn)
+fi
+
+for service in "${services[@]}"; do
   printf '[catro] verify: waiting for %s health\n' "$service"
   wait_healthy "$service" || fail "$service did not become healthy"
 done
