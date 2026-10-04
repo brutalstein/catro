@@ -109,9 +109,21 @@ void MainWindow::InitializeComponent() {
         window_active_ = args.WindowActivationState() != xaml::WindowActivationState::Deactivated;
         UpdateWindowActivity();
     });
+    startup_timer_ = DispatcherQueue().CreateTimer();
+    startup_timer_.Interval(std::chrono::seconds{6});
+    startup_timer_.IsRepeating(false);
+    startup_timer_.Tick([this](auto&&, auto&&) {
+        if (startup_splash_) {
+            StartupOfflineButton().Visibility(xaml::Visibility::Visible);
+        } else {
+            StartupSplash().Visibility(xaml::Visibility::Collapsed);
+        }
+    });
+    startup_timer_.Start();
     Closed([this](auto&&, auto&&) {
         window_closed_ = true;
         join_request_timer_.Stop();
+        startup_timer_.Stop();
     });
     VisibilityChanged([this](auto&&, auto&&) { UpdateWindowActivity(); });
     AppWindow().Changed([this](auto&&, auto&&) { UpdateWindowActivity(); });
@@ -281,7 +293,33 @@ void MainWindow::UpdateWindowActivity() {
     }
 }
 
+void MainWindow::OnContinueOffline(IInspectable const&, xaml::RoutedEventArgs const&) {
+    // Sign-in keeps retrying behind the status bar.
+    DismissStartupSplash();
+}
+
+void MainWindow::DismissStartupSplash() {
+    if (!startup_splash_) {
+        return;
+    }
+    startup_splash_ = false;
+    StartupRing().IsActive(false);
+    StartupSplash().IsHitTestVisible(false);
+    StartupSplash().Opacity(0.0);
+    startup_timer_.Stop();
+    startup_timer_.Interval(std::chrono::milliseconds{300});
+    startup_timer_.Start();
+}
+
 void MainWindow::UpdateConnectionUi() {
+    if (startup_splash_) {
+        // Stays up while connecting, retries included; any settled state ends it.
+        if (workspace_state_.connection == catro::app::ConnectionState::connecting) {
+            StartupStatusText().Text(to_hstring(workspace_state_.connection_message));
+        } else {
+            DismissStartupSplash();
+        }
+    }
     const auto& join = workspace_state_.join_server;
     const bool show_action =
         (join.availability == catro::app::Availability::busy ||

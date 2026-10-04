@@ -40,6 +40,8 @@ final class AppModel: ObservableObject {
     // In-app full screen, like Discord: the stream fills the Catro window. nil shows the workspace.
     enum StageSource { case local, remote }
     @Published var stage: StageSource?
+    // Discord-like startup screen: up until the first sign-in settles or the user goes offline.
+    @Published var starting = true
 
     private let bridge = CatroProductBridge()
     private var timer: Timer?
@@ -89,6 +91,9 @@ final class AppModel: ObservableObject {
     private func apply(_ snapshot: CatroProductSnapshot) {
         let previous = self.snapshot
         self.snapshot = snapshot
+        if starting && snapshot.connection != .connecting {
+            starting = false
+        }
         if !snapshot.notice.isEmpty {
             notice = snapshot.notice
         }

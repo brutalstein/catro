@@ -119,6 +119,10 @@ TEST_CASE("shell exposes connection state instead of silently disabling online a
     CHECK(main_xaml.find("x:Name=\"ShellStatusText\"") != std::string::npos);
     CHECK(main_xaml.find("x:Name=\"JoinServerButton\"") != std::string::npos);
     CHECK(main_xaml.find("IsEnabled=\"False\"") == std::string::npos);
+    // Startup screen covers the shell until the first sign-in settles, with an offline escape.
+    CHECK(main_xaml.find("x:Name=\"StartupSplash\"") != std::string::npos);
+    CHECK(main_xaml.find("Click=\"OnContinueOffline\"") != std::string::npos);
+    CHECK(read(root / "MainWindow.xaml.cpp").find("DismissStartupSplash()") != std::string::npos);
     CHECK(server_xaml.find("x:Name=\"OnlineStatusText\"") != std::string::npos);
     CHECK(server_xaml.find("AutomationProperties.LiveSetting=\"Polite\"") !=
           std::string::npos);
@@ -394,6 +398,8 @@ TEST_CASE("macOS product shell stays native accessible and free of view-body med
     }
 
     CHECK(read(root / "Product/ServerWorkspace.swift").find("NavigationSplitView") != std::string::npos);
+    // Startup screen until the first sign-in settles, like Windows.
+    CHECK(read(root / "Product/ServerWorkspace.swift").find("struct StartupSplash: View") != std::string::npos);
     for (const auto* file : {"Product/ServerWorkspace.swift", "Product/ChannelSidebar.swift",
                              "Product/MemberSidebar.swift", "Product/SourcePicker.swift"}) {
         INFO(file);

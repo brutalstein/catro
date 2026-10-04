@@ -210,5 +210,21 @@
                                 VerticalContentAlignment="Stretch" />
             </Border>
         </Grid>
+
+        <!-- Startup screen, like Discord's: covers the shell until the first sign-in settles. -->
+        <Grid x:Name="StartupSplash" Grid.RowSpan="3" Background="{ThemeResource CatroBackgroundBrush}">
+            <Grid.OpacityTransition><ScalarTransition Duration="0:0:0.25" /></Grid.OpacityTransition>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="18" MaxWidth="360">
+                <Viewbox Width="96" Height="92" HorizontalAlignment="Center">
+                    <ContentControl ContentTemplate="{StaticResource CatroMascotTemplate}" IsTabStop="False" />
+                </Viewbox>
+                <TextBlock Text="CATRO" HorizontalAlignment="Center" Style="{StaticResource CatroPageTitleTextStyle}" CharacterSpacing="240" />
+                <ProgressRing x:Name="StartupRing" IsActive="True" Width="28" Height="28" />
+                <TextBlock x:Name="StartupStatusText" Text="Starting Catro…" TextAlignment="Center" TextWrapping="Wrap"
+                           Foreground="{ThemeResource CatroTextSecondaryBrush}" AutomationProperties.LiveSetting="Polite" />
+                <Button x:Name="StartupOfflineButton" Content="Continue offline" HorizontalAlignment="Center"
+                        Visibility="Collapsed" Click="OnContinueOffline" Style="{StaticResource CatroSecondaryButtonStyle}" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

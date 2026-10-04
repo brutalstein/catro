@@ -14,6 +14,9 @@ if(MSVC)
     # Production Windows artifacts are self-contained: avoid a target-machine dependency on
     # vc_redist by linking the MSVC runtime statically in every CMake-built native binary.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    # Sources are UTF-8; without this MSVC reads them in the machine's ANSI code page, so text
+    # like an em dash differs between a UTF-8 developer machine and a cp1252 CI runner.
+    add_compile_options(/utf-8)
 endif()
 # Catro uses headers, not C++20 modules; skip per-source module dependency scanning.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)

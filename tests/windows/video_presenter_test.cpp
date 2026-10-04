@@ -15,6 +15,16 @@ TEST_CASE("D3D11 composition video presenter shows only the visible part of a pa
         WARN("no hardware D3D11 device; presenter crop skipped");
         return;
     }
+    // CI runners report the Microsoft Basic Render Driver (vendor 0x1414) as hardware, but it has
+    // no video processor; the crop needs a real GPU.
+    Microsoft::WRL::ComPtr<IDXGIDevice> dxgi;
+    Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+    DXGI_ADAPTER_DESC adapter_desc{};
+    if (SUCCEEDED(device.As(&dxgi)) && SUCCEEDED(dxgi->GetAdapter(&adapter)) &&
+        SUCCEEDED(adapter->GetDesc(&adapter_desc)) && adapter_desc.VendorId == 0x1414) {
+        WARN("software adapter only; presenter crop skipped");
+        return;
+    }
     // A decoder surface for 1080p: 1088 coded rows.
     D3D11_TEXTURE2D_DESC desc{};
     desc.Width = 1920;
@@ -29,7 +39,9 @@ TEST_CASE("D3D11 composition video presenter shows only the visible part of a pa
 
     D3D11CompositionVideoPresenter presenter(VideoPresenterConfig{
         .max_width = 3840, .max_height = 2160, .frame_rate = 60});
-    REQUIRE_FALSE(presenter.present(*texture.Get(), 0, 1920, 1080));
+    const auto error = presenter.present(*texture.Get(), 0, 1920, 1080);
+    INFO((error ? name(error->code) : "none"));
+    REQUIRE_FALSE(error);
     const auto stats = presenter.statistics();
     CHECK(stats.source_height == 1080);
     CHECK(stats.output_width == 1920);

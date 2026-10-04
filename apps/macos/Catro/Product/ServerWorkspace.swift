@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // Main product window: servers on the left, the active server's text channel and voice/stream in
@@ -6,15 +7,20 @@ struct ServerWorkspace: View {
     @ObservedObject var model: AppModel
     @State private var draft = ""
     @State private var picking = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
-            if let stage = model.stage {
+            if model.starting {
+                StartupSplash(model: model)
+                    .transition(.opacity)
+            } else if let stage = model.stage {
                 StreamStage(model: model, source: stage)
             } else {
                 columns
             }
         }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: model.starting)
         .sheet(isPresented: $picking) {
             SourcePicker(model: model, isPresented: $picking)
         }
@@ -151,5 +157,43 @@ struct NoticeBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(Color.yellow.opacity(0.15))
+    }
+}
+
+// Shown at launch until the first sign-in settles, like Discord's loading screen. Sign-in keeps
+// retrying behind it; after a few seconds the user may go on offline.
+struct StartupSplash: View {
+    @ObservedObject var model: AppModel
+    @State private var slow = false
+
+    private var message: String {
+        let text = model.snapshot?.connectionMessage ?? ""
+        return text.isEmpty ? "Starting Catro…" : text
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 96, height: 96)
+                .accessibilityHidden(true)
+            Text("CATRO")
+                .font(.title2.weight(.semibold))
+                .tracking(6)
+            ProgressView()
+                .controlSize(.small)
+            Text(message)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+            if slow {
+                Button("Continue Offline") { model.starting = false }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            slow = true
+        }
     }
 }

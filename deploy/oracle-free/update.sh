@@ -67,7 +67,7 @@ rollback() {
       if [[ -f "$ACTIVE_SNAPSHOT/compose.shared-edge.yaml" ]]; then
         files+=(-f "$ACTIVE_SNAPSHOT/compose.shared-edge.yaml")
       fi
-      COMPOSE_FILE= docker compose "${files[@]}" --env-file "$ENV_FILE"         up -d --force-recreate --remove-orphans "${services[@]}"
+      COMPOSE_FILE='' docker compose "${files[@]}" --env-file "$ENV_FILE"         up -d --force-recreate --remove-orphans "${services[@]}"
     ) || true
     ENV_FILE="$ENV_FILE" "$SCRIPT_DIR/verify.sh" || true
   elif (( had_previous == 1 )); then

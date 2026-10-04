@@ -34,6 +34,7 @@ struct MainWindow : MainWindowT<MainWindow> {
     void OnDiagnostics(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnSettings(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnProfile(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnContinueOffline(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
 
 private:
     Microsoft::UI::Xaml::UIElement PageFor(catro::app::AppDestination destination);
@@ -52,6 +53,7 @@ private:
     void ApplyDirectoryServerToPage();
     void UpdateRail();
     void UpdateConnectionUi();
+    void DismissStartupSplash();
     void UpdateCaptionButtons();
     void UpdateWindowActivity();
 
@@ -75,6 +77,9 @@ private:
         active_directory_server_;
 
     Microsoft::UI::Dispatching::DispatcherQueueTimer join_request_timer_{nullptr};
+    // Offers "Continue offline" on a slow start, then collapses the startup screen after its fade.
+    Microsoft::UI::Dispatching::DispatcherQueueTimer startup_timer_{nullptr};
+    bool startup_splash_ = true;
     std::unordered_set<std::string> observed_join_request_ids_;
     std::unordered_set<std::string> approved_join_requests_waiting_refresh_;
     bool join_request_refresh_pending_ = false;
