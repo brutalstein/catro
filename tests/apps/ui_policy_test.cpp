@@ -427,7 +427,11 @@ TEST_CASE("macOS product shell stays native accessible and free of view-body med
     CHECK(stream.find("toggleFullScreen") != std::string::npos);
     CHECK(stream.find("AppWindows.show(\"stream\"") != std::string::npos);
     CHECK(picker.find("Picker(\"Resolution\"") != std::string::npos);
-    CHECK(picker.find("Picker(\"Frame rate\"") != std::string::npos);
+    // Like Windows: only the resolution is chosen, sources are grouped and a second click clears.
+    CHECK(picker.find("Picker(\"Frame rate\"") == std::string::npos);
+    CHECK(picker.find("ShareQuality.choices(") != std::string::npos);
+    CHECK(picker.find("group(\"Screens\"") != std::string::npos);
+    CHECK(picker.find("selection = chosen ? nil : source.nativeID") != std::string::npos);
 
     // Same Settings rows and values as Windows: an editable profile name and the System, Ivory and
     // Espresso themes the Windows appearance picker offers, plus device choice and a live mic meter.

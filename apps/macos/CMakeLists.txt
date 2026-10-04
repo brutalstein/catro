@@ -41,7 +41,7 @@ target_compile_options(catro_macos_app PRIVATE
     # Catro supports macOS 12.3; any newer API must sit behind @available.
     "$<$<COMPILE_LANGUAGE:OBJCXX>:-Werror=unguarded-availability>")
 target_link_libraries(catro_macos_app PRIVATE catro_diagnostics Catro::Macos catro_product_bridge_macos
-    "-framework AppKit" "-framework SwiftUI" "-framework QuartzCore")
+    "-framework AppKit" "-framework SwiftUI" "-framework QuartzCore" "-framework Metal")
 
 # The passive probe helper runs from beside the application executable.
 add_dependencies(catro_macos_app catro_capability_probe)

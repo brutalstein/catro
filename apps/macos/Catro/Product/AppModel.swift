@@ -229,10 +229,9 @@ final class AppModel: ObservableObject {
     func stopShare() { bridge.stopShare() }
     func setWatching(_ watching: Bool) { bridge.setWatching(watching) }
 
-    func share(_ source: CatroShareSource, settings: ShareSettings) {
-        let size = settings.size(for: source)
-        bridge.startShare(source, maxWidth: size.width, maxHeight: size.height, fps: settings.fps.rawValue,
-                          bitrateMbps: settings.bitrateMbps(for: source), audio: settings.audio)
+    func share(_ source: CatroShareSource, quality: ShareQuality, audio: Bool) {
+        bridge.startShare(source, maxWidth: quality.maxWidth, maxHeight: quality.maxHeight, fps: quality.fps,
+                          bitrateMbps: quality.bitrateMbps, audio: audio)
     }
 
     // Layer hosting happens from NSView lifecycle callbacks, never from a view body. A view
@@ -282,41 +281,5 @@ final class AppModel: ObservableObject {
     func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-    }
-}
-
-// Discord's stream quality choices. Bitrate follows resolution and frame rate (about 0.07 bits per
-// pixel for screen content) so the encoder never starves at 60 fps or wastes bandwidth at 15.
-struct ShareSettings {
-    enum Resolution: String, CaseIterable, Identifiable {
-        case p720 = "720p", p1080 = "1080p", p1440 = "1440p", source = "Source"
-        var id: String { rawValue }
-    }
-
-    enum FrameRate: UInt32, CaseIterable, Identifiable {
-        case fps15 = 15, fps30 = 30, fps60 = 60
-        var id: UInt32 { rawValue }
-    }
-
-    var resolution = Resolution.p1080
-    var fps = FrameRate.fps30
-    var audio = false
-
-    func size(for source: CatroShareSource) -> (width: UInt32, height: UInt32) {
-        switch resolution {
-        case .p720: return (1280, 720)
-        case .p1080: return (1920, 1080)
-        case .p1440: return (2560, 1440)
-        case .source: return (min(max(source.width, 320), 7680), min(max(source.height, 180), 4320))
-        }
-    }
-
-    func bitrateMbps(for source: CatroShareSource) -> Double {
-        let size = size(for: source)
-        // The capture keeps the source aspect inside the box, so a smaller source sends less.
-        let width = Double(min(size.width, max(source.width, 1)))
-        let height = Double(min(size.height, max(source.height, 1)))
-        let mbps = width * height * Double(fps.rawValue) * 0.07 / 1_000_000
-        return min(max(mbps, 1.5), 25)
     }
 }

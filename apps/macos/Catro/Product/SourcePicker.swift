@@ -1,25 +1,123 @@
+import AppKit
+import Metal
 import SwiftUI
 
+// One resolution choice; frame rate and starting bitrate follow from it and the GPU. These are the
+// Windows presets (apps/windows/Catro/SharePresets.hpp), so both sides offer the same choices.
+struct ShareQuality: Hashable {
+    let label: String
+    let maxWidth: UInt32
+    let maxHeight: UInt32
+    let fps: UInt32
+    let bitrateMbps: Double
+
+    // Apple silicon and a GPU with its own memory stream 1440p60; Intel integrated graphics stop
+    // at 1080p and keep 60 FPS only at 720p.
+    static let strongGPU: Bool = {
+        #if arch(arm64)
+        return true
+        #else
+        guard let device = MTLCreateSystemDefaultDevice() else { return false }
+        return !device.isLowPower && !device.hasUnifiedMemory
+        #endif
+    }()
+
+    private static func preset(_ label: String, height: UInt32, strongGPU: Bool) -> ShareQuality {
+        let fps: UInt32 = strongGPU || height <= 720 ? 60 : 30
+        // About 0.06 bits per pixel of a 16:9 frame; "p" names the height, so the box is wide.
+        let pixels = Double(height) * Double(height) * 16 / 9
+        return ShareQuality(label: label, maxWidth: height * 32 / 9, maxHeight: height, fps: fps,
+                            bitrateMbps: min(max(pixels * Double(fps) * 0.06 / 1_000_000, 2.5), 25))
+    }
+
+    // Presets never exceed the source, so nothing is upscaled. Windows pass the screen size: a
+    // window can grow while it is shared.
+    static func choices(width: UInt32, height: UInt32, strongGPU: Bool)
+        -> (options: [ShareQuality], recommended: Int) {
+        let ceiling: UInt32 = strongGPU ? 1440 : 1080
+        var options = [UInt32(720), 1080, 1440].filter { $0 <= height && $0 <= ceiling }
+            .map { preset("\($0)p", height: $0, strongGPU: strongGPU) }
+        if height > (options.last?.maxHeight ?? 0) && (strongGPU || height <= ceiling) {
+            // The floor keeps a tiny source inside what the screen runtime accepts.
+            let source = preset("Source", height: min(max(height, 180), 4320), strongGPU: strongGPU)
+            options.append(ShareQuality(label: source.label, maxWidth: min(max(width, 320), 7680),
+                                        maxHeight: source.maxHeight, fps: source.fps,
+                                        bitrateMbps: source.bitrateMbps))
+        }
+        if options.isEmpty {
+            options = [preset("1080p", height: 1080, strongGPU: strongGPU)]
+        }
+        // The best the computer handles, but not a 4K source by default.
+        var recommended = options.count - 1
+        if recommended > 0 && options[recommended].maxHeight > 1440 {
+            recommended -= 1
+        }
+        return (options, recommended)
+    }
+}
+
+// The name a person recognizes: "Brave - YouTube", "Counter-Strike 2", "Discord".
+enum ShareNames {
+    private static let browsers = [("brave", "Brave"), ("chrome", "Chrome"), ("edge", "Edge"),
+                                   ("firefox", "Firefox"), ("safari", "Safari"), ("opera", "Opera"),
+                                   ("vivaldi", "Vivaldi")]
+
+    static func window(title: String, application: String, game: Bool) -> String {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if game && !title.isEmpty {
+            return title
+        }
+        let app = application.lowercased()
+        if let browser = browsers.first(where: { app.contains($0.0) })?.1 {
+            // "Lofi beats - YouTube" -> "YouTube"; "(3) Inbox - Gmail" -> "Gmail"
+            let parts = title.replacingOccurrences(of: " \u{2013} ", with: " - ")
+                .replacingOccurrences(of: " \u{2014} ", with: " - ")
+                .components(separatedBy: " - ")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && !$0.lowercased().contains(browser.lowercased()) }
+            guard var site = parts.last else { return browser }
+            if site.hasPrefix("("), let close = site.range(of: ") ") {
+                site = String(site[close.upperBound...])
+            }
+            return "\(browser) - \(site)"
+        }
+        return application.isEmpty ? title : application
+    }
+}
+
 // Catro's own source picker (never the stock system picker): displays and windows from
-// ScreenCaptureKit and cameras, enumerated on the session worker, plus Discord's stream quality
-// presets.
+// ScreenCaptureKit and cameras, enumerated on the session worker. Grouped like Discord; the user
+// picks only the resolution.
 struct SourcePicker: View {
     @ObservedObject var model: AppModel
     @Binding var isPresented: Bool
     @State private var selection: UInt64?
-    @State private var settings = ShareSettings()
+    @State private var qualityIndex = 0
+    @State private var audio = false
 
-    // Running games first, like Discord's "Stream <game>".
-    private var sources: [CatroShareSource] {
-        let all = model.snapshot?.sources ?? []
-        return all.filter { $0.game } + all.filter { !$0.game }
-    }
-    private var firstGame: UInt64? { sources.first { $0.game }?.nativeID }
+    private var sources: [CatroShareSource] { model.snapshot?.sources ?? [] }
+    private var games: [CatroShareSource] { sources.filter { $0.game } }
+    private var screens: [CatroShareSource] { sources.filter { !$0.game && !$0.window && !$0.camera } }
+    private var apps: [CatroShareSource] { sources.filter { !$0.game && $0.window } }
+    private var cameras: [CatroShareSource] { sources.filter { !$0.game && $0.camera } }
+    private var firstGame: UInt64? { games.first?.nativeID }
     private var selectedSource: CatroShareSource? { sources.first { $0.nativeID == selection } }
     private var sharesDisplay: Bool { selectedSource.map { !$0.window && !$0.camera } ?? false }
     private var sharesCamera: Bool { selectedSource?.camera ?? false }
     // Only cameras listed: Screen Recording is off, so say how to get displays and windows.
     private var screensBlocked: Bool { !sources.isEmpty && sources.allSatisfy { $0.camera } }
+
+    private var qualities: (options: [ShareQuality], recommended: Int) {
+        guard let source = selectedSource else { return ([], 0) }
+        let screen = source.window ? screens.max { $0.height < $1.height } : nil
+        return ShareQuality.choices(width: max(source.width, screen?.width ?? 0),
+                                    height: max(source.height, screen?.height ?? 0),
+                                    strongGPU: ShareQuality.strongGPU)
+    }
+    private var quality: ShareQuality? {
+        let options = qualities.options
+        return options.indices.contains(qualityIndex) ? options[qualityIndex] : nil
+    }
 
     private var emptyText: String {
         let status = model.snapshot?.voiceStatus ?? ""
@@ -29,10 +127,13 @@ struct SourcePicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Share your screen").font(.title2)
-            List(sources, id: \.nativeID, selection: $selection) { source in
-                SourceRow(source: source).tag(source.nativeID)
+            List {
+                group("Games", games)
+                group("Screens", screens)
+                group("Apps", apps)
+                group("Cameras", cameras)
             }
-            .frame(minHeight: 220)
+            .frame(minHeight: 260)
             .overlay(alignment: .bottom) {
                 if screensBlocked {
                     Text("Allow Screen Recording in System Settings to share displays and windows.")
@@ -50,23 +151,23 @@ struct SourcePicker: View {
                 }
             }
             Form {
+                if let quality {
+                    Picker("Resolution", selection: $qualityIndex) {
+                        ForEach(Array(qualities.options.enumerated()), id: \.offset) { index, option in
+                            Text(option.label).tag(index)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .help("Frame rate and quality are set for this Mac")
+                    Text("\(quality.label) · \(quality.fps) FPS · "
+                         + (ShareQuality.strongGPU ? "tuned for your graphics" : "tuned for integrated graphics"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Toggle("Show my preview", isOn: $model.localPreviewEnabled)
                     .help("Preview only changes what you see here. You can turn it on or off while sharing.")
-                Picker("Resolution", selection: $settings.resolution) {
-                    ForEach(ShareSettings.Resolution.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                Picker("Frame rate", selection: $settings.fps) {
-                    ForEach(ShareSettings.FrameRate.allCases) { Text("\($0.rawValue) FPS").tag($0) }
-                }
-                .pickerStyle(.segmented)
-                if let source = selectedSource {
-                    LabeledRow("Bitrate",
-                                   value: String(format: "%.1f Mbps", settings.bitrateMbps(for: source)))
-                        .help("Set from resolution and frame rate; the hardware encoder holds it")
-                }
                 if screenAudioCaptureAvailable {
-                    Toggle(sharesDisplay ? "Share computer audio" : "Share app audio", isOn: $settings.audio)
+                    Toggle(sharesDisplay ? "Share computer audio" : "Share app audio", isOn: $audio)
                         .help(sharesDisplay
                             ? "Everything this Mac plays except Catro, including notification sounds"
                             : "Only the sound of the app you share")
@@ -84,11 +185,11 @@ struct SourcePicker: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Go Live") { goLive() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(selection == nil)
+                    .disabled(selectedSource == nil || quality == nil)
             }
         }
         .padding(20)
-        .frame(minWidth: 480, minHeight: 520)
+        .frame(minWidth: 480, minHeight: 540)
         .onAppear { model.loadSources() }
         // A detected game is picked for you; choosing anything else keeps your choice.
         .onChange(of: firstGame) { game in
@@ -99,17 +200,53 @@ struct SourcePicker: View {
         // Like Discord: an app share includes its sound by default; whole-screen audio is opt-in
         // because it also carries notifications.
         .onChange(of: selection) { _ in
-            settings.audio = screenAudioCaptureAvailable && (selectedSource?.window ?? false)
-            // Games move fast; 60 FPS keeps motion smooth, and the bitrate follows.
-            if selectedSource?.game == true {
-                settings.fps = .fps60
+            audio = screenAudioCaptureAvailable && (selectedSource?.window ?? false)
+            qualityIndex = qualities.recommended
+        }
+    }
+
+    // Click a source to pick it; click it again to clear the choice.
+    @ViewBuilder
+    private func group(_ title: String, _ items: [CatroShareSource]) -> some View {
+        if !items.isEmpty {
+            Section(title) {
+                ForEach(items, id: \.nativeID) { source in
+                    let chosen = selection == source.nativeID
+                    Button {
+                        selection = chosen ? nil : source.nativeID
+                    } label: {
+                        SourceRow(source: source, name: name(of: source), detail: detail(of: source),
+                                  selected: chosen)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(chosen ? .isSelected : [])
+                }
             }
         }
     }
 
+    private func name(of source: CatroShareSource) -> String {
+        if source.camera {
+            return source.title.isEmpty ? "Camera" : source.title
+        }
+        if !source.window {
+            let number = (screens.firstIndex { $0.nativeID == source.nativeID } ?? 0) + 1
+            return "Screen \(number)" + (source.primary ? " (main)" : "")
+        }
+        return ShareNames.window(title: source.title, application: source.application, game: source.game)
+    }
+
+    private func detail(of source: CatroShareSource) -> String {
+        if source.camera { return "Camera" }
+        if !source.window { return "\(source.width)×\(source.height)" }
+        if source.game { return "Game" }
+        let title = source.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title == name(of: source) ? "" : title
+    }
+
     private func goLive() {
-        if let source = selectedSource {
-            model.share(source, settings: settings)
+        if let source = selectedSource, let quality {
+            model.share(source, quality: quality, audio: audio)
         }
         isPresented = false
     }
@@ -117,23 +254,42 @@ struct SourcePicker: View {
 
 private struct SourceRow: View {
     let source: CatroShareSource
+    let name: String
+    let detail: String
+    let selected: Bool
 
-    private var detail: String {
-        let kind = source.camera ? "Camera" : source.game ? "Game" : source.window ? "Window" : "Display"
-        let main = source.primary ? " · Main display" : ""
-        return "\(kind) · \(source.width)×\(source.height)\(main)"
+    // The program's own icon, like Discord; screens, cameras and unknown apps get a symbol.
+    private var appIcon: NSImage? {
+        guard source.window, !source.application.isEmpty else { return nil }
+        return NSWorkspace.shared.runningApplications.first { $0.localizedName == source.application }?.icon
     }
 
     var body: some View {
-        Label {
-            VStack(alignment: .leading) {
-                Text(source.title.isEmpty ? source.application : source.title)
-                Text(detail).font(.caption).foregroundStyle(.secondary)
+        HStack(spacing: 10) {
+            if let appIcon {
+                Image(nsImage: appIcon).resizable().frame(width: 28, height: 28)
+            } else {
+                Image(systemName: source.camera ? "video" : source.game ? "gamecontroller"
+                    : source.window ? "macwindow" : "display")
+                    .font(.title2)
+                    .frame(width: 28, height: 28)
             }
-        } icon: {
-            Image(systemName: source.camera ? "video" : source.game ? "gamecontroller"
-                : source.window ? "macwindow" : "display")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name).fontWeight(.semibold).lineLimit(1)
+                if !detail.isEmpty {
+                    Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            if selected {
+                Image(systemName: "checkmark.circle.fill").foregroundColor(.accentColor)
+            }
         }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 6)
+        .background(RoundedRectangle(cornerRadius: 6)
+            .fill(selected ? Color.accentColor.opacity(0.18) : Color.clear))
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 }
