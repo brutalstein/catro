@@ -31,6 +31,16 @@ namespace {
     return std::string{value.UTF8String};
 }
 
+[[nodiscard]] constexpr video::VideoExtent oriented_pixels(video::VideoExtent pixels, int rotation) {
+    return rotation % 180 == 90 || rotation % 180 == -90
+        ? video::VideoExtent{pixels.height, pixels.width} : pixels;
+}
+
+static_assert(oriented_pixels({1920, 1080}, 0) == video::VideoExtent{1920, 1080});
+static_assert(oriented_pixels({1920, 1080}, 90) == video::VideoExtent{1080, 1920});
+static_assert(oriented_pixels({3840, 2160}, 180) == video::VideoExtent{3840, 2160});
+static_assert(oriented_pixels({3840, 2160}, 270) == video::VideoExtent{2160, 3840});
+
 [[nodiscard]] video::VideoExtent display_pixels(SCDisplay* display) {
     CGDisplayModeRef mode = CGDisplayCopyDisplayMode(display.displayID);
     if (mode == nullptr) {
@@ -41,7 +51,8 @@ namespace {
         static_cast<std::uint32_t>(CGDisplayModeGetPixelWidth(mode)),
         static_cast<std::uint32_t>(CGDisplayModeGetPixelHeight(mode))};
     CGDisplayModeRelease(mode);
-    return pixels;
+    // Display mode dimensions are unrotated; ScreenCaptureKit dimensions are oriented.
+    return oriented_pixels(pixels, static_cast<int>(std::lround(CGDisplayRotation(display.displayID))));
 }
 
 [[nodiscard]] video::VideoExtent window_pixels(CGRect frame, NSArray<SCDisplay*>* displays) {

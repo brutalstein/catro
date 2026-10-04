@@ -20,6 +20,8 @@ from the local checkout and completed in this branch.
 - macOS translates display/window point dimensions to backing pixels before
   choosing quality and configuring ScreenCaptureKit. Window filters remain
   desktop-independent and attached to the selected window.
+- Display pixel geometry preserves 90/270-degree rotation; compile-time checks
+  cover landscape/portrait at 1x and 2x pixel dimensions.
 - Intel integrated graphics retain 720p60 and 1080p30 choices. Existing bounded,
   aspect-preserving video geometry remains in use.
 
@@ -35,6 +37,8 @@ from the local checkout and completed in this branch.
   source may retain its last frame rather than generate new frames.
 - `catro-capture-check --list` reports the local display as **2560x1600**.
 - `bash -n` passed for the macOS packaging script and installer tests.
+- Full Windows GUI build, ZIP hash verification, and packaged app launch/quit
+  smoke test passed.
 - Graphify was refreshed with the AST-only `graphify update .` command.
 
 ## Remaining device evidence
