@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(Catro VERSION 0.3.3 LANGUAGES C CXX)
+project(Catro VERSION 0.3.4 LANGUAGES C CXX)
 
 # Catro ships through scripts/package-windows.ps1 and the native app bundles; it does not use
 # CMake's install tree. Disable install-rule generation globally so embedded third-party projects

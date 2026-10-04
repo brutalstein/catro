@@ -55,13 +55,13 @@ std::wstring file_description(const std::wstring& path) {
     Translation* translation = nullptr;
     UINT length = 0;
     if (!GetFileVersionInfoW(path.c_str(), 0, size, data.data()) ||
-        !VerQueryValueW(data.data(), L"\VarFileInfo\Translation",
+        !VerQueryValueW(data.data(), L"\\VarFileInfo\\Translation",
                         reinterpret_cast<void**>(&translation), &length) ||
         length < sizeof(Translation)) {
         return {};
     }
     wchar_t key[64];
-    swprintf_s(key, L"\StringFileInfo\%04x%04x\FileDescription",
+    swprintf_s(key, L"\\StringFileInfo\\%04x%04x\\FileDescription",
                translation->language, translation->code_page);
     wchar_t* value = nullptr;
     if (!VerQueryValueW(data.data(), key, reinterpret_cast<void**>(&value), &length) ||

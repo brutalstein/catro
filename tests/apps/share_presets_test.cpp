@@ -49,6 +49,19 @@ TEST_CASE("presets never upscale; an odd-sized screen gets its own Source") {
     CHECK(tiny.options[0].label == L"Source");
 }
 
+TEST_CASE("a tiny source still gets a box the screen runtime accepts") {
+    const auto choice = share_qualities(300, 120, true);
+    REQUIRE(choice.options.size() == 1);
+    CHECK(choice.options[0].max_width >= 320);
+    CHECK(choice.options[0].max_height >= 180);
+    for (const auto& option : share_qualities(1, 1, false).options) {
+        CHECK(option.max_width >= 320);
+        CHECK(option.max_height >= 180);
+        CHECK(option.max_width <= 7680);
+        CHECK(option.max_height <= 4320);
+    }
+}
+
 TEST_CASE("browser windows read as browser and site") {
     CHECK(share_window_name(L"Lofi beats - YouTube - Brave", L"brave.exe", L"Brave Browser", false) ==
           L"Brave - YouTube");

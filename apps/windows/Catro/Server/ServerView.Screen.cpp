@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <string>
@@ -326,50 +327,111 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
             return source.kind == CaptureSourceKind::display;
         });
 
-        controls::ListView source_list;
-        source_list.SelectionMode(controls::ListViewSelectionMode::Single);
-        source_list.MaxHeight(300);
+        // Grouped like Discord. Click a source to pick it; click it again to clear the choice.
+        const xaml::Media::SolidColorBrush clear_brush{winrt::Windows::UI::Color{}};
+        controls::StackPanel source_panel;
+        source_panel.Spacing(2);
+        std::vector<controls::Primitives::ToggleButton> source_buttons;
         int display_number = 0;
+        std::wstring_view group;
         for (const auto& source : sources) {
-            source_list.Items().Append(catro::shell::share_source_row(
-                source,
-                source.kind == CaptureSourceKind::display ? ++display_number : 0));
+            const std::wstring_view heading =
+                source.game ? L"GAMES"
+                            : source.kind == CaptureSourceKind::display ? L"SCREENS" : L"APPS";
+            if (heading != group) {
+                group = heading;
+                controls::TextBlock header;
+                header.Text(hstring{heading});
+                header.FontSize(11.0);
+                header.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+                header.Opacity(0.6);
+                header.Margin(xaml::Thickness{4.0, source_buttons.empty() ? 0.0 : 10.0, 0.0, 2.0});
+                source_panel.Children().Append(header);
+            }
+            controls::Primitives::ToggleButton button;
+            button.Content(catro::shell::share_source_row(
+                source, source.kind == CaptureSourceKind::display ? ++display_number : 0));
+            button.HorizontalAlignment(xaml::HorizontalAlignment::Stretch);
+            button.HorizontalContentAlignment(xaml::HorizontalAlignment::Stretch);
+            button.Padding(xaml::Thickness{10.0, 2.0, 10.0, 2.0});
+            button.Background(clear_brush);
+            button.BorderBrush(clear_brush);
+            source_buttons.push_back(button);
+            source_panel.Children().Append(button);
         }
-        source_list.SelectedIndex(0);
-        form.Children().Append(source_list);
+        controls::ScrollViewer source_scroll;
+        source_scroll.MaxHeight(320);
+        source_scroll.Content(source_panel);
+        form.Children().Append(source_scroll);
 
-        // Resolution is the only quality choice; FPS and bitrate follow the GPU.
-        controls::RadioButtons quality_box;
-        quality_box.Header(box_value(hstring{L"Resolution"}));
-        form.Children().Append(quality_box);
+        // Resolution is the only quality choice; FPS and bitrate follow the GPU. A window can grow
+        // while it is shared, so app windows get the presets of the largest screen.
+        std::uint32_t screen_width = 0;
+        std::uint32_t screen_height = 0;
+        for (const auto& source : sources) {
+            if (source.kind == CaptureSourceKind::display && source.height > screen_height) {
+                screen_width = source.width;
+                screen_height = source.height;
+            }
+        }
+        const auto qualities_for = [gpu_strong, screen_width, screen_height](
+                                       const catro::platform::windows::CaptureSource& source) {
+            return source.kind == CaptureSourceKind::display
+                       ? catro::shell::share_qualities(source.width, source.height, gpu_strong)
+                       : catro::shell::share_qualities(std::max(source.width, screen_width),
+                                                       std::max(source.height, screen_height),
+                                                       gpu_strong);
+        };
+        controls::StackPanel quality_section;
+        quality_section.Spacing(6);
+        controls::TextBlock quality_header;
+        quality_header.Text(L"Resolution");
+        quality_header.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        quality_section.Children().Append(quality_header);
+        controls::StackPanel quality_bar;
+        quality_bar.Orientation(controls::Orientation::Horizontal);
+        quality_bar.Spacing(6);
+        quality_section.Children().Append(quality_bar);
         controls::TextBlock quality_note;
         quality_note.FontSize(12.0);
         quality_note.Opacity(0.7);
-        form.Children().Append(quality_note);
+        quality_section.Children().Append(quality_note);
+        form.Children().Append(quality_section);
+
+        // The pickers live behind shared std::functions that are emptied when the dialog closes;
+        // otherwise each button's handler would keep the whole dialog alive.
         const auto qualities = std::make_shared<catro::shell::ShareQualityChoice>();
-        const auto show_quality = [qualities, quality_box, quality_note, gpu_strong]() {
-            const auto index = quality_box.SelectedIndex();
-            if (index < 0 || static_cast<std::size_t>(index) >= qualities->options.size()) {
-                return;
+        const auto quality_index = std::make_shared<int>(-1);
+        const auto pick_quality = std::make_shared<std::function<void(int)>>();
+        *pick_quality = [qualities, quality_index, quality_bar, quality_note, gpu_strong](int index) {
+            *quality_index = index;
+            for (std::uint32_t i = 0; i < quality_bar.Children().Size(); ++i) {
+                quality_bar.Children().GetAt(i).as<controls::Primitives::ToggleButton>().IsChecked(
+                    static_cast<int>(i) == index);
             }
-            std::wstring note = std::to_wstring(qualities->options[static_cast<std::size_t>(index)].fps);
-            note += gpu_strong ? L" FPS, set for your graphics card"
-                               : L" FPS, set for your integrated graphics";
-            quality_note.Text(note);
+            const auto& quality = qualities->options[static_cast<std::size_t>(index)];
+            quality_note.Text(quality.label + L" \x00B7 " + std::to_wstring(quality.fps) +
+                              (gpu_strong ? L" FPS \x00B7 tuned for your graphics card"
+                                          : L" FPS \x00B7 tuned for integrated graphics"));
         };
-        const auto fill_qualities = [qualities, quality_box, show_quality, gpu_strong](
-                                        const catro::platform::windows::CaptureSource& source) {
-            *qualities = catro::shell::share_qualities(source.width, source.height, gpu_strong);
-            quality_box.Items().Clear();
-            for (const auto& quality : qualities->options) {
-                quality_box.Items().Append(box_value(hstring{quality.label}));
+        const auto fill_qualities = [qualities, quality_bar, pick_quality](
+                                        catro::shell::ShareQualityChoice choice) {
+            *qualities = std::move(choice);
+            quality_bar.Children().Clear();
+            for (std::size_t i = 0; i < qualities->options.size(); ++i) {
+                controls::Primitives::ToggleButton pill;
+                pill.Content(box_value(hstring{qualities->options[i].label}));
+                pill.MinWidth(76.0);
+                pill.CornerRadius(xaml::CornerRadius{16.0, 16.0, 16.0, 16.0});
+                pill.Click([pick_quality, index = static_cast<int>(i)](auto const&, auto const&) {
+                    if (*pick_quality) {
+                        (*pick_quality)(index);
+                    }
+                });
+                quality_bar.Children().Append(pill);
             }
-            quality_box.MaxColumns(static_cast<std::int32_t>(qualities->options.size()));
-            quality_box.SelectedIndex(static_cast<std::int32_t>(qualities->recommended));
-            show_quality();
+            (*pick_quality)(static_cast<int>(qualities->recommended));
         };
-        quality_box.SelectionChanged([show_quality](auto const&, auto const&) { show_quality(); });
-        fill_qualities(sources.front());
 
         controls::TextBlock browser_note;
         browser_note.Text(
@@ -378,10 +440,6 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         browser_note.TextWrapping(xaml::TextWrapping::Wrap);
         browser_note.FontSize(12.0);
         browser_note.Opacity(0.7);
-        browser_note.Visibility(
-            chromium_window(sources.front())
-                ? xaml::Visibility::Visible
-                : xaml::Visibility::Collapsed);
         form.Children().Append(browser_note);
 
         controls::ToggleSwitch share_audio_box;
@@ -401,8 +459,6 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         const auto audio_default = [](const catro::platform::windows::CaptureSource& source) {
             return source.kind == catro::platform::windows::CaptureSourceKind::window;
         };
-        share_audio_box.IsEnabled(audio_for(sources.front()));
-        share_audio_box.IsOn(audio_for(sources.front()) && audio_default(sources.front()));
         form.Children().Append(share_audio_box);
 
         controls::ToggleSwitch preview_box;
@@ -410,37 +466,44 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         preview_box.IsOn(catro::shell::local_preview_preference());
         form.Children().Append(preview_box);
 
-        source_list.SelectionChanged(
-            [&sources,
-             dialog,
-             audio_for,
-             audio_default,
-             browser_note,
-             fill_qualities,
-             share_audio_box](auto const& sender, auto const&) {
-                const auto selected =
-                    sender.template as<controls::ListView>().SelectedIndex();
-                const bool valid =
-                    selected >= 0 &&
-                    static_cast<std::size_t>(selected) <
-                        sources.size();
-                dialog.IsPrimaryButtonEnabled(valid);
-                if (!valid) {
-                    return;
-                }
-                const auto& source = sources[static_cast<std::size_t>(selected)];
-                browser_note.Visibility(
-                    chromium_window(source)
-                        ? xaml::Visibility::Visible
-                        : xaml::Visibility::Collapsed);
-                const bool audio_available = audio_for(source);
-                share_audio_box.IsEnabled(audio_available);
-                share_audio_box.IsOn(audio_available && audio_default(source));
-                fill_qualities(source);
-            });
+        const auto source_index = std::make_shared<int>(-1);
+        const auto pick_source = std::make_shared<std::function<void(int)>>();
+        *pick_source = [&sources, source_index, source_buttons, dialog, quality_section,
+                        browser_note, share_audio_box, audio_for, audio_default, qualities_for,
+                        fill_qualities](int index) {
+            *source_index = index;
+            for (std::size_t i = 0; i < source_buttons.size(); ++i) {
+                source_buttons[i].IsChecked(static_cast<int>(i) == index);
+            }
+            const bool chosen = index >= 0;
+            dialog.IsPrimaryButtonEnabled(chosen);
+            quality_section.Visibility(chosen ? xaml::Visibility::Visible
+                                              : xaml::Visibility::Collapsed);
+            const auto* source = chosen ? &sources[static_cast<std::size_t>(index)] : nullptr;
+            browser_note.Visibility(source != nullptr && chromium_window(*source)
+                                        ? xaml::Visibility::Visible
+                                        : xaml::Visibility::Collapsed);
+            const bool audio_available = source != nullptr && audio_for(*source);
+            share_audio_box.IsEnabled(audio_available);
+            share_audio_box.IsOn(audio_available && audio_default(*source));
+            if (source != nullptr) {
+                fill_qualities(qualities_for(*source));
+            }
+        };
+        for (std::size_t i = 0; i < source_buttons.size(); ++i) {
+            source_buttons[i].Click(
+                [pick_source, source_index, index = static_cast<int>(i)](auto const&, auto const&) {
+                    if (*pick_source) {
+                        (*pick_source)(*source_index == index ? -1 : index);
+                    }
+                });
+        }
+        (*pick_source)(0);
 
         dialog.Content(form);
         const auto result = co_await dialog.ShowAsync();
+        *pick_source = nullptr;
+        *pick_quality = nullptr;
         share_dialog_open_ = false;
 
         if (result != controls::ContentDialogResult::Primary) {
@@ -449,8 +512,8 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
             co_return;
         }
 
-        const auto selected = source_list.SelectedIndex();
-        const auto quality_index = quality_box.SelectedIndex();
+        const auto selected = *source_index;
+        const auto quality_choice = *quality_index;
         const bool request_borderless = true;
         const bool request_audio =
             share_audio_box.IsEnabled() &&
@@ -458,15 +521,15 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
 
         if (selected < 0 ||
             static_cast<std::size_t>(selected) >= sources.size() ||
-            quality_index < 0 ||
-            static_cast<std::size_t>(quality_index) >= qualities->options.size()) {
+            quality_choice < 0 ||
+            static_cast<std::size_t>(quality_choice) >= qualities->options.size()) {
             workspace_state_.share_screen.fail(
                 "Invalid screen-share settings");
             UpdateVoiceUi();
             co_return;
         }
 
-        const auto& quality = qualities->options[static_cast<std::size_t>(quality_index)];
+        const auto& quality = qualities->options[static_cast<std::size_t>(quality_choice)];
         const auto width = quality.max_width;
         const auto height = quality.max_height;
         const auto fps = quality.fps;

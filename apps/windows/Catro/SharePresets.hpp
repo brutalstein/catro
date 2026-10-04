@@ -27,7 +27,8 @@ struct ShareQualityChoice {
 
 // strong_gpu: a GPU with its own video memory. Integrated GPUs stop at 1080p and keep 60 FPS
 // only at 720p. Presets never exceed the source height, so nothing is upscaled; "Source" covers
-// a source larger than every preset or smaller than the smallest one.
+// a source larger than every preset or smaller than the smallest one. A window can be resized
+// while it is shared, so the caller passes the screen size for windows, not the window size.
 inline ShareQualityChoice share_qualities(
     std::uint32_t source_width, std::uint32_t source_height, bool strong_gpu) {
     const auto make = [strong_gpu](std::wstring label, std::uint32_t height) {
@@ -53,8 +54,9 @@ inline ShareQualityChoice share_qualities(
     }
     const std::uint32_t largest = choice.options.empty() ? 0 : choice.options.back().max_height;
     if (source_height > largest && (strong_gpu || source_height <= ceiling)) {
-        auto source = make(L"Source", source_height);
-        source.max_width = std::max(source_width, 2U);
+        // The encoder never upscales, so the floor only keeps the box inside what it accepts.
+        auto source = make(L"Source", std::max(source_height, 180U));
+        source.max_width = std::max(source_width, 320U);
         choice.options.push_back(std::move(source));
     }
     if (choice.options.empty()) {
@@ -79,10 +81,10 @@ inline std::wstring lower(std::wstring_view text) {
 }
 
 inline std::wstring_view trim(std::wstring_view text) {
-    while (!text.empty() && (std::iswspace(text.front()) || text.front() == L'​')) {
+    while (!text.empty() && (std::iswspace(text.front()) || text.front() == L'\u200B')) {
         text.remove_prefix(1);
     }
-    while (!text.empty() && (std::iswspace(text.back()) || text.back() == L'​')) {
+    while (!text.empty() && (std::iswspace(text.back()) || text.back() == L'\u200B')) {
         text.remove_suffix(1);
     }
     return text;
@@ -93,7 +95,7 @@ inline std::vector<std::wstring> title_parts(std::wstring_view title) {
     std::vector<std::wstring> parts;
     std::wstring current;
     for (std::size_t i = 0; i < title.size(); ++i) {
-        const bool dash = title[i] == L'-' || title[i] == L'–' || title[i] == L'—';
+        const bool dash = title[i] == L'-' || title[i] == L'\u2013' || title[i] == L'\u2014';
         if (dash && i > 0 && i + 1 < title.size() && title[i - 1] == L' ' && title[i + 1] == L' ') {
             parts.emplace_back(trim(current));
             current.clear();
