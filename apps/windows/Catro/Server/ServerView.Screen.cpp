@@ -8,6 +8,7 @@
 #include <catro/screen_runtime.hpp>
 #include <catro/video/geometry.hpp>
 
+#include <dxgi1_3.h>
 #include <microsoft.ui.xaml.media.dxinterop.h>
 
 #include <winrt/Windows.Graphics.Capture.h>
@@ -75,6 +76,26 @@ struct ViewportSize {
         std::max(2.0, static_cast<double>(source_width) * scale),
         std::max(2.0, static_cast<double>(source_height) * scale),
     };
+}
+
+// The self-preview swap chain stays at most 640x360 to save GPU work, while its viewport grows
+// to 960x720. A SwapChainPanel shows one buffer pixel per view pixel, so the compositor scales
+// the buffer up to fill the viewport; the scale itself costs no rendering.
+void fit_swap_chain(IDXGISwapChain1* swap_chain, double width, double height) noexcept {
+    DXGI_SWAP_CHAIN_DESC1 desc{};
+    if (swap_chain == nullptr || !(width > 0.0) || !(height > 0.0) ||
+        FAILED(swap_chain->GetDesc1(&desc)) || desc.Width == 0 || desc.Height == 0) {
+        return;
+    }
+    ::Microsoft::WRL::ComPtr<IDXGISwapChain2> scalable;
+    if (FAILED(swap_chain->QueryInterface(IID_PPV_ARGS(&scalable)))) {
+        return;
+    }
+    const auto scale = static_cast<float>(std::min(
+        width / static_cast<double>(desc.Width),
+        height / static_cast<double>(desc.Height)));
+    const DXGI_MATRIX_3X2_F matrix{scale, 0.0f, 0.0f, scale, 0.0f, 0.0f};
+    (void)scalable->SetMatrixTransform(&matrix);
 }
 
 std::wstring capture_source_label(
@@ -1356,6 +1377,13 @@ void ServerView::UpdateScreenShareUi() {
                 xaml::Thickness{22.0, 22.0, 22.0, 22.0});
             Microsoft::UI::Xaml::Controls::Canvas::SetZIndex(
                 SharePreviewHost(), 0);
+        }
+        if (local_preview_enabled_) {
+            // Inside the viewport's 1-pixel border.
+            fit_swap_chain(
+                attached_preview_swap_chain_.Get(),
+                LocalShareViewport().Width() - 2.0,
+                LocalShareViewport().Height() - 2.0);
         }
     } else {
         DetachPreviewSwapChain();
