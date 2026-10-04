@@ -63,14 +63,46 @@ int wmain(int argc, wchar_t** argv) {
         return 2;
     }
 
-    catro::platform::windows::WindowsGraphicsCapture capture;
-    if (const auto failure = capture.start_primary_display()) {
-        report_error(*failure);
-        return 5;
+    namespace windows = catro::platform::windows;
+    const auto backend_name = [](windows::ScreenCaptureBackend backend) {
+        return backend == windows::ScreenCaptureBackend::desktop_duplication ? "dxgi" : "wgc";
+    };
+    windows::WindowsGraphicsCapture capture;
+    if (options->list || !options->source.empty()) {
+        const auto sources = windows::enumerate_capture_sources();
+        if (options->list) {
+            for (const auto& source : sources) {
+                std::cout << (source.kind == windows::CaptureSourceKind::display ? "display " : "window  ")
+                          << backend_name(windows::recommended_capture_backend(source))
+                          << (source.game ? " game " : "      ") << source.width << "x" << source.height
+                          << " [" << source.process_name << "] " << source.title << '\n';
+            }
+            return 0;
+        }
+        const auto match = std::find_if(sources.begin(), sources.end(), [&](const auto& source) {
+            return source.title.find(options->source) != std::string::npos ||
+                   source.process_name.find(options->source) != std::string::npos;
+        });
+        if (match == sources.end()) {
+            std::cerr << "catro-capture-check: no source matches \"" << options->source << "\"\n";
+            return 4;
+        }
+        windows::ScreenCaptureConfig config;
+        config.backend = windows::recommended_capture_backend(*match);
+        std::cout << "source: " << match->title << " via " << backend_name(config.backend) << '\n';
+        if (const auto failure = capture.start_source(*match, config)) {
+            report_error(*failure);
+            return 5;
+        }
+    } else {
+        if (const auto failure = capture.start_primary_display()) {
+            report_error(*failure);
+            return 5;
+        }
+        std::cout << "source: primary display\n";
     }
 
     auto initial = capture.statistics();
-    std::cout << "source: primary display\n";
     std::cout << "adapter-luid: 0x" << std::hex << initial.adapter_luid << std::dec << '\n';
     std::cout << "initial-size: " << initial.width << "x" << initial.height << '\n';
     std::cout << "pipeline: WGC -> D3D11 texture -> one-frame latest mailbox; no CPU pixel copy\n";

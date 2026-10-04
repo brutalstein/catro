@@ -14,6 +14,7 @@
 #include <array>
 #include <atomic>
 #include <condition_variable>
+#include <cmath>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -28,6 +29,42 @@ namespace {
         return {};
     }
     return std::string{value.UTF8String};
+}
+
+[[nodiscard]] video::VideoExtent display_pixels(SCDisplay* display) {
+    CGDisplayModeRef mode = CGDisplayCopyDisplayMode(display.displayID);
+    if (mode == nullptr) {
+        return {static_cast<std::uint32_t>(display.width),
+                static_cast<std::uint32_t>(display.height)};
+    }
+    const video::VideoExtent pixels{
+        static_cast<std::uint32_t>(CGDisplayModeGetPixelWidth(mode)),
+        static_cast<std::uint32_t>(CGDisplayModeGetPixelHeight(mode))};
+    CGDisplayModeRelease(mode);
+    return pixels;
+}
+
+[[nodiscard]] video::VideoExtent window_pixels(CGRect frame, NSArray<SCDisplay*>* displays) {
+    SCDisplay* selected = displays.firstObject;
+    CGFloat largest_area = 0;
+    for (SCDisplay* display in displays) {
+        const CGRect intersection = CGRectIntersection(frame, display.frame);
+        if (CGRectIsNull(intersection)) continue;
+        const CGFloat area = intersection.size.width * intersection.size.height;
+        if (area > largest_area) {
+            largest_area = area;
+            selected = display;
+        }
+    }
+    // ScreenCaptureKit descriptors use points, but its output configuration uses pixels. Use
+    // the owning display's backing resolution so Retina windows aren't capped at half size.
+    const auto pixels = selected != nil ? display_pixels(selected) : video::VideoExtent{};
+    const double scale_x = selected != nil && selected.width > 0
+        ? static_cast<double>(pixels.width) / selected.width : 1.0;
+    const double scale_y = selected != nil && selected.height > 0
+        ? static_cast<double>(pixels.height) / selected.height : 1.0;
+    return {static_cast<std::uint32_t>(std::lround(frame.size.width * scale_x)),
+            static_cast<std::uint32_t>(std::lround(frame.size.height * scale_y))};
 }
 
 // Native game detection, like Discord's: the app's own category, or a Steam library install.
@@ -371,12 +408,13 @@ public:
             [main.deviceDescription[@"NSScreenNumber"] unsignedIntValue]);
         result.sources.reserve(content.displays.count + content.windows.count);
         for (SCDisplay* display in content.displays) {
+            const auto pixels = display_pixels(display);
             result.sources.push_back(CaptureSource{
                 .kind = CaptureSourceKind::display,
                 .native_id = display.displayID,
                 .title = "Display " + std::to_string(display.displayID),
-                .width = static_cast<std::uint32_t>(display.width),
-                .height = static_cast<std::uint32_t>(display.height),
+                .width = pixels.width,
+                .height = pixels.height,
                 .primary = display.displayID == main_id,
             });
         }
@@ -398,13 +436,14 @@ public:
             if ((!window.onScreen || window.windowLayer != 0) && !found->second) {
                 continue;
             }
+            const auto pixels = window_pixels(window.frame, content.displays);
             result.sources.push_back(CaptureSource{
                 .kind = CaptureSourceKind::window,
                 .native_id = window.windowID,
                 .title = utf8(window.title),
                 .application_name = utf8(app.applicationName),
-                .width = static_cast<std::uint32_t>(window.frame.size.width),
-                .height = static_cast<std::uint32_t>(window.frame.size.height),
+                .width = pixels.width,
+                .height = pixels.height,
                 .game = found->second,
             });
         }

@@ -106,7 +106,7 @@ Signed and notarized builds are on the roadmap.
 | --- | --- | --- |
 | **OS** | Windows 11, or Windows 10 version 2004 (build 19041) or newer, 64-bit | macOS 12.3 Monterey or newer, Apple silicon or Intel (sharing sound needs macOS 13) |
 | **Screen sharing** | A GPU with a hardware H.264 encoder (NVIDIA, AMD, or Intel from the last several years) and current drivers | Built in on every supported Mac |
-| **App audio in streams** | Windows build 20348 or newer | Every supported Mac (window shares send that app's audio; display shares can send all computer audio) |
+| **App audio in streams** | Windows build 20348 or newer | macOS 13 or newer (window shares send that app's audio; display shares can send all computer audio). Monterey supports video sharing and microphone voice without extra drivers. |
 | **Network** | Any normal home connection. Catro relays through TURN automatically when a direct path is blocked. | Same |
 
 ## Getting started

@@ -835,10 +835,10 @@ struct WindowsScreenShareRuntime::Impl {
 
         GpuCaptureFrame first;
         const bool wait_for_game_restore =
-            capture_config.backend ==
-                platform::windows::ScreenCaptureBackend::desktop_duplication &&
             config.source.kind ==
-                platform::windows::CaptureSourceKind::window;
+                platform::windows::CaptureSourceKind::window &&
+            (config.source.game || IsIconic(
+                reinterpret_cast<HWND>(config.source.native_handle)));
         const auto first_deadline =
             Clock::now() +
             (wait_for_game_restore

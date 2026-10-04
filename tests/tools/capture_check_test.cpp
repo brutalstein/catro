@@ -32,5 +32,17 @@ TEST_CASE("capture-check accepts seconds once and rejects ambiguous arguments") 
     CHECK_FALSE(parse({"--seconds", "61"}));
     CHECK_FALSE(parse({"--seconds", "2s"}));
     CHECK_FALSE(parse({"--seconds", "5", "--seconds", "5"}));
-    CHECK_FALSE(parse({"--source", "primary"}));
+    CHECK_FALSE(parse({"--source"}));
+    CHECK_FALSE(parse({"--source", "a", "--source", "b"}));
+    CHECK_FALSE(parse({"--list", "--list"}));
+}
+
+TEST_CASE("capture-check lists sources or captures one by name") {
+    const auto listed = parse({"--list"});
+    REQUIRE(listed);
+    CHECK(listed->list);
+    const auto named = parse({"--source", "Counter-Strike", "--seconds", "5"});
+    REQUIRE(named);
+    CHECK(named->source == "Counter-Strike");
+    CHECK(named->duration == std::chrono::seconds(5));
 }

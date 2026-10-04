@@ -38,6 +38,8 @@ namespace direct3d = winrt::Windows::Graphics::DirectX::Direct3D11;
 namespace directx = winrt::Windows::Graphics::DirectX;
 
 constexpr int kFramePoolBuffers = 2;
+constexpr LONG kMinimumWindowWidth = 120;
+constexpr LONG kMinimumWindowHeight = 80;
 
 std::uint64_t pack_luid(LUID luid) noexcept {
     return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(luid.HighPart)) << 32U) |
@@ -385,48 +387,6 @@ bool capture_client_rect(
     return true;
 }
 
-bool nearly_equal_edge(LONG left, LONG right) noexcept {
-    constexpr LONG tolerance = 8;
-    const auto delta = left >= right ? left - right : right - left;
-    return delta <= tolerance;
-}
-
-bool window_is_fullscreen_like(HWND window, HMONITOR monitor) noexcept {
-    if (window == nullptr || monitor == nullptr) return false;
-
-    RECT candidate{};
-    if (IsIconic(window)) {
-        WINDOWPLACEMENT placement{};
-        placement.length = sizeof(placement);
-        if (!GetWindowPlacement(window, &placement)) return false;
-        candidate = placement.rcNormalPosition;
-    } else {
-        RECT client{};
-        if (!GetClientRect(window, &client)) return false;
-        POINT top_left{client.left, client.top};
-        POINT bottom_right{client.right, client.bottom};
-        if (!ClientToScreen(window, &top_left) ||
-            !ClientToScreen(window, &bottom_right)) {
-            return false;
-        }
-        candidate = RECT{
-            top_left.x,
-            top_left.y,
-            bottom_right.x,
-            bottom_right.y,
-        };
-    }
-
-    MONITORINFO info{};
-    info.cbSize = sizeof(info);
-    if (!GetMonitorInfoW(monitor, &info)) return false;
-
-    return nearly_equal_edge(candidate.left, info.rcMonitor.left) &&
-           nearly_equal_edge(candidate.top, info.rcMonitor.top) &&
-           nearly_equal_edge(candidate.right, info.rcMonitor.right) &&
-           nearly_equal_edge(candidate.bottom, info.rcMonitor.bottom);
-}
-
 std::string utf8(std::wstring_view wide) {
     if (wide.empty()) {
         return {};
@@ -622,16 +582,10 @@ struct WindowsGraphicsCapture::Impl {
     std::optional<ScreenCaptureError> start_source(
         const CaptureSource& source,
         const ScreenCaptureConfig& config) {
-        if (config.backend == ScreenCaptureBackend::desktop_duplication) {
-            const auto monitor = reinterpret_cast<HMONITOR>(
-                source.kind == CaptureSourceKind::display
-                    ? source.native_handle
-                    : source.monitor_handle);
-            const auto window =
-                source.kind == CaptureSourceKind::window
-                    ? reinterpret_cast<HWND>(source.native_handle)
-                    : nullptr;
-            return start_duplication(monitor, window);
+        if (source.kind == CaptureSourceKind::display &&
+            config.backend == ScreenCaptureBackend::desktop_duplication) {
+            return start_duplication(
+                reinterpret_cast<HMONITOR>(source.native_handle), nullptr);
         }
         initialize_apartment();
         auto item_result = capture_item_for_source(source);
@@ -1171,6 +1125,13 @@ struct WindowsGraphicsCapture::Impl {
 };
 
 std::vector<CaptureSource> enumerate_capture_sources() noexcept {
+    // Enumeration must report the same physical pixels WGC captures, including from diagnostic
+    // tools without the app's PerMonitorV2 manifest. Restore the caller's context on every exit.
+    struct DpiScope {
+        DPI_AWARENESS_CONTEXT previous =
+            SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        ~DpiScope() { if (previous) SetThreadDpiAwarenessContext(previous); }
+    } dpi;
     std::vector<CaptureSource> sources;
     try {
         (void)EnumDisplayMonitors(
@@ -1239,13 +1200,25 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
                     return TRUE;
                 }
 
+                // A minimized window has an empty client area, yet it is still shareable: a
+                // full-screen game minimizes whenever you switch away from it. Use its restored
+                // size; capture resumes when it is restored.
                 RECT client{};
-                if (!GetClientRect(window, &client)) {
+                if (IsIconic(window)) {
+                    WINDOWPLACEMENT placement{};
+                    placement.length = sizeof(placement);
+                    if (!GetWindowPlacement(window, &placement)) {
+                        return TRUE;
+                    }
+                    client = placement.rcNormalPosition;
+                } else if (!GetClientRect(window, &client)) {
                     return TRUE;
                 }
                 const auto width = client.right - client.left;
                 const auto height = client.bottom - client.top;
-                if (width <= 1 || height <= 1) {
+                // Tiny helper windows (Steam's hidden 158x26 ones, for example) are not things
+                // anyone means to share.
+                if (width < kMinimumWindowWidth || height < kMinimumWindowHeight) {
                     return TRUE;
                 }
 
@@ -1260,8 +1233,6 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
 
                 const auto monitor =
                     MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
-                const bool fullscreen_like =
-                    window_is_fullscreen_like(window, monitor);
 
                 auto& state = *reinterpret_cast<WindowScan*>(opaque);
                 const auto path = process_image_path(process_id);
@@ -1275,7 +1246,6 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
                     .width = static_cast<std::uint32_t>(width),
                     .height = static_cast<std::uint32_t>(height),
                     .primary = false,
-                    .fullscreen_like = fullscreen_like,
                     .game = is_game(path, state.games),
                 });
                 return TRUE;
@@ -1310,11 +1280,8 @@ ScreenCaptureBackend recommended_capture_backend(
         source.native_handle != 0) {
         return ScreenCaptureBackend::desktop_duplication;
     }
-    if (source.kind == CaptureSourceKind::window &&
-        source.monitor_handle != 0 &&
-        (source.fullscreen_like || source.process_name == "cs2.exe")) {
-        return ScreenCaptureBackend::desktop_duplication;
-    }
+    // Windows and games always go through WGC: it captures the window's own pixels even when
+    // another app covers it. Desktop duplication would stream whatever is on the monitor.
     return ScreenCaptureBackend::windows_graphics_capture;
 }
 

@@ -77,7 +77,6 @@ struct CaptureSource {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     bool primary = false;
-    bool fullscreen_like = false;
     // A window of a game Windows knows (Game Bar's game list) or one installed in a Steam or Xbox
     // game library.
     bool game = false;
@@ -152,6 +151,8 @@ public:
 
     [[nodiscard]] std::optional<ScreenCaptureError> start_primary_display(
         const ScreenCaptureConfig& config = {});
+    // Window sources always use WGC, even if config requests desktop duplication: copying a
+    // monitor cannot preserve the selected window when another application covers it.
     [[nodiscard]] std::optional<ScreenCaptureError> start_source(
         const CaptureSource& source,
         const ScreenCaptureConfig& config = {});
