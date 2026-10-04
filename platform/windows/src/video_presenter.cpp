@@ -36,9 +36,16 @@ struct D3D11CompositionVideoPresenter::Impl {
 
     [[nodiscard]] std::optional<VideoPresenterError> present(
         ID3D11Texture2D& source,
-        std::uint32_t subresource_index) {
+        std::uint32_t subresource_index,
+        std::uint32_t visible_width,
+        std::uint32_t visible_height) {
         D3D11_TEXTURE2D_DESC description{};
         source.GetDesc(&description);
+        // From here on the description names the visible picture, not the padded texture.
+        if (visible_width != 0 && visible_height != 0) {
+            description.Width = std::min<UINT>(description.Width, visible_width);
+            description.Height = std::min<UINT>(description.Height, visible_height);
+        }
         if (description.Width == 0 || description.Height == 0 ||
             !supported_input_format(description.Format) ||
             description.MipLevels == 0 ||
@@ -421,8 +428,10 @@ D3D11CompositionVideoPresenter::~D3D11CompositionVideoPresenter() {
 std::optional<VideoPresenterError>
 D3D11CompositionVideoPresenter::present(
     ID3D11Texture2D& source,
-    std::uint32_t subresource_index) {
-    return impl_->present(source, subresource_index);
+    std::uint32_t subresource_index,
+    std::uint32_t visible_width,
+    std::uint32_t visible_height) {
+    return impl_->present(source, subresource_index, visible_width, visible_height);
 }
 
 void D3D11CompositionVideoPresenter::reset() noexcept {

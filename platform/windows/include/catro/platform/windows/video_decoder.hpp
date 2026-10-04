@@ -75,6 +75,8 @@ struct DecodedGpuFrame {
     Microsoft::WRL::ComPtr<IUnknown> sample_lease;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
     std::uint32_t subresource_index = 0;
+    // The visible picture: the stream's crop, which can be smaller than the texture (H.264 codes
+    // 1080p as 1088 rows). Present only this top-left rectangle.
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;

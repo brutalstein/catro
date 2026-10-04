@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace winrt::Catro::implementation {
@@ -428,5 +429,77 @@ void ServerView::OnStreamVolumeChanged(
     ApplyStreamVolume();
 }
 
+winrt::Windows::Foundation::IAsyncOperation<bool>
+ServerView::ClaimScreenOwnership() {
+    auto lifetime = get_strong();
+    if (!room_mode_active_) {
+        co_return true;
+    }
+    if (room_runtime_ == nullptr ||
+        room_peer_id_.empty()) {
+        VoiceStateText().Text(
+            L"Screen ownership request failed");
+        co_return false;
+    }
+
+    const auto peer_id = room_peer_id_;
+    auto room =
+        catro_room_runtime_snapshot(
+            room_runtime_);
+    if (room.screen_owner[0] != '\0' &&
+        std::string_view{room.screen_owner} !=
+            peer_id) {
+        VoiceStateText().Text(
+            L"Another participant is sharing");
+        co_return false;
+    }
+
+    if (catro_room_runtime_claim_screen(
+            room_runtime_) != 0) {
+        VoiceStateText().Text(
+            L"Screen ownership request failed");
+        co_return false;
+    }
+    if (std::string_view{room.screen_owner} ==
+        peer_id) {
+        co_return true;
+    }
+
+    UiThread ui_thread;
+    const auto deadline =
+        std::chrono::steady_clock::now() +
+        std::chrono::seconds{3};
+
+    while (std::chrono::steady_clock::now() <
+           deadline) {
+        co_await winrt::resume_after(
+            std::chrono::milliseconds{50});
+        room = catro_room_runtime_snapshot(
+            room_runtime_);
+
+        if (std::string_view{room.screen_owner} ==
+            peer_id) {
+            co_await ui_thread;
+            co_return true;
+        }
+        if (room.screen_owner[0] != '\0') {
+            co_await ui_thread;
+            if (room_mode_active_ &&
+                room_peer_id_ == peer_id) {
+                VoiceStateText().Text(
+                    L"Another participant is sharing");
+            }
+            co_return false;
+        }
+    }
+
+    co_await ui_thread;
+    if (room_mode_active_ &&
+        room_peer_id_ == peer_id) {
+        VoiceStateText().Text(
+            L"Screen ownership request timed out");
+    }
+    co_return false;
+}
 
 } // namespace winrt::Catro::implementation

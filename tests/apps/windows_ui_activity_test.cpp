@@ -44,8 +44,9 @@ TEST_CASE("unloaded pages sleep while an explicitly opened popout remains refres
         CHECK(unloaded.screen == 0ms);
         CHECK_FALSE(unloaded.local_preview);
 
+        // The stream window covers Catro, so Catro itself is in the background or hidden.
         const auto popout = ui_refresh_policy(activity, true, true, true);
-        CHECK(popout.screen > 0ms);
+        CHECK(popout.screen == 250ms);
     }
 }
 

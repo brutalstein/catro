@@ -158,6 +158,9 @@ private:
     Microsoft::UI::Xaml::Controls::SwapChainPanel stream_window_swap_chain_panel_{nullptr};
     Microsoft::UI::Xaml::Controls::Button stream_window_mode_button_{nullptr};
     Microsoft::UI::Xaml::Controls::Button stream_window_topmost_button_{nullptr};
+    // Full screen hides the toolbar while the mouse rests, like Discord.
+    Microsoft::UI::Xaml::Controls::StackPanel stream_window_toolbar_{nullptr};
+    Microsoft::UI::Dispatching::DispatcherQueueTimer stream_window_idle_timer_{nullptr};
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> stream_window_swap_chain_;
     bool stream_window_fullscreen_ = false;
     // The window shows this client's own outgoing stream instead of a watched one.

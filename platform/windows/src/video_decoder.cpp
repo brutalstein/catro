@@ -729,6 +729,18 @@ struct WindowsH264D3D11Decoder::Impl {
                 stats_.width = width;
                 stats_.height = height;
             }
+            MFVideoArea aperture{};
+            visible_width_ = 0;
+            visible_height_ = 0;
+            if (SUCCEEDED(type->GetBlob(
+                    MF_MT_MINIMUM_DISPLAY_APERTURE,
+                    reinterpret_cast<UINT8*>(&aperture),
+                    sizeof(aperture), nullptr)) &&
+                aperture.OffsetX.value == 0 && aperture.OffsetY.value == 0 &&
+                aperture.Area.cx > 0 && aperture.Area.cy > 0) {
+                visible_width_ = static_cast<std::uint32_t>(aperture.Area.cx);
+                visible_height_ = static_cast<std::uint32_t>(aperture.Area.cy);
+            }
             return std::nullopt;
         }
 
@@ -844,8 +856,12 @@ struct WindowsH264D3D11Decoder::Impl {
             output.sample_lease = std::move(lease);
             output.texture = std::move(texture);
             output.subresource_index = subresource;
-            output.width = description.Width;
-            output.height = description.Height;
+            output.width = visible_width_ != 0
+                               ? std::min(visible_width_, description.Width)
+                               : description.Width;
+            output.height = visible_height_ != 0
+                                ? std::min(visible_height_, description.Height)
+                                : description.Height;
             output.format = description.Format;
             output.pts_100ns =
                 static_cast<std::int64_t>(sample_time);
@@ -872,6 +888,10 @@ struct WindowsH264D3D11Decoder::Impl {
     ComPtr<IMFSample> input_sample_;
     ComPtr<IMFMediaBuffer> input_buffer_;
     std::size_t input_capacity_ = 0;
+    // H.264 codes whole 16-pixel macroblocks; the stream's crop (the display aperture) is the
+    // real picture. 0 means "no aperture reported": use the whole texture.
+    std::uint32_t visible_width_ = 0;
+    std::uint32_t visible_height_ = 0;
 
     bool running_ = false;
     bool apartment_initialized_ = false;

@@ -194,79 +194,6 @@ void ServerView::OnSizeChanged(IInspectable const&, xaml::SizeChangedEventArgs c
     UpdateScreenShareUi();
 }
 
-winrt::Windows::Foundation::IAsyncOperation<bool>
-ServerView::ClaimScreenOwnership() {
-    auto lifetime = get_strong();
-    if (!room_mode_active_) {
-        co_return true;
-    }
-    if (room_runtime_ == nullptr ||
-        room_peer_id_.empty()) {
-        VoiceStateText().Text(
-            L"Screen ownership request failed");
-        co_return false;
-    }
-
-    const auto peer_id = room_peer_id_;
-    auto room =
-        catro_room_runtime_snapshot(
-            room_runtime_);
-    if (room.screen_owner[0] != '\0' &&
-        std::string_view{room.screen_owner} !=
-            peer_id) {
-        VoiceStateText().Text(
-            L"Another participant is sharing");
-        co_return false;
-    }
-
-    if (catro_room_runtime_claim_screen(
-            room_runtime_) != 0) {
-        VoiceStateText().Text(
-            L"Screen ownership request failed");
-        co_return false;
-    }
-    if (std::string_view{room.screen_owner} ==
-        peer_id) {
-        co_return true;
-    }
-
-    UiThread ui_thread;
-    const auto deadline =
-        std::chrono::steady_clock::now() +
-        std::chrono::seconds{3};
-
-    while (std::chrono::steady_clock::now() <
-           deadline) {
-        co_await winrt::resume_after(
-            std::chrono::milliseconds{50});
-        room = catro_room_runtime_snapshot(
-            room_runtime_);
-
-        if (std::string_view{room.screen_owner} ==
-            peer_id) {
-            co_await ui_thread;
-            co_return true;
-        }
-        if (room.screen_owner[0] != '\0') {
-            co_await ui_thread;
-            if (room_mode_active_ &&
-                room_peer_id_ == peer_id) {
-                VoiceStateText().Text(
-                    L"Another participant is sharing");
-            }
-            co_return false;
-        }
-    }
-
-    co_await ui_thread;
-    if (room_mode_active_ &&
-        room_peer_id_ == peer_id) {
-        VoiceStateText().Text(
-            L"Screen ownership request timed out");
-    }
-    co_return false;
-}
-
 winrt::fire_and_forget ServerView::BeginScreenShare() {
     [[maybe_unused]] auto lifetime = get_strong();
     if (workspace_state_.share_screen.availability ==
@@ -800,7 +727,29 @@ void ServerView::OpenStreamWindow(bool fullscreen, bool local) {
             toolbar.Children().Append(leave_button);
         }
 
+        // A fast double-click on a toolbar button must not also flip full screen.
+        toolbar.DoubleTapped([](auto const&, xaml::Input::DoubleTappedRoutedEventArgs const& args) {
+            args.Handled(true);
+        });
         stream_window_root_.Children().Append(toolbar);
+        stream_window_toolbar_ = toolbar;
+        stream_window_idle_timer_ = stream_window_.DispatcherQueue().CreateTimer();
+        stream_window_idle_timer_.Interval(2500ms);
+        stream_window_idle_timer_.IsRepeating(false);
+        stream_window_idle_timer_.Tick([this](auto const&, auto const&) {
+            if (stream_window_fullscreen_ && stream_window_toolbar_) {
+                stream_window_toolbar_.Opacity(0.0);
+            }
+        });
+        stream_window_root_.PointerMoved([this](auto const&, auto const&) {
+            if (stream_window_toolbar_) {
+                stream_window_toolbar_.Opacity(1.0);
+            }
+            if (stream_window_idle_timer_ && stream_window_fullscreen_) {
+                stream_window_idle_timer_.Stop();
+                stream_window_idle_timer_.Start();
+            }
+        });
         stream_window_root_.DoubleTapped(
             [this](auto const&, auto const&) {
                 SetStreamWindowFullscreen(
@@ -822,7 +771,14 @@ void ServerView::OpenStreamWindow(bool fullscreen, bool local) {
             });
 
         stream_window_.Closed(
-            [this](auto const&, auto const&) {
+            [this](auto const& sender, auto const&) {
+                // CloseStreamWindow already let go of this window, and a new one may have taken
+                // its place (switching between your stream and a viewer's): leave that one alone.
+                if (!stream_window_ || sender != stream_window_) {
+                    UpdateScreenShareUi();
+                    ApplyActivityPolicy();
+                    return;
+                }
                 try {
                     if (stream_window_swap_chain_panel_) {
                         auto native =
@@ -838,6 +794,11 @@ void ServerView::OpenStreamWindow(bool fullscreen, bool local) {
                 stream_window_root_ = nullptr;
                 stream_window_mode_button_ = nullptr;
                 stream_window_topmost_button_ = nullptr;
+                if (stream_window_idle_timer_) {
+                    stream_window_idle_timer_.Stop();
+                }
+                stream_window_idle_timer_ = nullptr;
+                stream_window_toolbar_ = nullptr;
                 stream_window_ = nullptr;
                 stream_window_fullscreen_ = false;
                 stream_window_topmost_ = false;
@@ -847,17 +808,25 @@ void ServerView::OpenStreamWindow(bool fullscreen, bool local) {
             });
 
         stream_window_.Content(stream_window_root_);
+        // Esc needs keyboard focus inside the new window, which exists only once it has loaded.
+        stream_window_root_.Loaded([this](auto const&, auto const&) {
+            if (stream_window_mode_button_) {
+                stream_window_mode_button_.Focus(xaml::FocusState::Programmatic);
+            }
+        });
         stream_window_.Activate();
 
         if (!fullscreen) {
             const auto snapshot =
                 screen_runtime_->snapshot();
-            if (snapshot.remote_width != 0 &&
-                snapshot.remote_height != 0) {
+            const auto stream_width = local ? snapshot.encoded_width : snapshot.remote_width;
+            const auto stream_height = local ? snapshot.encoded_height : snapshot.remote_height;
+            if (stream_width != 0 &&
+                stream_height != 0) {
                 const auto initial =
                     fit_viewport(
-                        snapshot.remote_width,
-                        snapshot.remote_height,
+                        stream_width,
+                        stream_height,
                         1280.0,
                         760.0);
                 stream_window_.AppWindow().Resize(
@@ -913,6 +882,15 @@ void ServerView::SetStreamWindowFullscreen(
         }
         if (!fullscreen && stream_window_topmost_) {
             SetStreamWindowAlwaysOnTop(true);
+        }
+        if (stream_window_toolbar_) {
+            stream_window_toolbar_.Opacity(1.0);
+        }
+        if (stream_window_idle_timer_) {
+            stream_window_idle_timer_.Stop();
+            if (fullscreen) {
+                stream_window_idle_timer_.Start();
+            }
         }
         UpdateStreamWindowLayout();
     } catch (...) {
@@ -1045,6 +1023,11 @@ void ServerView::CloseStreamWindow() noexcept {
     stream_window_root_ = nullptr;
     stream_window_mode_button_ = nullptr;
     stream_window_topmost_button_ = nullptr;
+    if (stream_window_idle_timer_) {
+        stream_window_idle_timer_.Stop();
+    }
+    stream_window_idle_timer_ = nullptr;
+    stream_window_toolbar_ = nullptr;
     stream_window_ = nullptr;
     stream_window_fullscreen_ = false;
     stream_window_topmost_ = false;
@@ -1216,7 +1199,9 @@ void ServerView::UpdateScreenShareUi() {
         if (remote_window) {
             RemoteShareHost().Visibility(
                 xaml::Visibility::Collapsed);
-            DetachRemoteSwapChain();
+            if (attached_remote_swap_chain_) {
+                DetachRemoteSwapChain();
+            }
             UpdateStreamWindowLayout();
         } else {
             RemoteShareHost().Visibility(

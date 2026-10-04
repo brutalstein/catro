@@ -69,9 +69,13 @@ public:
     D3D11CompositionVideoPresenter(const D3D11CompositionVideoPresenter&) = delete;
     D3D11CompositionVideoPresenter& operator=(const D3D11CompositionVideoPresenter&) = delete;
 
+    // visible_width/visible_height crop the top-left picture out of a padded decoder texture;
+    // 0 presents the whole texture.
     [[nodiscard]] std::optional<VideoPresenterError> present(
         ID3D11Texture2D& source,
-        std::uint32_t subresource_index = 0);
+        std::uint32_t subresource_index = 0,
+        std::uint32_t visible_width = 0,
+        std::uint32_t visible_height = 0);
 
     void reset() noexcept;
 

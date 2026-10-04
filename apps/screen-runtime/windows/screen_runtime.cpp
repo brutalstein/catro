@@ -182,9 +182,11 @@ struct WindowsScreenShareRuntime::Impl {
     public:
         RemoteViewer(Impl& owner, std::size_t max_access_unit_bytes)
             : owner_(owner),
+              // Up to the largest share a sender offers (a 4K Source), so a full-screen viewer
+              // sees every pixel of a 1440p stream. The presenter never upscales.
               presenter_(VideoPresenterConfig{
-                  .max_width = 1920,
-                  .max_height = 1080,
+                  .max_width = 3840,
+                  .max_height = 2160,
                   .frame_rate = 60,
               }) {
             decoder_config_.max_access_unit_bytes =
@@ -243,7 +245,9 @@ struct WindowsScreenShareRuntime::Impl {
             if (const auto failure =
                     presenter_.present(
                         *decoded.texture.Get(),
-                        decoded.subresource_index)) {
+                        decoded.subresource_index,
+                        decoded.width,
+                        decoded.height)) {
                 trace_event("receiver-present-error");
                 return ScreenShareError{
                     ScreenShareErrorCode::remote_present_failed,
