@@ -335,6 +335,15 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 			return nil, errors.New("directory server exceeds member bounds")
 		}
 
+		// Before invite acceptance kept existing roles, an owner who accepted an invite to their
+		// own server was rewritten as a member. Restore the role so such a directory still opens.
+		if demoted, exists := server.Members[server.OwnerID]; exists &&
+			demoted.UserID == server.OwnerID && demoted.Role == "member" {
+			demoted.Role = "owner"
+			server.Members[server.OwnerID] = demoted
+			migrationDirty = true
+		}
+
 		owner, ownerExists := server.Members[server.OwnerID]
 		if !ownerExists ||
 			owner.UserID != server.OwnerID ||
@@ -1140,8 +1149,13 @@ func (d *directory) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 	if server.Members == nil {
 		server.Members = make(map[string]directoryMember)
 	}
-	if _, alreadyMember := server.Members[user.ID]; !alreadyMember &&
-		len(server.Members) >= maxDirectoryMembers {
+	// A member, or the owner, opening an invite to a server they are already in keeps their
+	// role, and the invite stays usable for the person it was meant for.
+	if _, alreadyMember := server.Members[user.ID]; alreadyMember {
+		writeAPIJSON(w, http.StatusOK, descriptorFor(server, user.ID))
+		return
+	}
+	if len(server.Members) >= maxDirectoryMembers {
 		writeAPIError(w, http.StatusConflict, "server member capacity reached")
 		return
 	}

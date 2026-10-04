@@ -1853,3 +1853,102 @@ func TestOpenDirectoryRejectsApprovedJoinRequestWithoutMembership(t *testing.T) 
 		t.Fatal("approved request without membership must be rejected")
 	}
 }
+
+func TestOwnerAcceptingOwnInviteStaysOwner(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "directory.json")
+	secret := []byte(strings.Repeat("d", 32))
+	d, err := openDirectory(path, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerToken := registerTestUser(t, d, "owner-1", testCredential(0x11))
+	friendToken := registerTestUser(t, d, "friend-1", testCredential(0x22))
+	sync := func() int {
+		response := httptest.NewRecorder()
+		d.handleServerSync(response, authenticatedRequest(
+			http.MethodPost, "/v1/servers/sync", ownerToken,
+			map[string]any{
+				"server_id":        "server-1",
+				"name":             "Test Server",
+				"text_channel_id":  "text-1",
+				"voice_channel_id": "voice-1",
+			}))
+		return response.Code
+	}
+	if code := sync(); code != http.StatusCreated {
+		t.Fatalf("sync server: %d", code)
+	}
+	inviteResponse := httptest.NewRecorder()
+	d.handleInvites(inviteResponse, authenticatedRequest(
+		http.MethodPost, "/v1/invites", ownerToken,
+		map[string]any{"server_id": "server-1"}))
+	var invite struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(inviteResponse.Body.Bytes(), &invite); err != nil || invite.Code == "" {
+		t.Fatalf("create invite: %d %s", inviteResponse.Code, inviteResponse.Body.String())
+	}
+
+	// The owner pastes their own invite: nothing changes and the invite stays usable.
+	ownResponse := httptest.NewRecorder()
+	d.handleInviteAccept(ownResponse, authenticatedRequest(
+		http.MethodPost, "/v1/invites/accept", ownerToken,
+		map[string]any{"code": invite.Code}))
+	if ownResponse.Code != http.StatusOK {
+		t.Fatalf("owner accept: %d %s", ownResponse.Code, ownResponse.Body.String())
+	}
+	if role := d.state.Servers["server-1"].Members["owner-1"].Role; role != "owner" {
+		t.Fatalf("owner role after own invite = %q", role)
+	}
+	if code := sync(); code != http.StatusOK {
+		t.Fatalf("owner sync after own invite: %d", code)
+	}
+	friendResponse := httptest.NewRecorder()
+	d.handleInviteAccept(friendResponse, authenticatedRequest(
+		http.MethodPost, "/v1/invites/accept", friendToken,
+		map[string]any{"code": invite.Code}))
+	if friendResponse.Code != http.StatusOK {
+		t.Fatalf("friend accept after owner: %d %s", friendResponse.Code, friendResponse.Body.String())
+	}
+}
+
+func TestOpenDirectoryRestoresDemotedOwner(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "directory.json")
+	secret := []byte(strings.Repeat("d", 32))
+	d, err := openDirectory(path, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerToken := registerTestUser(t, d, "owner-1", testCredential(0x11))
+	response := httptest.NewRecorder()
+	d.handleServerSync(response, authenticatedRequest(
+		http.MethodPost, "/v1/servers/sync", ownerToken,
+		map[string]any{
+			"server_id":        "server-1",
+			"name":             "Test Server",
+			"text_channel_id":  "text-1",
+			"voice_channel_id": "voice-1",
+		}))
+	if response.Code != http.StatusCreated {
+		t.Fatalf("sync server: %d", response.Code)
+	}
+	// The state an owner accepting their own invite left behind before the fix.
+	d.mu.Lock()
+	d.state.Servers["server-1"].Members["owner-1"] = directoryMember{UserID: "owner-1", Role: "member"}
+	if err := d.persistLocked(); err != nil {
+		t.Fatal(err)
+	}
+	d.mu.Unlock()
+
+	reopened, err := openDirectory(path, secret)
+	if err != nil {
+		t.Fatalf("reopen demoted directory: %v", err)
+	}
+	if role := reopened.state.Servers["server-1"].Members["owner-1"].Role; role != "owner" {
+		t.Fatalf("restored owner role = %q", role)
+	}
+	again, err := openDirectory(path, secret)
+	if err != nil || again.state.Servers["server-1"].Members["owner-1"].Role != "owner" {
+		t.Fatalf("restored role was not persisted: %v", err)
+	}
+}
