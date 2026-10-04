@@ -5,6 +5,7 @@
 #include "Settings/Performance.hpp"
 #include "Server/SharePicker.hpp"
 #include "SharePresets.hpp"
+#include "Server/StreamViewport.hpp"
 
 #include <catro/platform/windows/screen_capture.hpp>
 #include <catro/screen_runtime.hpp>
@@ -55,53 +56,8 @@ namespace controls = Microsoft::UI::Xaml::Controls;
 using namespace std::chrono_literals;
 using server_view_detail::direct_video_config;
 using server_view_detail::direct_voice_config;
-
-struct ViewportSize {
-    double width = 0.0;
-    double height = 0.0;
-};
-
-[[nodiscard]] ViewportSize fit_viewport(
-    std::uint32_t source_width,
-    std::uint32_t source_height,
-    double max_width,
-    double max_height) noexcept {
-    if (source_width == 0 || source_height == 0 ||
-        !std::isfinite(max_width) || !std::isfinite(max_height) ||
-        max_width <= 0.0 || max_height <= 0.0) {
-        return {};
-    }
-    const auto scale = std::min(
-        max_width / static_cast<double>(source_width),
-        max_height / static_cast<double>(source_height));
-    if (!std::isfinite(scale) || scale <= 0.0) {
-        return {};
-    }
-    return {
-        std::max(2.0, static_cast<double>(source_width) * scale),
-        std::max(2.0, static_cast<double>(source_height) * scale),
-    };
-}
-
-// The self-preview swap chain stays at most 640x360 to save GPU work, while its viewport grows
-// to 960x720. A SwapChainPanel shows one buffer pixel per view pixel, so the compositor scales
-// the buffer up to fill the viewport; the scale itself costs no rendering.
-void fit_swap_chain(IDXGISwapChain1* swap_chain, double width, double height) noexcept {
-    DXGI_SWAP_CHAIN_DESC1 desc{};
-    if (swap_chain == nullptr || !(width > 0.0) || !(height > 0.0) ||
-        FAILED(swap_chain->GetDesc1(&desc)) || desc.Width == 0 || desc.Height == 0) {
-        return;
-    }
-    ::Microsoft::WRL::ComPtr<IDXGISwapChain2> scalable;
-    if (FAILED(swap_chain->QueryInterface(IID_PPV_ARGS(&scalable)))) {
-        return;
-    }
-    const auto scale = static_cast<float>(std::min(
-        width / static_cast<double>(desc.Width),
-        height / static_cast<double>(desc.Height)));
-    const DXGI_MATRIX_3X2_F matrix{scale, 0.0f, 0.0f, scale, 0.0f, 0.0f};
-    (void)scalable->SetMatrixTransform(&matrix);
-}
+using stream_viewport::fit_swap_chain;
+using stream_viewport::fit_viewport;
 
 bool chromium_window(
     const catro::platform::windows::CaptureSource& source) noexcept {
@@ -114,6 +70,22 @@ bool chromium_window(
            source.process_name == "chromium.exe" ||
            source.process_name == "opera.exe" ||
            source.process_name == "vivaldi.exe";
+}
+
+// Keeps every Catro window out of screen capture. A game share falls back to cropping
+// the monitor, so without this an overlapping Catro window would be streamed too.
+void exclude_catro_from_capture(bool exclude) noexcept {
+    EnumWindows(
+        [](HWND window, LPARAM value) -> BOOL {
+            DWORD process = 0;
+            GetWindowThreadProcessId(window, &process);
+            if (process == GetCurrentProcessId()) {
+                (void)SetWindowDisplayAffinity(
+                    window, value != 0 ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+            }
+            return TRUE;
+        },
+        exclude ? 1 : 0);
 }
 
 } // namespace
@@ -155,42 +127,6 @@ void ServerView::OnLeaveStream(
     screen_runtime_->set_remote_viewing_enabled(false);
     CloseStreamWindow();
     DetachRemoteSwapChain();
-    UpdateScreenShareUi();
-}
-
-void ServerView::OnPopOutStream(
-    IInspectable const&, xaml::RoutedEventArgs const&) {
-    OpenStreamWindow(false);
-}
-
-void ServerView::OnFullScreenStream(
-    IInspectable const&, xaml::RoutedEventArgs const&) {
-    OpenStreamWindow(true);
-}
-
-void ServerView::OnRemoteStreamDoubleTapped(
-    IInspectable const&, xaml::Input::DoubleTappedRoutedEventArgs const&) {
-    OpenStreamWindow(true);
-}
-
-void ServerView::OnLocalStreamDoubleTapped(
-    IInspectable const&, xaml::Input::DoubleTappedRoutedEventArgs const&) {
-    OpenStreamWindow(true, true);
-}
-
-void ServerView::OnLocalFullScreen(
-    IInspectable const&, xaml::RoutedEventArgs const&) {
-    OpenStreamWindow(true, true);
-}
-
-void ServerView::OnSizeChanged(IInspectable const&, xaml::SizeChangedEventArgs const& args) {
-    const auto width = args.NewSize().Width;
-    const bool show_members = width >= 920.0;
-    MembersColumn().Width(xaml::GridLengthHelper::FromPixels(show_members ? 216.0 : 0.0));
-    MembersPane().Visibility(show_members ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
-    ChannelsColumn().Width(xaml::GridLengthHelper::FromPixels(width >= 760.0 ? 240.0 : 196.0));
-    // The same action remains available in the voice control bar on compact windows.
-    ShareScreenButton().Visibility(width >= 760.0 ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
     UpdateScreenShareUi();
 }
 
@@ -301,13 +237,17 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
                 screen_height = source.height;
             }
         }
-        const auto qualities_for = [gpu_strong, screen_width, screen_height](
+        const auto qualities_for = [gpu_strong, screen_width, screen_height,
+                                    encoder_max_height = encoder_max_height_](
                                        const catro::platform::windows::CaptureSource& source) {
-            return source.kind == CaptureSourceKind::display
-                       ? catro::shell::share_qualities(source.width, source.height, gpu_strong)
-                       : catro::shell::share_qualities(std::max(source.width, screen_width),
-                                                       std::max(source.height, screen_height),
-                                                       gpu_strong);
+            auto choice =
+                source.kind == CaptureSourceKind::display
+                    ? catro::shell::share_qualities(source.width, source.height, gpu_strong)
+                    : catro::shell::share_qualities(std::max(source.width, screen_width),
+                                                    std::max(source.height, screen_height),
+                                                    gpu_strong);
+            catro::shell::cap_share_qualities(choice, encoder_max_height);
+            return choice;
         };
         controls::StackPanel quality_section;
         quality_section.Spacing(6);
@@ -533,6 +473,12 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
             config.ssrc = 1;
         }
 
+        // Sharing a whole screen shows Catro like any other window; any narrower
+        // source must never show Catro itself.
+        share_hides_catro_ =
+            selected_source.kind !=
+            catro::platform::windows::CaptureSourceKind::display;
+
         ownership_claimed =
             co_await ClaimScreenOwnership();
         if (!ownership_claimed) {
@@ -587,455 +533,6 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         workspace_state_.share_screen.fail(
             "Screen share UI error");
         UpdateVoiceUi();
-    }
-}
-
-void ServerView::OpenStreamWindow(bool fullscreen, bool local) {
-    if (!screen_runtime_) {
-        return;
-    }
-    const auto opening = screen_runtime_->snapshot();
-    const bool sharing =
-        opening.state == catro::screen::ScreenShareState::starting ||
-        opening.state == catro::screen::ScreenShareState::sharing;
-    if (local ? !sharing : !opening.remote_viewing) {
-        return;
-    }
-
-    if (stream_window_ && stream_window_local_ != local) {
-        CloseStreamWindow();
-    }
-    if (stream_window_) {
-        SetStreamWindowFullscreen(fullscreen);
-        stream_window_.Activate();
-        UpdateStreamWindowLayout();
-        return;
-    }
-
-    try {
-        namespace media = Microsoft::UI::Xaml::Media;
-
-        if (local) {
-            DetachPreviewSwapChain();
-        } else {
-            DetachRemoteSwapChain();
-        }
-
-        stream_window_local_ = local;
-        stream_window_ = xaml::Window{};
-        stream_window_.Title(local ? L"Catro — Your Stream" : L"Catro — Live Stream");
-
-        stream_window_root_ = controls::Grid{};
-        stream_window_root_.Background(
-            media::SolidColorBrush(
-                Windows::UI::Color{255, 0, 0, 0}));
-
-        stream_window_viewport_ = controls::Border{};
-        stream_window_viewport_.Background(
-            media::SolidColorBrush(
-                Windows::UI::Color{255, 0, 0, 0}));
-        stream_window_viewport_.HorizontalAlignment(
-            xaml::HorizontalAlignment::Center);
-        stream_window_viewport_.VerticalAlignment(
-            xaml::VerticalAlignment::Center);
-
-        stream_window_swap_chain_panel_ =
-            controls::SwapChainPanel{};
-        stream_window_swap_chain_panel_.HorizontalAlignment(
-            xaml::HorizontalAlignment::Stretch);
-        stream_window_swap_chain_panel_.VerticalAlignment(
-            xaml::VerticalAlignment::Stretch);
-        stream_window_viewport_.Child(
-            stream_window_swap_chain_panel_);
-        stream_window_root_.Children().Append(
-            stream_window_viewport_);
-
-        controls::StackPanel toolbar;
-        toolbar.Orientation(
-            controls::Orientation::Horizontal);
-        toolbar.Spacing(8);
-        toolbar.Margin(xaml::Thickness{14.0});
-        toolbar.HorizontalAlignment(
-            xaml::HorizontalAlignment::Right);
-        toolbar.VerticalAlignment(
-            xaml::VerticalAlignment::Top);
-
-        controls::Border live_badge;
-        live_badge.Padding(xaml::Thickness{9.0, 5.0, 9.0, 5.0});
-        live_badge.CornerRadius(xaml::CornerRadius{7.0});
-        live_badge.Background(
-            media::SolidColorBrush(
-                Windows::UI::Color{220, 35, 35, 35}));
-        controls::TextBlock live_text;
-        live_text.Text(L"LIVE");
-        live_text.FontSize(10.0);
-        live_text.FontWeight(
-            Windows::UI::Text::FontWeights::SemiBold());
-        live_badge.Child(live_text);
-        toolbar.Children().Append(live_badge);
-
-        stream_window_mode_button_ = controls::Button{};
-        stream_window_mode_button_.Padding(
-            xaml::Thickness{12.0, 6.0, 12.0, 6.0});
-        stream_window_mode_button_.Click(
-            [this](auto const&, auto const&) {
-                SetStreamWindowFullscreen(
-                    !stream_window_fullscreen_);
-            });
-        toolbar.Children().Append(
-            stream_window_mode_button_);
-
-        stream_window_topmost_button_ =
-            controls::Button{};
-        stream_window_topmost_button_.Content(
-            box_value(hstring{L"Stay On Top"}));
-        stream_window_topmost_button_.Padding(
-            xaml::Thickness{12.0, 6.0, 12.0, 6.0});
-        stream_window_topmost_button_.Click(
-            [this](auto const&, auto const&) {
-                SetStreamWindowAlwaysOnTop(
-                    !stream_window_topmost_);
-            });
-        toolbar.Children().Append(
-            stream_window_topmost_button_);
-
-        controls::Button back_button;
-        back_button.Content(box_value(hstring{L"Back to Catro"}));
-        back_button.Padding(
-            xaml::Thickness{12.0, 6.0, 12.0, 6.0});
-        back_button.Click(
-            [this](auto const&, auto const&) {
-                CloseStreamWindow();
-                UpdateScreenShareUi();
-            });
-        toolbar.Children().Append(back_button);
-
-        controls::Button leave_button;
-        leave_button.Content(box_value(hstring{L"Leave Stream"}));
-        leave_button.Padding(
-            xaml::Thickness{12.0, 6.0, 12.0, 6.0});
-        leave_button.Click(
-            [this](auto const&, auto const&) {
-                if (screen_runtime_) {
-                    screen_runtime_->set_remote_viewing_enabled(
-                        false);
-                }
-                CloseStreamWindow();
-                UpdateScreenShareUi();
-            });
-        if (!local) {
-            toolbar.Children().Append(leave_button);
-        }
-
-        // A fast double-click on a toolbar button must not also flip full screen.
-        toolbar.DoubleTapped([](auto const&, xaml::Input::DoubleTappedRoutedEventArgs const& args) {
-            args.Handled(true);
-        });
-        stream_window_root_.Children().Append(toolbar);
-        stream_window_toolbar_ = toolbar;
-        stream_window_idle_timer_ = stream_window_.DispatcherQueue().CreateTimer();
-        stream_window_idle_timer_.Interval(2500ms);
-        stream_window_idle_timer_.IsRepeating(false);
-        stream_window_idle_timer_.Tick([this](auto const&, auto const&) {
-            if (stream_window_fullscreen_ && stream_window_toolbar_) {
-                stream_window_toolbar_.Opacity(0.0);
-            }
-        });
-        stream_window_root_.PointerMoved([this](auto const&, auto const&) {
-            if (stream_window_toolbar_) {
-                stream_window_toolbar_.Opacity(1.0);
-            }
-            if (stream_window_idle_timer_ && stream_window_fullscreen_) {
-                stream_window_idle_timer_.Stop();
-                stream_window_idle_timer_.Start();
-            }
-        });
-        stream_window_root_.DoubleTapped(
-            [this](auto const&, auto const&) {
-                SetStreamWindowFullscreen(
-                    !stream_window_fullscreen_);
-            });
-        xaml::Input::KeyboardAccelerator escape;
-        escape.Key(Windows::System::VirtualKey::Escape);
-        escape.Invoked(
-            [this](auto const&, xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args) {
-                args.Handled(true);
-                if (stream_window_fullscreen_) {
-                    SetStreamWindowFullscreen(false);
-                }
-            });
-        stream_window_root_.KeyboardAccelerators().Append(escape);
-        stream_window_root_.SizeChanged(
-            [this](auto const&, auto const&) {
-                UpdateStreamWindowLayout();
-            });
-
-        stream_window_.Closed(
-            [this](auto const& sender, auto const&) {
-                // CloseStreamWindow already let go of this window, and a new one may have taken
-                // its place (switching between your stream and a viewer's): leave that one alone.
-                if (!stream_window_ || sender != stream_window_) {
-                    UpdateScreenShareUi();
-                    ApplyActivityPolicy();
-                    return;
-                }
-                try {
-                    if (stream_window_swap_chain_panel_) {
-                        auto native =
-                            stream_window_swap_chain_panel_
-                                .as<ISwapChainPanelNative>();
-                        (void)native->SetSwapChain(nullptr);
-                    }
-                } catch (...) {
-                }
-                stream_window_swap_chain_.Reset();
-                stream_window_swap_chain_panel_ = nullptr;
-                stream_window_viewport_ = nullptr;
-                stream_window_root_ = nullptr;
-                stream_window_mode_button_ = nullptr;
-                stream_window_topmost_button_ = nullptr;
-                if (stream_window_idle_timer_) {
-                    stream_window_idle_timer_.Stop();
-                }
-                stream_window_idle_timer_ = nullptr;
-                stream_window_toolbar_ = nullptr;
-                stream_window_ = nullptr;
-                stream_window_fullscreen_ = false;
-                stream_window_topmost_ = false;
-                stream_window_local_ = false;
-                UpdateScreenShareUi();
-                ApplyActivityPolicy();
-            });
-
-        stream_window_.Content(stream_window_root_);
-        // Esc needs keyboard focus inside the new window, which exists only once it has loaded.
-        stream_window_root_.Loaded([this](auto const&, auto const&) {
-            if (stream_window_mode_button_) {
-                stream_window_mode_button_.Focus(xaml::FocusState::Programmatic);
-            }
-        });
-        stream_window_.Activate();
-
-        if (!fullscreen) {
-            const auto snapshot =
-                screen_runtime_->snapshot();
-            const auto stream_width = local ? snapshot.encoded_width : snapshot.remote_width;
-            const auto stream_height = local ? snapshot.encoded_height : snapshot.remote_height;
-            if (stream_width != 0 &&
-                stream_height != 0) {
-                const auto initial =
-                    fit_viewport(
-                        stream_width,
-                        stream_height,
-                        1280.0,
-                        760.0);
-                stream_window_.AppWindow().Resize(
-                    {
-                        static_cast<std::int32_t>(
-                            std::max(
-                                640.0,
-                                initial.width)),
-                        static_cast<std::int32_t>(
-                            std::max(
-                                420.0,
-                                initial.height + 40.0)),
-                    });
-            } else {
-                stream_window_.AppWindow().Resize(
-                    {960, 640});
-            }
-        }
-
-        SetStreamWindowFullscreen(fullscreen);
-        ApplyActivityPolicy();
-        UpdateStreamWindowLayout();
-    } catch (...) {
-        CloseStreamWindow();
-    }
-}
-
-void ServerView::SetStreamWindowFullscreen(
-    bool fullscreen) {
-    if (!stream_window_) {
-        return;
-    }
-
-    try {
-        const auto kind =
-            fullscreen
-                ? Microsoft::UI::Windowing::
-                      AppWindowPresenterKind::FullScreen
-                : Microsoft::UI::Windowing::
-                      AppWindowPresenterKind::Overlapped;
-        stream_window_.AppWindow().SetPresenter(kind);
-        stream_window_fullscreen_ = fullscreen;
-        if (stream_window_mode_button_) {
-            stream_window_mode_button_.Content(
-                box_value(
-                    fullscreen
-                        ? hstring{L"Exit Full Screen"}
-                        : hstring{L"Full Screen"}));
-        }
-        if (stream_window_topmost_button_) {
-            stream_window_topmost_button_.IsEnabled(
-                !fullscreen);
-        }
-        if (!fullscreen && stream_window_topmost_) {
-            SetStreamWindowAlwaysOnTop(true);
-        }
-        if (stream_window_toolbar_) {
-            stream_window_toolbar_.Opacity(1.0);
-        }
-        if (stream_window_idle_timer_) {
-            stream_window_idle_timer_.Stop();
-            if (fullscreen) {
-                stream_window_idle_timer_.Start();
-            }
-        }
-        UpdateStreamWindowLayout();
-    } catch (...) {
-    }
-}
-
-void ServerView::SetStreamWindowAlwaysOnTop(
-    bool enabled) {
-    if (!stream_window_ ||
-        stream_window_fullscreen_) {
-        return;
-    }
-
-    try {
-        const auto presenter =
-            stream_window_.AppWindow().Presenter();
-        const auto overlapped =
-            presenter.try_as<
-                Microsoft::UI::Windowing::
-                    OverlappedPresenter>();
-        if (!overlapped) {
-            return;
-        }
-        overlapped.IsAlwaysOnTop(enabled);
-        stream_window_topmost_ = enabled;
-        if (stream_window_topmost_button_) {
-            stream_window_topmost_button_.Content(
-                box_value(
-                    enabled
-                        ? hstring{L"Remove From Top"}
-                        : hstring{L"Stay On Top"}));
-        }
-    } catch (...) {
-    }
-}
-
-void ServerView::UpdateStreamWindowLayout() {
-    if (!stream_window_ ||
-        !stream_window_root_ ||
-        !stream_window_viewport_ ||
-        !stream_window_swap_chain_panel_ ||
-        !screen_runtime_) {
-        return;
-    }
-
-    const auto snapshot = screen_runtime_->snapshot();
-    const bool sharing =
-        snapshot.state == catro::screen::ScreenShareState::starting ||
-        snapshot.state == catro::screen::ScreenShareState::sharing;
-    if (stream_window_local_ ? !sharing : !snapshot.remote_viewing) {
-        CloseStreamWindow();
-        return;
-    }
-
-    const auto source_width =
-        stream_window_local_
-            ? (snapshot.encoded_width != 0 ? snapshot.encoded_width : snapshot.source_width)
-            : snapshot.remote_width;
-    const auto source_height =
-        stream_window_local_
-            ? (snapshot.encoded_height != 0 ? snapshot.encoded_height : snapshot.source_height)
-            : snapshot.remote_height;
-    if (source_width == 0 || source_height == 0) {
-        stream_window_viewport_.Visibility(
-            xaml::Visibility::Collapsed);
-        return;
-    }
-    stream_window_viewport_.Visibility(
-        xaml::Visibility::Visible);
-    const auto available_width =
-        std::max(2.0, stream_window_root_.ActualWidth());
-    const auto available_height =
-        std::max(
-            2.0,
-            stream_window_root_.ActualHeight());
-    const auto viewport =
-        fit_viewport(
-            source_width,
-            source_height,
-            available_width,
-            available_height);
-    if (viewport.width > 0.0 &&
-        viewport.height > 0.0) {
-        stream_window_viewport_.Width(viewport.width);
-        stream_window_viewport_.Height(viewport.height);
-    }
-
-    const auto swap =
-        stream_window_local_
-            ? screen_runtime_->preview_swap_chain()
-            : screen_runtime_->remote_swap_chain();
-    if (swap &&
-        stream_window_swap_chain_.Get() != swap.Get()) {
-        try {
-            auto native =
-                stream_window_swap_chain_panel_
-                    .as<ISwapChainPanelNative>();
-            if (SUCCEEDED(
-                    native->SetSwapChain(swap.Get()))) {
-                stream_window_swap_chain_ = swap;
-            }
-        } catch (...) {
-        }
-    }
-    fit_swap_chain(
-        stream_window_swap_chain_.Get(),
-        viewport.width,
-        viewport.height);
-}
-
-void ServerView::CloseStreamWindow() noexcept {
-    if (!stream_window_) {
-        return;
-    }
-
-    auto window = stream_window_;
-    try {
-        if (stream_window_swap_chain_panel_) {
-            auto native =
-                stream_window_swap_chain_panel_
-                    .as<ISwapChainPanelNative>();
-            (void)native->SetSwapChain(nullptr);
-        }
-    } catch (...) {
-    }
-
-    stream_window_swap_chain_.Reset();
-    stream_window_swap_chain_panel_ = nullptr;
-    stream_window_viewport_ = nullptr;
-    stream_window_root_ = nullptr;
-    stream_window_mode_button_ = nullptr;
-    stream_window_topmost_button_ = nullptr;
-    if (stream_window_idle_timer_) {
-        stream_window_idle_timer_.Stop();
-    }
-    stream_window_idle_timer_ = nullptr;
-    stream_window_toolbar_ = nullptr;
-    stream_window_ = nullptr;
-    stream_window_fullscreen_ = false;
-    stream_window_topmost_ = false;
-    stream_window_local_ = false;
-
-    try {
-        window.Close();
-    } catch (...) {
     }
 }
 
@@ -1097,6 +594,11 @@ void ServerView::UpdateScreenShareUi() {
     const bool local_active =
         snapshot.state == catro::screen::ScreenShareState::starting ||
         snapshot.state == catro::screen::ScreenShareState::sharing;
+    const bool hide_catro = local_active && share_hides_catro_;
+    if (hide_catro != catro_hidden_from_capture_) {
+        exclude_catro_from_capture(hide_catro);
+        catro_hidden_from_capture_ = hide_catro;
+    }
     const bool remote_available = snapshot.remote_available;
     const bool remote_viewing = snapshot.remote_viewing;
     const bool remote_active = snapshot.remote_active;
@@ -1130,11 +632,20 @@ void ServerView::UpdateScreenShareUi() {
     ShareScreenButton().IsEnabled(can_share);
     ShareScreenIconButton().IsEnabled(can_share);
 
-    if (stream_window_ && !(stream_window_local_ ? local_active : remote_viewing)) {
+    if (stream_window_ && !remote_viewing) {
         CloseStreamWindow();
     }
-    const bool remote_window = stream_window_ && !stream_window_local_;
-    const bool local_window = stream_window_ && stream_window_local_;
+    if (stage_active_ && !(stage_local_ ? local_active : remote_viewing)) {
+        SetStage(false, false); // updates this view again
+        return;
+    }
+    const bool remote_window = static_cast<bool>(stream_window_);
+    const bool remote_stage = stage_active_ && !stage_local_;
+    const bool local_stage = stage_local_;
+    const auto stage_border = xaml::Thickness{stage_active_ ? 0.0 : 1.0};
+    const auto stage_corner = xaml::CornerRadius{stage_active_ ? 0.0 : 14.0};
+    // A framed viewport draws its stream inside a 1-pixel border.
+    const double frame = stage_active_ ? 0.0 : 2.0;
 
     const auto panel_width = VoicePanel().ActualWidth();
     const auto panel_height = VoicePanel().ActualHeight();
@@ -1145,11 +656,13 @@ void ServerView::UpdateScreenShareUi() {
     // source aspect ratio while presentation scales independently from the encoder's no-upscale
     // policy.
     const auto remote_max_stream_width =
-        panel_width > 80.0
+        stage_active_ && panel_width > 2.0 ? panel_width
+        : panel_width > 80.0
             ? std::max(160.0, panel_width - 44.0)
             : 720.0;
     const auto remote_max_stream_height =
-        panel_height > 140.0
+        stage_active_ && panel_height > 2.0 ? panel_height
+        : panel_height > 140.0
             ? std::max(120.0, panel_height - 120.0)
             : 405.0;
 
@@ -1191,22 +704,27 @@ void ServerView::UpdateScreenShareUi() {
             : xaml::Visibility::Visible);
 
     RemoteStreamInvite().Visibility(
-        remote_available && !remote_viewing
+        remote_available && !remote_viewing && !local_stage
             ? xaml::Visibility::Visible
             : xaml::Visibility::Collapsed);
 
     if (remote_viewing) {
-        if (remote_window) {
+        const bool remote_inline = !remote_window && !local_stage;
+        if (!remote_inline) {
             RemoteShareHost().Visibility(
                 xaml::Visibility::Collapsed);
             if (attached_remote_swap_chain_) {
                 DetachRemoteSwapChain();
             }
-            UpdateStreamWindowLayout();
         } else {
             RemoteShareHost().Visibility(
                 xaml::Visibility::Visible);
         }
+        RemoteShareHost().Margin(xaml::Thickness{remote_stage ? 0.0 : 22.0});
+        RemoteShareViewport().BorderThickness(stage_border);
+        RemoteShareViewport().CornerRadius(stage_corner);
+        RemoteShareMetaText().Visibility(
+            remote_stage ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
 
         const auto remote_size =
             fit_viewport(
@@ -1228,7 +746,7 @@ void ServerView::UpdateScreenShareUi() {
                 remote_size.height);
         }
 
-        if (!remote_window) {
+        if (remote_inline) {
             const auto remote_swap =
                 screen_runtime_->remote_swap_chain();
             if (remote_swap &&
@@ -1248,11 +766,10 @@ void ServerView::UpdateScreenShareUi() {
                 }
             }
             if (have_remote_geometry) {
-                // Inside the viewport's 1-pixel border.
                 fit_swap_chain(
                     attached_remote_swap_chain_.Get(),
-                    remote_size.width - 2.0,
-                    remote_size.height - 2.0);
+                    remote_size.width - frame,
+                    remote_size.height - frame);
             }
         }
 
@@ -1280,12 +797,16 @@ void ServerView::UpdateScreenShareUi() {
         RemoteShareHost().Visibility(xaml::Visibility::Collapsed);
     }
 
-    if (local_active) {
+    if (local_active && !remote_stage) {
         SharePreviewHost().Visibility(xaml::Visibility::Visible);
-        // While the full-screen window shows the preview, the inline box steps aside.
-        const bool inline_preview = local_preview_enabled_ && !local_window;
+        const bool inline_preview = local_preview_enabled_;
         LocalShareViewport().Visibility(inline_preview ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
-        LocalPreviewPausedHint().Visibility(local_preview_enabled_ ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
+        LocalPreviewPausedHint().Visibility(
+            local_preview_enabled_ || local_stage ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
+        LocalShareControls().Visibility(
+            local_stage ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
+        LocalShareViewport().BorderThickness(stage_border);
+        LocalShareViewport().CornerRadius(stage_corner);
 
         const auto local_swap =
             inline_preview ? screen_runtime_->preview_swap_chain() : nullptr;
@@ -1308,6 +829,11 @@ void ServerView::UpdateScreenShareUi() {
                 ? hstring{L"Starting…"}
                 : to_hstring(snapshot.source_title));
 
+        if (snapshot.quality_reduced && snapshot.encoded_height != 0 &&
+            (encoder_max_height_ == 0 || snapshot.encoded_height < encoder_max_height_)) {
+            // Remember what this GPU's encoder managed so the picker stops offering more.
+            encoder_max_height_ = snapshot.encoded_height;
+        }
         if (snapshot.frames_sent > 0 && snapshot.encoded_width != 0 &&
             snapshot.encoded_height != 0) {
             std::wstring meta =
@@ -1315,6 +841,9 @@ void ServerView::UpdateScreenShareUi() {
             meta += L"×";
             meta += std::to_wstring(snapshot.encoded_height);
             meta += L"  ·  SENDING";
+            if (snapshot.quality_reduced) {
+                meta += L"  ·  LOWERED TO FIT YOUR GPU";
+            }
             if (snapshot.stream_audio_active) {
                 meta += L"  ·  AUDIO";
             } else if (
@@ -1340,7 +869,18 @@ void ServerView::UpdateScreenShareUi() {
                        ? snapshot.source_height
                        : 720U);
 
-        if (remote_viewing) {
+        if (local_stage) {
+            const auto local_size = fit_viewport(
+                local_source_width, local_source_height, panel_width, panel_height);
+            if (local_size.width > 0.0 && local_size.height > 0.0) {
+                LocalShareViewport().Width(local_size.width);
+                LocalShareViewport().Height(local_size.height);
+            }
+            SharePreviewHost().HorizontalAlignment(xaml::HorizontalAlignment::Center);
+            SharePreviewHost().VerticalAlignment(xaml::VerticalAlignment::Center);
+            SharePreviewHost().Margin(xaml::Thickness{0.0});
+            Microsoft::UI::Xaml::Controls::Canvas::SetZIndex(SharePreviewHost(), 10);
+        } else if (remote_viewing) {
             const auto local_size =
                 fit_viewport(
                     local_source_width,
@@ -1382,13 +922,13 @@ void ServerView::UpdateScreenShareUi() {
                 SharePreviewHost(), 0);
         }
         if (inline_preview) {
-            // Inside the viewport's 1-pixel border.
             fit_swap_chain(
                 attached_preview_swap_chain_.Get(),
-                LocalShareViewport().Width() - 2.0,
-                LocalShareViewport().Height() - 2.0);
+                LocalShareViewport().Width() - frame,
+                LocalShareViewport().Height() - frame);
         }
     } else {
+        // Nothing to show, or a watched stream fills Catro on top of your own.
         DetachPreviewSwapChain();
         SharePreviewHost().Visibility(xaml::Visibility::Collapsed);
     }

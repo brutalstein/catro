@@ -52,7 +52,7 @@ endif()
 target_link_libraries(catro_platform_windows
     PUBLIC Catro::Capabilities Catro::Audio Catro::Community
     PRIVATE catro_windows_translation Catro::Reporting Catro::Video nlohmann_json::nlohmann_json
-            powrprof user32 bcrypt crypt32 winhttp shell32 wtsapi32 dxgi d3d11 d3d12 dxcore shcore windowsapp
+            powrprof user32 bcrypt crypt32 winhttp shell32 wtsapi32 dxgi d3d11 d3d12 dxcore dwmapi shcore windowsapp
             mfplat mfuuid ole32 avrt
 )
 target_compile_definitions(catro_platform_windows PRIVATE

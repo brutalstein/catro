@@ -60,6 +60,16 @@ void WorkspaceSnapshot::fail(std::string message) {
     set_online_actions(Availability::unavailable, connection_message);
 }
 
+void WorkspaceSnapshot::reconnect(std::string message) {
+    connection = ConnectionState::connecting;
+    connection_message = std::move(message);
+    set_online_actions(Availability::busy, connection_message);
+}
+
+std::chrono::seconds reconnect_delay(unsigned attempt) noexcept {
+    return attempt >= 4 ? std::chrono::seconds{30} : std::chrono::seconds{2LL << attempt};
+}
+
 void WorkspaceSnapshot::set_online_actions(
     Availability availability,
     std::string_view reason) {

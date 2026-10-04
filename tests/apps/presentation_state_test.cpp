@@ -42,6 +42,25 @@ TEST_CASE("failed snapshot preserves local navigation and explains recovery") {
     CHECK(state.open_system.available());
 }
 
+TEST_CASE("reconnecting keeps online actions waiting and backs off to 30 seconds") {
+    auto state = WorkspaceSnapshot::connecting();
+    state.reconnect("Can't reach Catro online. Retrying in 2 s.");
+    CHECK(state.connection == ConnectionState::connecting);
+    CHECK(state.join_server.availability == Availability::busy);
+    CHECK(state.join_server.reason == state.connection_message);
+    CHECK(state.open_settings.available());
+
+    using std::chrono::seconds;
+    CHECK(reconnect_delay(0) == seconds{2});
+    CHECK(reconnect_delay(1) == seconds{4});
+    CHECK(reconnect_delay(3) == seconds{16});
+    CHECK(reconnect_delay(4) == seconds{30});
+    CHECK(reconnect_delay(1000) == seconds{30});
+
+    state.synchronize();
+    CHECK(state.join_server.available());
+}
+
 TEST_CASE("busy action rejects duplicates and can recover") {
     ActionState action = ActionState::ready();
     CHECK(action.begin("Joining voice…"));

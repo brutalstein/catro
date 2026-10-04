@@ -29,6 +29,7 @@ std::string read_server_sources(const std::filesystem::path& root) {
     return read(root / "Server/ServerView.xaml.cpp") +
            read(root / "Server/ServerView.Directory.cpp") +
            read(root / "Server/ServerView.Screen.cpp") +
+           read(root / "Server/ServerView.Stage.cpp") +
            read(root / "Server/ServerView.State.cpp") +
            read(root / "Server/ServerView.Activity.cpp") +
            read(root / "Server/ServerView.Voice.cpp");
@@ -140,6 +141,7 @@ TEST_CASE("Windows product code-behind is split by responsibility") {
         "Server/ServerView.Directory.cpp",
         "Server/ServerView.Voice.cpp",
         "Server/ServerView.Screen.cpp",
+        "Server/ServerView.Stage.cpp",
         "Server/ServerView.State.cpp",
     };
 
@@ -422,9 +424,12 @@ TEST_CASE("macOS product shell stays native accessible and free of view-body med
     CHECK(stream.find("NSViewRepresentable") != std::string::npos);
     CHECK(stream.find("dismantleNSView") != std::string::npos);
 
-    // Discord-style stream window: pop out and full screen, plus quality presets in the picker.
+    // Discord-style stream: pop out, and full screen inside the Catro window (never the
+    // display's full screen), plus quality presets in the picker.
     CHECK(stream.find("\"Pop Out\"") != std::string::npos);
-    CHECK(stream.find("toggleFullScreen") != std::string::npos);
+    CHECK(stream.find("toggleFullScreen") == std::string::npos);
+    CHECK(stream.find("struct StreamStage: View") != std::string::npos);
+    CHECK(stream.find(".keyboardShortcut(.cancelAction)") != std::string::npos);
     CHECK(stream.find("AppWindows.show(\"stream\"") != std::string::npos);
     CHECK(picker.find("Picker(\"Resolution\"") != std::string::npos);
     // Like Windows: only the resolution is chosen, sources are grouped and a second click clears.
@@ -529,4 +534,18 @@ TEST_CASE("Windows resources are modular and settings explain automatic efficien
     const auto settings = read(root / "Settings/SettingsView.xaml");
     CHECK(settings.find("<ScrollViewer") != std::string::npos);
     CHECK(settings.find("Automatic efficiency") != std::string::npos);
+}
+
+TEST_CASE("stream full screen fills Catro and narrow shares never show Catro") {
+    const auto root = std::filesystem::path(CATRO_WINDOWS_XAML_DIR);
+    const auto source = read_server_sources(root);
+    const auto xaml = read(root / "Server/ServerView.xaml");
+    // Full screen is an in-app stage, never the monitor's full-screen presenter.
+    CHECK(source.find("AppWindowPresenterKind::FullScreen") == std::string::npos);
+    CHECK(source.find("void ServerView::SetStage(bool enabled, bool local)") != std::string::npos);
+    CHECK(xaml.find("Invoked=\"OnStageEscape\"") != std::string::npos);
+    CHECK(xaml.find("x:Name=\"LocalStageExitButton\"") != std::string::npos);
+    // A window or game share hides every Catro window from capture; a screen share does not.
+    CHECK(source.find("WDA_EXCLUDEFROMCAPTURE") != std::string::npos);
+    CHECK(source.find("CaptureSourceKind::display") != std::string::npos);
 }

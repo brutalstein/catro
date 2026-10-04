@@ -8,7 +8,13 @@ struct ServerWorkspace: View {
     @State private var picking = false
 
     var body: some View {
-        columns
+        Group {
+            if let stage = model.stage {
+                StreamStage(model: model, source: stage)
+            } else {
+                columns
+            }
+        }
         .sheet(isPresented: $picking) {
             SourcePicker(model: model, isPresented: $picking)
         }

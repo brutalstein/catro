@@ -70,6 +70,28 @@ inline ShareQualityChoice share_qualities(
     return choice;
 }
 
+// Drops the presets above what this GPU's encoder actually started (it fell back to a smaller
+// size once), so the picker stops offering a resolution that cannot be met. 0 means no limit.
+inline void cap_share_qualities(ShareQualityChoice& choice, std::uint32_t encoder_max_height) {
+    if (encoder_max_height == 0) {
+        return;
+    }
+    const auto fits = [encoder_max_height](const ShareQuality& quality) {
+        return quality.max_height <= encoder_max_height;
+    };
+    if (std::ranges::none_of(choice.options, fits)) {
+        // Even the smallest preset failed: offer one the encoder did start.
+        auto quality = choice.options.front();
+        quality.label = std::to_wstring(encoder_max_height) + L"p";
+        quality.max_height = encoder_max_height;
+        quality.max_width = encoder_max_height * 32 / 9;
+        choice.options = {std::move(quality)};
+    } else {
+        std::erase_if(choice.options, [&fits](const ShareQuality& quality) { return !fits(quality); });
+    }
+    choice.recommended = choice.options.size() - 1;
+}
+
 namespace detail {
 
 inline std::wstring lower(std::wstring_view text) {

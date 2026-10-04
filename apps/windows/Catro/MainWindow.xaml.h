@@ -17,6 +17,13 @@
 
 namespace winrt::Catro::implementation {
 
+// What one successful directory handshake yields.
+struct DirectoryLink {
+    std::string access_token;
+    catro::platform::windows::DirectoryServer personal;
+    std::vector<catro::platform::windows::DirectoryServer> servers;
+};
+
 struct MainWindow : MainWindowT<MainWindow> {
     MainWindow() = default;
     ~MainWindow();
@@ -33,6 +40,9 @@ private:
     void Activate(catro::app::AppDestination destination);
     void ActivateDirectoryServer(std::string_view server_id);
     winrt::fire_and_forget BeginDirectoryBootstrap();
+    void ApplyDirectoryLink(
+        catro::platform::windows::DirectoryServiceConfig service,
+        DirectoryLink link);
     winrt::fire_and_forget BeginJoinServer();
     winrt::fire_and_forget BeginServerCodeLookup(std::string server_code);
     winrt::fire_and_forget BeginInviteJoin(std::string invite_code);

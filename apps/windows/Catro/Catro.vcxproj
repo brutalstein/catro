@@ -82,7 +82,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>$(CatroCoreRoot)\apps\shell\$(Configuration)\catro_shell.lib;$(CatroCoreRoot)\apps\voice-runtime\windows\$(Configuration)\catro-voice-runtime.lib;$(CatroCoreRoot)\apps\room-runtime\windows\$(Configuration)\catro-room-runtime.lib;$(CatroCoreRoot)\apps\screen-runtime\windows\$(Configuration)\catro_screen_runtime.lib;$(CatroCoreRoot)\apps\screen-runtime\common\$(Configuration)\catro_screen_transport.lib;$(CatroCoreRoot)\core\voice\$(Configuration)\catro_voice.lib;$(CatroCoreRoot)\_deps\opus-build\$(Configuration)\opus.lib;$(CatroCoreRoot)\core\video\$(Configuration)\catro_video.lib;$(CatroCoreRoot)\core\transport\$(Configuration)\catro_transport.lib;$(CatroCoreRoot)\core\community\$(Configuration)\catro_community.lib;$(CatroCoreRoot)\apps\diagnostics\$(Configuration)\catro_diagnostics.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_platform_windows.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_windows_translation.lib;$(CatroCoreRoot)\core\reporting\$(Configuration)\catro_reporting.lib;$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib;$(CatroCoreRoot)\core\audio\$(Configuration)\catro_audio.lib;avrt.lib;ws2_32.lib;powrprof.lib;user32.lib;wtsapi32.lib;bcrypt.lib;crypt32.lib;winhttp.lib;shell32.lib;version.lib;gdi32.lib;dxgi.lib;d3d11.lib;d3d12.lib;dxcore.lib;shcore.lib;mfplat.lib;mfuuid.lib;ole32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(CatroCoreRoot)\apps\shell\$(Configuration)\catro_shell.lib;$(CatroCoreRoot)\apps\voice-runtime\windows\$(Configuration)\catro-voice-runtime.lib;$(CatroCoreRoot)\apps\room-runtime\windows\$(Configuration)\catro-room-runtime.lib;$(CatroCoreRoot)\apps\screen-runtime\windows\$(Configuration)\catro_screen_runtime.lib;$(CatroCoreRoot)\apps\screen-runtime\common\$(Configuration)\catro_screen_transport.lib;$(CatroCoreRoot)\core\voice\$(Configuration)\catro_voice.lib;$(CatroCoreRoot)\_deps\opus-build\$(Configuration)\opus.lib;$(CatroCoreRoot)\core\video\$(Configuration)\catro_video.lib;$(CatroCoreRoot)\core\transport\$(Configuration)\catro_transport.lib;$(CatroCoreRoot)\core\community\$(Configuration)\catro_community.lib;$(CatroCoreRoot)\apps\diagnostics\$(Configuration)\catro_diagnostics.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_platform_windows.lib;$(CatroCoreRoot)\platform\windows\$(Configuration)\catro_windows_translation.lib;$(CatroCoreRoot)\core\reporting\$(Configuration)\catro_reporting.lib;$(CatroCoreRoot)\core\capabilities\$(Configuration)\catro_capabilities.lib;$(CatroCoreRoot)\core\audio\$(Configuration)\catro_audio.lib;avrt.lib;ws2_32.lib;powrprof.lib;user32.lib;wtsapi32.lib;bcrypt.lib;crypt32.lib;winhttp.lib;shell32.lib;version.lib;gdi32.lib;dxgi.lib;d3d11.lib;d3d12.lib;dxcore.lib;dwmapi.lib;shcore.lib;mfplat.lib;mfuuid.lib;ole32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)' == 'Debug'">
@@ -128,6 +128,7 @@
     <ClInclude Include="UiActivityPolicy.hpp" />
     <ClInclude Include="SharePresets.hpp" />
     <ClInclude Include="Server\SharePicker.hpp" />
+    <ClInclude Include="Server\StreamViewport.hpp" />
     <ClInclude Include="Settings\SettingsView.xaml.h">
       <DependentUpon>Settings\SettingsView.xaml</DependentUpon>
     </ClInclude>
@@ -175,6 +176,7 @@
       <DependentUpon>Server\ServerView.xaml</DependentUpon>
     </ClCompile>
     <ClCompile Include="Server\ServerView.Activity.cpp" />
+    <ClCompile Include="Server\ServerView.Stage.cpp" />
     <ClCompile Include="Server\SharePicker.cpp" />
     <ClCompile Include="Settings\SettingsView.Profile.cpp" />
     <ClCompile Include="Server\ServerView.Voice.cpp">

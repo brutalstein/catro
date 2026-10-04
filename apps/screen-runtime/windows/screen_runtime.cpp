@@ -58,6 +58,18 @@ constexpr auto kFirstFrameTimeout = 3s;
 constexpr auto kGameFirstFrameTimeout = 30s;
 constexpr std::uint32_t kPreviewMaxFps = 10;
 
+struct EncoderBox {
+    std::uint32_t width;
+    std::uint32_t height;
+};
+// Smaller sizes to try, largest first, when the hardware encoder refuses the chosen one.
+constexpr std::array kEncoderFallbackBoxes{
+    EncoderBox{3840, 1440},
+    EncoderBox{3840, 1080},
+    EncoderBox{2560, 720},
+    EncoderBox{1920, 540},
+};
+
 [[nodiscard]] RoomScreenApi room_api() noexcept {
     return RoomScreenApi{
         .snapshot = &catro_room_runtime_snapshot,
@@ -916,7 +928,7 @@ struct WindowsScreenShareRuntime::Impl {
 
         const auto configure_encoder =
             [&](const GpuCaptureFrame& frame) -> bool {
-            const auto extent = video::fit_even_video_extent(
+            auto extent = video::fit_even_video_extent(
                 frame.width,
                 frame.height,
                 config.max_width,
@@ -944,15 +956,40 @@ struct WindowsScreenShareRuntime::Impl {
                     capture_stats.adapter_luid;
             }
 
-            if (const auto error =
-                    encoder.start(
-                        encoder_config,
-                        *frame.texture.Get())) {
+            // Hardware encoders differ in the largest frame they take: older and integrated
+            // GPUs may refuse 1440p or even 1080p. The share steps down to the next smaller
+            // size that starts instead of failing, and the snapshot reports the reduction.
+            auto error = encoder.start(encoder_config, *frame.texture.Get());
+            bool reduced = false;
+            for (const auto box : kEncoderFallbackBoxes) {
+                if (!error) {
+                    break;
+                }
+                const auto smaller = video::fit_even_video_extent(
+                    frame.width,
+                    frame.height,
+                    std::min(config.max_width, box.width),
+                    std::min(config.max_height, box.height));
+                if (!smaller || smaller->height >= extent->height) {
+                    continue;
+                }
+                encoder.stop();
+                extent = smaller;
+                encoder_config.width = extent->width;
+                encoder_config.height = extent->height;
+                error = encoder.start(encoder_config, *frame.texture.Get());
+                reduced = true;
+            }
+            if (error) {
                 fail_share(
                     ScreenShareErrorCode::encoder_failed,
                     platform::windows::name(error->code),
                     error->native_code);
                 return false;
+            }
+            if (reduced) {
+                trace_event("sender-encoder-reduced");
+                quality_reduced_.store(true, std::memory_order_relaxed);
             }
 
             if (current_source_width == 0 && current_source_height == 0) {
@@ -1308,6 +1345,7 @@ struct WindowsScreenShareRuntime::Impl {
         source_height_.store(0, std::memory_order_relaxed);
         encoded_width_.store(0, std::memory_order_relaxed);
         encoded_height_.store(0, std::memory_order_relaxed);
+        quality_reduced_.store(false, std::memory_order_relaxed);
         frames_encoded_.store(0, std::memory_order_relaxed);
         preview_frames_.store(0, std::memory_order_relaxed);
         preview_drops_.store(0, std::memory_order_relaxed);
@@ -1347,6 +1385,7 @@ struct WindowsScreenShareRuntime::Impl {
         result.source_height = source_height_.load(relaxed);
         result.encoded_width = encoded_width_.load(relaxed);
         result.encoded_height = encoded_height_.load(relaxed);
+        result.quality_reduced = quality_reduced_.load(relaxed);
         result.frames_encoded = frames_encoded_.load(relaxed);
         result.preview_frames = preview_frames_.load(relaxed);
         result.preview_drops = preview_drops_.load(relaxed);
@@ -1406,6 +1445,7 @@ struct WindowsScreenShareRuntime::Impl {
     std::atomic<std::uint32_t> source_height_{0};
     std::atomic<std::uint32_t> encoded_width_{0};
     std::atomic<std::uint32_t> encoded_height_{0};
+    std::atomic<bool> quality_reduced_{false};
     std::atomic<std::uint64_t> frames_encoded_{0};
     std::atomic<std::uint64_t> preview_frames_{0};
     std::atomic<std::uint64_t> preview_drops_{0};

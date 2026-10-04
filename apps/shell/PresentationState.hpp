@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -47,9 +48,14 @@ struct WorkspaceSnapshot {
     [[nodiscard]] static WorkspaceSnapshot connecting();
     void synchronize();
     void fail(std::string message);
+    // A transient outage: online actions wait while the client keeps retrying.
+    void reconnect(std::string message);
 
 private:
     void set_online_actions(Availability availability, std::string_view reason);
 };
+
+// Backoff before reconnect attempt `attempt` (0-based): 2, 4, 8, 16, then 30 s.
+[[nodiscard]] std::chrono::seconds reconnect_delay(unsigned attempt) noexcept;
 
 } // namespace catro::app

@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <d3d11.h>
+#include <dwmapi.h>
 #include <dxgi1_6.h>
 #include <windows.graphics.capture.interop.h>
 #include <windows.graphics.directx.direct3d11.interop.h>
@@ -1215,6 +1216,15 @@ std::vector<CaptureSource> enumerate_capture_sources() noexcept {
                 if (!IsWindowVisible(window) ||
                     window == GetShellWindow() ||
                     (GetWindowLongPtrW(window, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) != 0) {
+                    return TRUE;
+                }
+                // Cloaked windows (suspended Store apps, the touch keyboard host, windows on
+                // another virtual desktop) are "visible" yet draw nothing, so a share of one
+                // would never get a frame.
+                DWORD cloaked = 0;
+                if (SUCCEEDED(DwmGetWindowAttribute(
+                        window, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+                    cloaked != 0) {
                     return TRUE;
                 }
 

@@ -226,18 +226,33 @@ struct ProductSession::Impl {
             return;
         }
         client_.emplace(service, *transport_);
-        auto access = client_->register_identity(local.identity, std::get<std::string>(credential), token());
+        credential_ = std::get<std::string>(std::move(credential));
+        connect();
+    }
+
+    // Startup often races the network (Wi-Fi joining, VPN, wake from sleep), so a failed sign-in
+    // or sync is retried with backoff from poll() instead of leaving the session offline.
+    void connect() {
+        const auto& local = *deps_.local_state;
+        const auto retry = [this](const std::string& reason) {
+            const auto delay = app::reconnect_delay(reconnect_attempt_++);
+            next_reconnect_ = std::chrono::steady_clock::now() + delay;
+            state_.workspace.reconnect("Can't reach Catro online (" + reason + "). Retrying in " +
+                                       std::to_string(delay.count()) + " s\u2026");
+        };
+        auto access = client_->register_identity(local.identity, credential_, token());
         if (const auto* error = error_of(access)) {
-            state_.workspace.fail("Online sign-in failed: " + error->message);
+            retry(error->message);
             return;
         }
         access_token_ = std::get<std::string>(access);
         auto synced = client_->sync_personal_server(access_token_, local.personal_server, token());
         if (const auto* error = error_of(synced)) {
             access_token_.clear();
-            state_.workspace.fail("Server sync failed: " + error->message);
+            retry(error->message);
             return;
         }
+        reconnect_attempt_ = 0;
         state_.workspace.synchronize();
         if (!refresh_servers()) {
             state_.servers = {to_item(std::get<community::DirectoryServer>(synced))};
@@ -427,6 +442,10 @@ struct ProductSession::Impl {
     void poll() {
         poll_queued_.store(false, std::memory_order_release);
         if (!online()) {
+            if (client_ && state_.workspace.connection == app::ConnectionState::connecting &&
+                std::chrono::steady_clock::now() >= next_reconnect_) {
+                connect();
+            }
             return;
         }
         refresh_media();
@@ -727,6 +746,9 @@ struct ProductSession::Impl {
     std::unique_ptr<platform::macos::DirectoryHttpTransport> transport_;
     std::optional<platform::macos::DirectoryClient> client_;
     std::string access_token_;
+    std::string credential_;
+    unsigned reconnect_attempt_ = 0;
+    std::chrono::steady_clock::time_point next_reconnect_{};
     std::string activated_id_;
     std::uint64_t message_cursor_ = 0;
     std::uint32_t poll_ticks_ = 0;

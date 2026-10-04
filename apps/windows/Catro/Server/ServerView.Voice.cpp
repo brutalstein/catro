@@ -389,6 +389,7 @@ void ServerView::StopVoice() {
         screen_runtime_->set_remote_viewing_enabled(false);
         screen_runtime_->stop();
     }
+    SetStage(false, false);
     CloseStreamWindow();
     DetachRemoteSwapChain();
     RemoteShareHost().Visibility(xaml::Visibility::Collapsed);

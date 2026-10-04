@@ -1,6 +1,7 @@
 #include <SharePresets.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+using catro::shell::cap_share_qualities;
 using catro::shell::share_qualities;
 using catro::shell::share_window_name;
 
@@ -60,6 +61,24 @@ TEST_CASE("a tiny source still gets a box the screen runtime accepts") {
         CHECK(option.max_width <= 7680);
         CHECK(option.max_height <= 4320);
     }
+}
+
+TEST_CASE("a resolution the encoder refused is no longer offered") {
+    auto choice = share_qualities(2560, 1440, true);
+    cap_share_qualities(choice, 0);
+    CHECK(choice.options.size() == 3);
+
+    cap_share_qualities(choice, 1080);
+    REQUIRE(choice.options.size() == 2);
+    CHECK(choice.options.back().label == L"1080p");
+    CHECK(choice.recommended == 1);
+
+    // Even 720p failed and the encoder ran at 540p: that is the one choice left.
+    cap_share_qualities(choice, 540);
+    REQUIRE(choice.options.size() == 1);
+    CHECK(choice.options[0].label == L"540p");
+    CHECK(choice.options[0].max_height == 540);
+    CHECK(choice.recommended == 0);
 }
 
 TEST_CASE("browser windows read as browser and site") {

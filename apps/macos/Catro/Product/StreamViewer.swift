@@ -36,7 +36,7 @@ struct StreamViewer: View {
                     shareStatus
                     HStack {
                         Toggle("Show my preview", isOn: $model.localPreviewEnabled)
-                        if model.localPreviewEnabled { windowButtons }
+                        if model.localPreviewEnabled { windowButtons(.local) }
                     }
                 }
             } else if snapshot?.remoteAvailable ?? false {
@@ -45,13 +45,13 @@ struct StreamViewer: View {
                         StreamLayer(model: model, preview: false)
                             .accessibilityLabel("Shared screen")
                             .help("Double-click for full screen")
-                            .onTapGesture(count: 2) { popOut(fullScreen: true) }
+                            .onTapGesture(count: 2) { model.stage = .remote }
                     }
                     HStack {
                         Button(watching ? "Stop Watching" : "Watch Stream") { model.setWatching(!watching) }
                             .help(watching ? "Stop decoding the shared screen" : "Decode and show the shared screen")
                         if watching {
-                            windowButtons
+                            windowButtons(.remote)
                             StreamVolume(model: model)
                         }
                     }
@@ -81,17 +81,16 @@ struct StreamViewer: View {
         }
     }
 
-    private var windowButtons: some View {
+    private func windowButtons(_ source: AppModel.StageSource) -> some View {
         HStack {
-            Button("Pop Out") { popOut(fullScreen: false) }
+            Button("Pop Out") { popOut() }
                 .help("Show the stream in its own window")
-            Button("Full Screen") { popOut(fullScreen: true) }
-                .help("Show the stream full screen; Esc leaves")
+            Button("Full Screen") { model.stage = source }
+                .help("Fill the Catro window with the stream; Esc leaves")
         }
     }
 
-    private func popOut(fullScreen: Bool) {
-        model.streamFullScreenRequested = fullScreen
+    private func popOut() {
         model.streamPoppedOut = true
         AppWindows.show("stream", title: "Stream", size: CGSize(width: 1280, height: 720)) {
             StreamWindow(model: model)
@@ -100,7 +99,31 @@ struct StreamViewer: View {
     }
 }
 
-// The stream's own resizable window; it supports macOS full screen and closes back into the workspace.
+// In-app full screen, like Discord: the stream fills the Catro window instead of taking over the
+// display. Esc, the button or a double-click goes back to the workspace.
+struct StreamStage: View {
+    @ObservedObject var model: AppModel
+    let source: AppModel.StageSource
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black
+            StreamLayer(model: model, preview: source == .local)
+                .accessibilityLabel(source == .local ? "Your screen share preview" : "Shared screen")
+                .onTapGesture(count: 2) { model.stage = nil }
+            HStack {
+                if source == .remote { StreamVolume(model: model) }
+                Button("Exit Full Screen") { model.stage = nil }
+                    .keyboardShortcut(.cancelAction)
+                    .help("Back to the channel (Esc)")
+            }
+            .padding(12)
+        }
+    }
+}
+
+// The stream's own resizable window, for watching beside another app; it closes back into the
+// workspace.
 struct StreamWindow: View {
     @ObservedObject var model: AppModel
     @State private var window: NSWindow?
@@ -120,15 +143,7 @@ struct StreamWindow: View {
         }
         .frame(minWidth: 480, minHeight: 270)
         .background(Color.black)
-        .onTapGesture(count: 2) { window?.toggleFullScreen(nil) }
-        .background(WindowReader { window in
-            self.window = window
-            guard model.streamFullScreenRequested else { return }
-            model.streamFullScreenRequested = false
-            if !window.styleMask.contains(.fullScreen) {
-                window.toggleFullScreen(nil)
-            }
-        })
+        .background(WindowReader { window in self.window = window })
         .onChange(of: model.streamPoppedOut) { poppedOut in
             if !poppedOut { window?.close() }
         }
@@ -253,7 +268,6 @@ private struct WindowReader: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             guard let window, let onWindow else { return }
-            // Full screen needs the window on screen first.
             Task { @MainActor in onWindow(window) }
         }
     }

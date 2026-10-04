@@ -46,6 +46,11 @@ struct ServerView : ServerViewT<ServerView> {
     void OnRemoteStreamDoubleTapped(IInspectable const&, Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs const&);
     void OnLocalStreamDoubleTapped(IInspectable const&, Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs const&);
     void OnLocalFullScreen(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnExitStage(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnStageEscape(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
+                       Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const&);
+    void OnSwallowDoubleTap(IInspectable const&, Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs const&);
+    void OnStagePointerMoved(IInspectable const&, Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&);
     void OnStreamVolumeChanged(
         IInspectable const&, Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const&);
     void OnSizeChanged(IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
@@ -108,10 +113,14 @@ private:
     void StopScreenShare();
     void UpdateScreenShareUi();
     void UpdateOnlineStatus();
-    void OpenStreamWindow(bool fullscreen, bool local = false);
+    void ApplyServerLayout();
+    // In-app full screen: the stream fills the server page; `local` shows your own stream.
+    void SetStage(bool enabled, bool local);
+    void ShowStageControls();
+    void OpenStreamWindow();
     void CloseStreamWindow() noexcept;
+    void ReleaseStreamWindow() noexcept;
     void UpdateStreamWindowLayout();
-    void SetStreamWindowFullscreen(bool fullscreen);
     void SetStreamWindowAlwaysOnTop(bool enabled);
     void DetachPreviewSwapChain() noexcept;
     void DetachRemoteSwapChain() noexcept;
@@ -156,16 +165,13 @@ private:
     Microsoft::UI::Xaml::Controls::Grid stream_window_root_{nullptr};
     Microsoft::UI::Xaml::Controls::Border stream_window_viewport_{nullptr};
     Microsoft::UI::Xaml::Controls::SwapChainPanel stream_window_swap_chain_panel_{nullptr};
-    Microsoft::UI::Xaml::Controls::Button stream_window_mode_button_{nullptr};
     Microsoft::UI::Xaml::Controls::Button stream_window_topmost_button_{nullptr};
-    // Full screen hides the toolbar while the mouse rests, like Discord.
-    Microsoft::UI::Xaml::Controls::StackPanel stream_window_toolbar_{nullptr};
-    Microsoft::UI::Dispatching::DispatcherQueueTimer stream_window_idle_timer_{nullptr};
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> stream_window_swap_chain_;
-    bool stream_window_fullscreen_ = false;
-    // The window shows this client's own outgoing stream instead of a watched one.
-    bool stream_window_local_ = false;
     bool stream_window_topmost_ = false;
+    bool stage_active_ = false;
+    bool stage_local_ = false;
+    // Full screen hides the stream controls while the mouse rests, like Discord.
+    Microsoft::UI::Dispatching::DispatcherQueueTimer stage_idle_timer_{nullptr};
 
     std::vector<catro::platform::windows::DirectoryMember> roster_;
     // Per-user volume in percent (0-200) by user id, for this session.
@@ -197,6 +203,10 @@ private:
     bool voice_join_pending_ = false;
     bool invite_pending_ = false;
     bool share_dialog_open_ = false;
+    bool share_hides_catro_ = false;
+    bool catro_hidden_from_capture_ = false;
+    // Tallest frame this GPU's encoder accepted after refusing a larger one; 0 until then.
+    std::uint32_t encoder_max_height_ = 0;
     bool muted_ = false;
     bool deafened_ = false;
 };

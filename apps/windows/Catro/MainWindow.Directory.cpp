@@ -3,10 +3,14 @@
 #include "MainWindow.xaml.h"
 #include "Server/ServerView.xaml.h"
 #include <winrt/Windows.ApplicationModel.DataTransfer.h>
+#include <winrt/Windows.Networking.Connectivity.h>
 
 #include <algorithm>
+#include <chrono>
 #include <string>
 #include <utility>
+#include <variant>
+#include <vector>
 
 namespace winrt::Catro::implementation {
 
@@ -43,6 +47,52 @@ winrt::fire_and_forget paste_invite(controls::TextBox invite_box) {
     } else if (!text.empty()) {
         invite_box.Text(text);
     }
+}
+
+// Registers this identity, syncs the personal server and lists servers.
+// Any failure is reported so the caller can retry the whole sequence.
+std::variant<DirectoryLink, catro::platform::windows::DirectoryError>
+connect_directory(
+    const catro::platform::windows::DirectoryServiceConfig& service,
+    const catro::community::LocalState& state,
+    const std::string& credential) {
+    namespace directory = catro::platform::windows;
+    auto registration = directory::register_directory_identity(
+        service, state.identity, credential);
+    if (auto* failure = std::get_if<directory::DirectoryError>(&registration)) {
+        return std::move(*failure);
+    }
+    DirectoryLink link;
+    link.access_token = std::get<std::string>(std::move(registration));
+
+    auto synced = directory::sync_personal_server(
+        service, link.access_token, state.personal_server);
+    if (auto* failure = std::get_if<directory::DirectoryError>(&synced)) {
+        return std::move(*failure);
+    }
+    link.personal = std::get<directory::DirectoryServer>(std::move(synced));
+
+    auto listed = directory::list_directory_servers(service, link.access_token);
+    if (auto* values = std::get_if<std::vector<directory::DirectoryServer>>(&listed)) {
+        link.servers = std::move(*values);
+    } else {
+        // The personal server alone is enough to go online; the rail refreshes later.
+        link.servers.push_back(link.personal);
+    }
+    return link;
+}
+
+std::string reconnect_message(
+    const catro::platform::windows::DirectoryError& failure,
+    std::chrono::seconds delay) {
+    std::string detail;
+    if (failure.http_status != 0) {
+        detail = " (HTTP " + std::to_string(failure.http_status) + ")";
+    } else if (failure.native_code != 0) {
+        detail = " (error " + std::to_string(failure.native_code) + ")";
+    }
+    return "Can't reach Catro online" + detail + ". Retrying in " +
+           std::to_string(delay.count()) + " s\u2026";
 }
 
 } // namespace
@@ -129,131 +179,87 @@ MainWindow::BeginDirectoryBootstrap() {
         std::get<std::string>(
             credential_result);
 
-    const auto registration =
-        catro::platform::windows::
-            register_directory_identity(
-                service,
-                state.identity,
-                credential);
-    if (const auto* failure =
-            std::get_if<
-                catro::platform::windows::
-                    DirectoryError>(
-                &registration)) {
-        const auto message = failure->message;
+    // Wake the retry wait as soon as Windows reports a network change.
+    winrt::handle network_changed{
+        CreateEventW(nullptr, FALSE, FALSE, nullptr)};
+    Windows::Networking::Connectivity::NetworkInformation::
+        NetworkStatusChanged_revoker network_revoker;
+    try {
+        network_revoker =
+            Windows::Networking::Connectivity::NetworkInformation::
+                NetworkStatusChanged(
+                    winrt::auto_revoke,
+                    [event = network_changed.get()](auto&&) {
+                        SetEvent(event);
+                    });
+    } catch (winrt::hresult_error const&) {
+        // Without change notifications the backoff alone still recovers.
+    }
+
+    // Startup often races the network (Wi-Fi joining, VPN, sleep resume), so a
+    // failed attempt is retried with backoff instead of leaving the session offline.
+    for (unsigned attempt = 0;; ++attempt) {
+        auto connected = connect_directory(
+            service, state, credential);
         co_await ui_thread;
-        lifetime->workspace_state_.fail(message);
+        if (lifetime->window_closed_) {
+            co_return;
+        }
+        if (auto* link =
+                std::get_if<DirectoryLink>(
+                    &connected)) {
+            lifetime->ApplyDirectoryLink(
+                service, std::move(*link));
+            co_return;
+        }
+        const auto delay =
+            catro::app::reconnect_delay(attempt);
+        const auto message = reconnect_message(
+            std::get<catro::platform::windows::
+                         DirectoryError>(connected),
+            delay);
+        lifetime->workspace_state_.reconnect(message);
         lifetime->UpdateConnectionUi();
         controls::ToolTipService::SetToolTip(
             lifetime->JoinServerButton(),
             box_value(to_hstring(message)));
-        co_return;
+        co_await winrt::resume_on_signal(
+            network_changed.get(), delay);
     }
-    const auto access_token =
-        std::get<std::string>(
-            registration);
+}
 
-    const auto synced =
-        catro::platform::windows::
-            sync_personal_server(
-                service,
-                access_token,
-                state.personal_server);
-    if (const auto* failure =
-            std::get_if<
-                catro::platform::windows::
-                    DirectoryError>(
-                &synced)) {
-        const auto message = failure->message;
-        co_await ui_thread;
-        lifetime->workspace_state_.fail(message);
-        lifetime->UpdateConnectionUi();
-        controls::ToolTipService::SetToolTip(
-            lifetime->JoinServerButton(),
-            box_value(to_hstring(message)));
-        co_return;
+void MainWindow::ApplyDirectoryLink(
+    catro::platform::windows::DirectoryServiceConfig service,
+    DirectoryLink link) {
+    directory_service_ = std::move(service);
+    directory_access_token_ = std::move(link.access_token);
+    directory_servers_ = std::move(link.servers);
+
+    const auto found = std::ranges::find(
+        directory_servers_,
+        link.personal.id,
+        &catro::platform::windows::DirectoryServer::id);
+    active_directory_server_ =
+        found != directory_servers_.end()
+            ? *found
+            : link.personal;
+
+    workspace_state_.synchronize();
+    UpdateConnectionUi();
+    controls::ToolTipService::SetToolTip(
+        JoinServerButton(),
+        box_value(hstring{L"Add server"}));
+    if (join_request_timer_) {
+        UpdateWindowActivity();
     }
-    const auto personal =
-        std::get<
-            catro::platform::windows::
-                DirectoryServer>(synced);
-
-    std::vector<
-        catro::platform::windows::
-            DirectoryServer>
-        servers;
-    const auto listed =
-        catro::platform::windows::
-            list_directory_servers(
-                service,
-                access_token);
-    if (const auto* values =
-            std::get_if<
-                std::vector<
-                    catro::platform::windows::
-                        DirectoryServer>>(
-                &listed)) {
-        servers = *values;
-    } else {
-        servers.push_back(personal);
+    BeginOutgoingJoinRequestRefresh();
+    RefreshDirectoryRail();
+    ApplyDirectoryServerToPage();
+    if (shell_state_.destination() ==
+        catro::app::AppDestination::server) {
+        TitleContext().Text(
+            to_hstring(active_directory_server_->name));
     }
-
-    co_await ui_thread;
-
-        lifetime->directory_service_ =
-            service;
-        lifetime->
-            directory_access_token_ =
-            access_token;
-        lifetime->directory_servers_ =
-            std::move(servers);
-
-        const auto found =
-            std::ranges::find(
-                lifetime->
-                    directory_servers_,
-                personal.id,
-                &catro::platform::windows::
-                    DirectoryServer::id);
-        lifetime->
-            active_directory_server_ =
-            found !=
-                    lifetime->
-                        directory_servers_
-                            .end()
-                ? std::optional{
-                      *found}
-                : std::optional{
-                      personal};
-
-        lifetime->workspace_state_.synchronize();
-        lifetime->UpdateConnectionUi();
-        controls::ToolTipService::
-            SetToolTip(
-                lifetime->
-                    JoinServerButton(),
-                box_value(
-                    hstring{
-                        L"Add server"}));
-        if (lifetime->join_request_timer_) {
-            lifetime->UpdateWindowActivity();
-        }
-        lifetime->BeginOutgoingJoinRequestRefresh();
-        lifetime->
-            RefreshDirectoryRail();
-        lifetime->
-            ApplyDirectoryServerToPage();
-        if (lifetime->
-                shell_state_.destination() ==
-            catro::app::
-                AppDestination::server) {
-            lifetime->TitleContext().Text(
-                to_hstring(
-                    lifetime->
-                        active_directory_server_
-                        ->name));
-        }
-
 }
 
 winrt::fire_and_forget

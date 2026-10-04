@@ -66,6 +66,7 @@ struct FakeDirectory {
     std::vector<std::string> outgoing;                       // request JSON
     std::vector<std::string> endpoints;
     std::map<std::uint64_t, std::string> sent; // server-1 sequence -> content posted by the session
+    bool offline = false;                      // every request fails like an unreachable network
 
     std::string message_json(const std::string& server_id, std::uint64_t sequence) {
         const auto suffix = server_id.substr(server_id.find('-') + 1);
@@ -81,6 +82,9 @@ struct FakeDirectory {
     platform::macos::DirectoryHttpResult route(const platform::macos::DirectoryHttpRequest& request) {
         std::scoped_lock lock(mutex);
         endpoints.push_back(request.method + " " + request.endpoint);
+        if (offline) {
+            return community::DirectoryError{community::DirectoryErrorCode::network_failure, "offline"};
+        }
         const std::string_view endpoint = request.endpoint;
         const auto ok = [](std::string body) {
             return platform::macos::DirectoryHttpResponse{200, std::move(body)};
@@ -454,6 +458,32 @@ TEST_CASE("macOS product session keeps the personal server when online services 
     CHECK(snapshot.identity_name == "Owner");
     session.stop();
     CHECK_FALSE(transport_made);
+}
+
+TEST_CASE("macOS product session keeps retrying until the network is back") {
+    auto directory = seeded_directory();
+    directory->offline = true;
+    product::ProductSession session(online(directory), {});
+    session.start();
+
+    REQUIRE(wait_until(session, [](const auto& snapshot) {
+        return snapshot.workspace.connection == app::ConnectionState::connecting &&
+               snapshot.workspace.connection_message.find("Retrying in 2 s") != std::string::npos;
+    }));
+    CHECK_FALSE(session.snapshot().workspace.send_message.available());
+
+    {
+        std::scoped_lock lock(directory->mutex);
+        directory->offline = false;
+    }
+    // The app polls once a second; the first retry is due two seconds after the failure.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(6);
+    while (!synchronized_with_messages(session.snapshot()) && std::chrono::steady_clock::now() < deadline) {
+        session.poll();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    CHECK(synchronized_with_messages(session.snapshot()));
+    session.stop();
 }
 
 TEST_CASE("macOS product session renames the profile locally and online") {

@@ -30,15 +30,16 @@ final class AppModel: ObservableObject {
                 previewLayer = nil
                 previewVisible = false
                 if snapshot?.sharing == true {
-                    streamFullScreenRequested = false
                     streamPoppedOut = false
+                    if stage == .local { stage = nil }
                 }
             }
             applyLocalPreview()
         }
     }
-    // Set by "Full Screen"; the stream window consumes it once it has a window.
-    var streamFullScreenRequested = false
+    // In-app full screen, like Discord: the stream fills the Catro window. nil shows the workspace.
+    enum StageSource { case local, remote }
+    @Published var stage: StageSource?
 
     private let bridge = CatroProductBridge()
     private var timer: Timer?
@@ -98,6 +99,10 @@ final class AppModel: ObservableObject {
         }
         if !snapshot.remoteAvailable && !snapshot.sharing {
             streamPoppedOut = false
+        }
+        // Full screen ends with the stream it shows.
+        if (stage == .local && !snapshot.sharing) || (stage == .remote && !snapshot.watching) {
+            stage = nil
         }
     }
 
