@@ -44,6 +44,8 @@ struct ServerView : ServerViewT<ServerView> {
     void OnPopOutStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnFullScreenStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnRemoteStreamDoubleTapped(IInspectable const&, Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs const&);
+    void OnLocalStreamDoubleTapped(IInspectable const&, Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs const&);
+    void OnLocalFullScreen(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnStreamVolumeChanged(
         IInspectable const&, Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const&);
     void OnSizeChanged(IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
@@ -106,7 +108,7 @@ private:
     void StopScreenShare();
     void UpdateScreenShareUi();
     void UpdateOnlineStatus();
-    void OpenStreamWindow(bool fullscreen);
+    void OpenStreamWindow(bool fullscreen, bool local = false);
     void CloseStreamWindow() noexcept;
     void UpdateStreamWindowLayout();
     void SetStreamWindowFullscreen(bool fullscreen);
@@ -158,6 +160,8 @@ private:
     Microsoft::UI::Xaml::Controls::Button stream_window_topmost_button_{nullptr};
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> stream_window_swap_chain_;
     bool stream_window_fullscreen_ = false;
+    // The window shows this client's own outgoing stream instead of a watched one.
+    bool stream_window_local_ = false;
     bool stream_window_topmost_ = false;
 
     std::vector<catro::platform::windows::DirectoryMember> roster_;

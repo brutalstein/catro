@@ -269,8 +269,8 @@ void ServerView::UpdateVoiceUi() {
         const auto style = [&](wchar_t const* key) {
             return resources.Lookup(box_value(key)).as<xaml::Style>();
         };
-        const hstring mic = effective_muted ? hstring{L"÷81"} : hstring{L"ç20"};
-        const hstring speaker = deafened_ ? hstring{L"ç4F"} : hstring{L"çF6"};
+        const hstring mic = effective_muted ? hstring{L"\xF781"} : hstring{L"\xE720"};
+        const hstring speaker = deafened_ ? hstring{L"\xE74F"} : hstring{L"\xE7F6"};
         MuteVoiceIcon().Glyph(mic);
         ProfileMuteIcon().Glyph(mic);
         DeafenVoiceIcon().Glyph(speaker);

@@ -71,6 +71,8 @@ public:
     // disables it while the voice page is hidden so screen sharing does not spend GPU time on an
     // invisible D3D11 VideoProcessor/swap-chain path.
     void set_local_preview_enabled(bool enabled) noexcept;
+    // Full-size, full-rate preview while the user watches their own stream full screen.
+    void set_local_preview_full(bool full) noexcept;
 
     // Receiving RTP is room state; decoding/presentation is viewer state. Keeping these separate
     // means a user can stay in voice while choosing whether to spend GPU time watching a stream.

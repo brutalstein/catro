@@ -48,6 +48,7 @@
     <ClCompile Include="Server\ServerView.Directory.cpp"><Filter>Server</Filter></ClCompile>
     <ClCompile Include="Server\ServerView.Screen.cpp"><Filter>Server</Filter></ClCompile>
     <ClCompile Include="Server\ServerView.State.cpp"><Filter>Server</Filter></ClCompile>
+    <ClCompile Include="Server\SharePicker.cpp"><Filter>Server</Filter></ClCompile>
     <ClCompile Include="Server\ServerView.Voice.cpp"><Filter>Server</Filter></ClCompile>
     <ClCompile Include="Settings\SettingsView.xaml.cpp"><Filter>Settings</Filter></ClCompile>
   </ItemGroup>

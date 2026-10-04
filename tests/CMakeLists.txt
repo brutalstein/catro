@@ -118,6 +118,10 @@ catro_add_test(windows_ui_activity apps/windows_ui_activity_test.cpp)
 target_include_directories(catro_windows_ui_activity_test PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/windows/Catro
 )
+catro_add_test(share_presets apps/share_presets_test.cpp)
+target_include_directories(catro_share_presets_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/windows/Catro
+)
 target_compile_definitions(catro_ui_policy_test PRIVATE
     CATRO_WINDOWS_XAML_DIR="${CMAKE_SOURCE_DIR}/apps/windows/Catro"
     CATRO_MACOS_UI_DIR="${CMAKE_SOURCE_DIR}/apps/macos/Catro"

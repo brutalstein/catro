@@ -3,6 +3,8 @@
 #include "Server/ServerView.xaml.h"
 #include "Server/ServerView.RuntimeConfig.hpp"
 #include "Settings/Performance.hpp"
+#include "Server/SharePicker.hpp"
+#include "SharePresets.hpp"
 
 #include <catro/platform/windows/screen_capture.hpp>
 #include <catro/screen_runtime.hpp>
@@ -10,6 +12,7 @@
 
 #include <dxgi1_3.h>
 #include <microsoft.ui.xaml.media.dxinterop.h>
+
 
 #include <winrt/Windows.Graphics.Capture.h>
 #include <winrt/Windows.Security.Authorization.AppCapabilityAccess.h>
@@ -23,6 +26,7 @@
 #include <cstdint>
 #include <exception>
 #include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -98,29 +102,6 @@ void fit_swap_chain(IDXGISwapChain1* swap_chain, double width, double height) no
     (void)scalable->SetMatrixTransform(&matrix);
 }
 
-std::wstring capture_source_label(
-    const catro::platform::windows::CaptureSource& source) {
-    std::wstring label =
-        source.game ? L"Game — "
-        : source.kind == catro::platform::windows::CaptureSourceKind::display
-            ? L"Display — "
-            : L"Window — ";
-    if (source.fullscreen_like && !source.game &&
-        source.kind == catro::platform::windows::CaptureSourceKind::window) {
-        label += L"Fullscreen/game — ";
-    }
-    label += to_hstring(source.title).c_str();
-    if (!source.process_name.empty()) {
-        label += L"  ·  ";
-        label += to_hstring(source.process_name).c_str();
-    }
-    label += L"  ·  ";
-    label += std::to_wstring(source.width);
-    label += L"×";
-    label += std::to_wstring(source.height);
-    return label;
-}
-
 bool chromium_window(
     const catro::platform::windows::CaptureSource& source) noexcept {
     if (source.kind != catro::platform::windows::CaptureSourceKind::window) {
@@ -189,6 +170,16 @@ void ServerView::OnFullScreenStream(
 void ServerView::OnRemoteStreamDoubleTapped(
     IInspectable const&, xaml::Input::DoubleTappedRoutedEventArgs const&) {
     OpenStreamWindow(true);
+}
+
+void ServerView::OnLocalStreamDoubleTapped(
+    IInspectable const&, xaml::Input::DoubleTappedRoutedEventArgs const&) {
+    OpenStreamWindow(true, true);
+}
+
+void ServerView::OnLocalFullScreen(
+    IInspectable const&, xaml::RoutedEventArgs const&) {
+    OpenStreamWindow(true, true);
 }
 
 void ServerView::OnSizeChanged(IInspectable const&, xaml::SizeChangedEventArgs const& args) {
@@ -293,10 +284,12 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         std::vector<
             catro::platform::windows::CaptureSource> sources;
         std::exception_ptr enumeration_failure;
+        bool gpu_strong = false;
         co_await winrt::resume_background();
         try {
             sources =
                 catro::platform::windows::enumerate_capture_sources();
+            gpu_strong = catro::shell::strong_gpu();
         } catch (...) {
             enumeration_failure =
                 std::current_exception();
@@ -325,39 +318,66 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         controls::StackPanel form;
         form.Spacing(10);
 
-        controls::TextBlock source_label;
-        source_label.Text(L"Source");
-        form.Children().Append(source_label);
+        // Games first, then screens, then app windows, the way Discord lists them.
+        using catro::platform::windows::CaptureSourceKind;
+        const auto not_game = std::stable_partition(
+            sources.begin(), sources.end(), [](const auto& source) { return source.game; });
+        std::stable_partition(not_game, sources.end(), [](const auto& source) {
+            return source.kind == CaptureSourceKind::display;
+        });
 
-        controls::ComboBox source_box;
-        source_box.HorizontalAlignment(xaml::HorizontalAlignment::Stretch);
+        controls::ListView source_list;
+        source_list.SelectionMode(controls::ListViewSelectionMode::Single);
+        source_list.MaxHeight(300);
+        int display_number = 0;
         for (const auto& source : sources) {
-            source_box.Items().Append(
-                box_value(hstring{capture_source_label(source)}));
+            source_list.Items().Append(catro::shell::share_source_row(
+                source,
+                source.kind == CaptureSourceKind::display ? ++display_number : 0));
         }
-        source_box.SelectedIndex(0);
-        form.Children().Append(source_box);
+        source_list.SelectedIndex(0);
+        form.Children().Append(source_list);
 
-        controls::TextBlock game_note;
-        game_note.Text(
-            L"Border-free display/game capture uses GPU-only DXGI Desktop Duplication for full "
-            L"displays and Counter-Strike 2, including fullscreen mode changes, without injecting "
-            L"code into the game process.");
-        game_note.TextWrapping(xaml::TextWrapping::Wrap);
-        game_note.Visibility(
-            catro::platform::windows::recommended_capture_backend(sources.front()) ==
-                    catro::platform::windows::ScreenCaptureBackend::desktop_duplication
-                ? xaml::Visibility::Visible
-                : xaml::Visibility::Collapsed);
-        form.Children().Append(game_note);
+        // Resolution is the only quality choice; FPS and bitrate follow the GPU.
+        controls::RadioButtons quality_box;
+        quality_box.Header(box_value(hstring{L"Resolution"}));
+        form.Children().Append(quality_box);
+        controls::TextBlock quality_note;
+        quality_note.FontSize(12.0);
+        quality_note.Opacity(0.7);
+        form.Children().Append(quality_note);
+        const auto qualities = std::make_shared<catro::shell::ShareQualityChoice>();
+        const auto show_quality = [qualities, quality_box, quality_note, gpu_strong]() {
+            const auto index = quality_box.SelectedIndex();
+            if (index < 0 || static_cast<std::size_t>(index) >= qualities->options.size()) {
+                return;
+            }
+            std::wstring note = std::to_wstring(qualities->options[static_cast<std::size_t>(index)].fps);
+            note += gpu_strong ? L" FPS, set for your graphics card"
+                               : L" FPS, set for your integrated graphics";
+            quality_note.Text(note);
+        };
+        const auto fill_qualities = [qualities, quality_box, show_quality, gpu_strong](
+                                        const catro::platform::windows::CaptureSource& source) {
+            *qualities = catro::shell::share_qualities(source.width, source.height, gpu_strong);
+            quality_box.Items().Clear();
+            for (const auto& quality : qualities->options) {
+                quality_box.Items().Append(box_value(hstring{quality.label}));
+            }
+            quality_box.MaxColumns(static_cast<std::int32_t>(qualities->options.size()));
+            quality_box.SelectedIndex(static_cast<std::int32_t>(qualities->recommended));
+            show_quality();
+        };
+        quality_box.SelectionChanged([show_quality](auto const&, auto const&) { show_quality(); });
+        fill_qualities(sources.front());
 
         controls::TextBlock browser_note;
         browser_note.Text(
-            L"Browser video compatibility: Brave/Chrome/Edge may stop rendering a hardware video "
-            L"surface when the selected window is completely covered. If only the video region "
-            L"turns black, restart the browser with native window occlusion disabled. "
-            L"Protected/DRM video can remain unavailable to capture by design.");
+            L"Keep the browser window visible: a fully covered browser can stop drawing its video. "
+            L"Protected (DRM) video stays black.");
         browser_note.TextWrapping(xaml::TextWrapping::Wrap);
+        browser_note.FontSize(12.0);
+        browser_note.Opacity(0.7);
         browser_note.Visibility(
             chromium_window(sources.front())
                 ? xaml::Visibility::Visible
@@ -385,156 +405,39 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         share_audio_box.IsOn(audio_for(sources.front()) && audio_default(sources.front()));
         form.Children().Append(share_audio_box);
 
-        controls::TextBlock audio_note;
-        audio_note.Text(
-            room_mode_active_
-                ? L"A window or game shares only its own sound. A display can share computer audio; voices in Catro are never included."
-                : L"Stream audio is enabled for secure RTC rooms; local direct-peer engineering mode carries video only.");
-        audio_note.TextWrapping(
-            xaml::TextWrapping::Wrap);
-        audio_note.FontSize(11);
-        form.Children().Append(audio_note);
-
         controls::ToggleSwitch preview_box;
         preview_box.Header(box_value(hstring{L"Show my preview"}));
         preview_box.IsOn(catro::shell::local_preview_preference());
         form.Children().Append(preview_box);
 
-        controls::TextBlock preview_note;
-        preview_note.Text(L"Preview only changes what you see here. You can turn it on or off while sharing.");
-        preview_note.TextWrapping(xaml::TextWrapping::Wrap);
-        form.Children().Append(preview_note);
-
-        source_box.SelectionChanged(
+        source_list.SelectionChanged(
             [&sources,
+             dialog,
              audio_for,
              audio_default,
              browser_note,
-             game_note,
+             fill_qualities,
              share_audio_box](auto const& sender, auto const&) {
                 const auto selected =
-                    sender.as<controls::ComboBox>().SelectedIndex();
+                    sender.template as<controls::ListView>().SelectedIndex();
                 const bool valid =
                     selected >= 0 &&
                     static_cast<std::size_t>(selected) <
                         sources.size();
-                const auto* source =
-                    valid
-                        ? &sources[
-                              static_cast<std::size_t>(
-                                  selected)]
-                        : nullptr;
-
+                dialog.IsPrimaryButtonEnabled(valid);
+                if (!valid) {
+                    return;
+                }
+                const auto& source = sources[static_cast<std::size_t>(selected)];
                 browser_note.Visibility(
-                    source != nullptr &&
-                            chromium_window(*source)
+                    chromium_window(source)
                         ? xaml::Visibility::Visible
                         : xaml::Visibility::Collapsed);
-                const bool game_visible =
-                    source != nullptr &&
-                    catro::platform::windows::
-                            recommended_capture_backend(
-                                *source) ==
-                        catro::platform::windows::
-                            ScreenCaptureBackend::
-                                desktop_duplication;
-                game_note.Visibility(
-                    game_visible
-                        ? xaml::Visibility::Visible
-                        : xaml::Visibility::Collapsed);
-
-                const bool audio_available =
-                    source != nullptr && audio_for(*source);
-                share_audio_box.IsEnabled(
-                    audio_available);
-                share_audio_box.IsOn(
-                    audio_available && audio_default(*source));
+                const bool audio_available = audio_for(source);
+                share_audio_box.IsEnabled(audio_available);
+                share_audio_box.IsOn(audio_available && audio_default(source));
+                fill_qualities(source);
             });
-
-        controls::ToggleSwitch borderless_box;
-        borderless_box.Header(box_value(hstring{L"Hide Windows capture border"}));
-        borderless_box.OnContent(box_value(hstring{L"On"}));
-        borderless_box.OffContent(box_value(hstring{L"Off"}));
-        borderless_box.IsOn(true);
-        form.Children().Append(borderless_box);
-
-        controls::TextBlock resolution_label;
-        resolution_label.Text(L"Stream resolution ceiling");
-        form.Children().Append(resolution_label);
-
-        controls::ComboBox preset_box;
-        preset_box.HorizontalAlignment(xaml::HorizontalAlignment::Stretch);
-        preset_box.Items().Append(box_value(hstring{L"1080p"}));
-        preset_box.Items().Append(box_value(hstring{L"900p"}));
-        preset_box.Items().Append(box_value(hstring{L"720p"}));
-        preset_box.Items().Append(box_value(hstring{L"Custom"}));
-        preset_box.SelectedIndex(0);
-        form.Children().Append(preset_box);
-
-        controls::NumberBox width_box;
-        width_box.Header(box_value(hstring{L"Maximum width"}));
-        width_box.Minimum(320);
-        width_box.Maximum(7680);
-        width_box.SmallChange(2);
-        width_box.Value(1920);
-        form.Children().Append(width_box);
-
-        controls::NumberBox height_box;
-        height_box.Header(box_value(hstring{L"Maximum height"}));
-        height_box.Minimum(180);
-        height_box.Maximum(4320);
-        height_box.SmallChange(2);
-        height_box.Value(1080);
-        form.Children().Append(height_box);
-
-        preset_box.SelectionChanged(
-            [width_box, height_box](auto const& sender, auto const&) {
-                const auto selected =
-                    sender.as<controls::ComboBox>().SelectedIndex();
-                if (selected == 0) {
-                    width_box.Value(1920);
-                    height_box.Value(1080);
-                } else if (selected == 1) {
-                    width_box.Value(1600);
-                    height_box.Value(900);
-                } else if (selected == 2) {
-                    width_box.Value(1280);
-                    height_box.Value(720);
-                }
-            });
-
-        controls::NumberBox fps_box;
-        fps_box.Header(box_value(hstring{L"Frames per second"}));
-        fps_box.Minimum(1);
-        fps_box.Maximum(120);
-        fps_box.SmallChange(1);
-        // Games move fast; 60 FPS keeps motion smooth and the bitrate adapts to the network.
-        fps_box.Value(sources.front().game ? 60 : 30);
-        form.Children().Append(fps_box);
-        source_box.SelectionChanged(
-            [&sources, fps_box](auto const& sender, auto const&) {
-                const auto selected = sender.as<controls::ComboBox>().SelectedIndex();
-                if (selected >= 0 && static_cast<std::size_t>(selected) < sources.size() &&
-                    sources[static_cast<std::size_t>(selected)].game) {
-                    fps_box.Value(60);
-                }
-            });
-
-        controls::NumberBox bitrate_box;
-        bitrate_box.Header(box_value(hstring{L"Bitrate (Mbps)"}));
-        bitrate_box.Minimum(0.128);
-        bitrate_box.Maximum(50.0);
-        bitrate_box.SmallChange(0.5);
-        bitrate_box.Value(6.0);
-        form.Children().Append(bitrate_box);
-
-        controls::TextBlock note;
-        note.Text(
-            L"Catro preserves the selected source aspect ratio, never upscales it, and rounds only "
-            L"to the even dimensions required by NV12/H.264. Your actual outgoing size is shown "
-            L"under the preview after the stream starts.");
-        note.TextWrapping(xaml::TextWrapping::Wrap);
-        form.Children().Append(note);
 
         dialog.Content(form);
         const auto result = co_await dialog.ShowAsync();
@@ -546,44 +449,35 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
             co_return;
         }
 
-        const auto selected = source_box.SelectedIndex();
-        const auto width_value = width_box.Value();
-        const auto height_value = height_box.Value();
-        const auto fps_value = fps_box.Value();
-        const auto bitrate_value = bitrate_box.Value();
-        const bool request_borderless = borderless_box.IsOn();
+        const auto selected = source_list.SelectedIndex();
+        const auto quality_index = quality_box.SelectedIndex();
+        const bool request_borderless = true;
         const bool request_audio =
             share_audio_box.IsEnabled() &&
             share_audio_box.IsOn();
 
         if (selected < 0 ||
             static_cast<std::size_t>(selected) >= sources.size() ||
-            !std::isfinite(width_value) ||
-            !std::isfinite(height_value) ||
-            !std::isfinite(fps_value) ||
-            !std::isfinite(bitrate_value)) {
+            quality_index < 0 ||
+            static_cast<std::size_t>(quality_index) >= qualities->options.size()) {
             workspace_state_.share_screen.fail(
                 "Invalid screen-share settings");
             UpdateVoiceUi();
             co_return;
         }
 
-        const auto width =
-            static_cast<std::uint32_t>(width_value);
-        const auto height =
-            static_cast<std::uint32_t>(height_value);
-        const auto fps =
-            static_cast<std::uint32_t>(fps_value);
-        const auto bitrate = static_cast<std::uint32_t>(
-            bitrate_value * 1'000'000.0 + 0.5);
+        const auto& quality = qualities->options[static_cast<std::size_t>(quality_index)];
+        const auto width = quality.max_width;
+        const auto height = quality.max_height;
+        const auto fps = quality.fps;
+        const auto bitrate = quality.bitrate;
 
         const auto fitted = catro::video::fit_even_video_extent(
             sources[static_cast<std::size_t>(selected)].width,
             sources[static_cast<std::size_t>(selected)].height,
             width,
             height);
-        if (!fitted || fps == 0 || fps > 120 ||
-            bitrate < 128'000 || bitrate > 50'000'000) {
+        if (!fitted) {
             workspace_state_.share_screen.fail(
                 "Invalid screen-share settings");
             UpdateVoiceUi();
@@ -706,12 +600,21 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
     }
 }
 
-void ServerView::OpenStreamWindow(bool fullscreen) {
-    if (!screen_runtime_ ||
-        !screen_runtime_->snapshot().remote_viewing) {
+void ServerView::OpenStreamWindow(bool fullscreen, bool local) {
+    if (!screen_runtime_) {
+        return;
+    }
+    const auto opening = screen_runtime_->snapshot();
+    const bool sharing =
+        opening.state == catro::screen::ScreenShareState::starting ||
+        opening.state == catro::screen::ScreenShareState::sharing;
+    if (local ? !sharing : !opening.remote_viewing) {
         return;
     }
 
+    if (stream_window_ && stream_window_local_ != local) {
+        CloseStreamWindow();
+    }
     if (stream_window_) {
         SetStreamWindowFullscreen(fullscreen);
         stream_window_.Activate();
@@ -722,10 +625,15 @@ void ServerView::OpenStreamWindow(bool fullscreen) {
     try {
         namespace media = Microsoft::UI::Xaml::Media;
 
-        DetachRemoteSwapChain();
+        if (local) {
+            DetachPreviewSwapChain();
+        } else {
+            DetachRemoteSwapChain();
+        }
 
+        stream_window_local_ = local;
         stream_window_ = xaml::Window{};
-        stream_window_.Title(L"Catro — Live Stream");
+        stream_window_.Title(local ? L"Catro — Your Stream" : L"Catro — Live Stream");
 
         stream_window_root_ = controls::Grid{};
         stream_window_root_.Background(
@@ -825,7 +733,9 @@ void ServerView::OpenStreamWindow(bool fullscreen) {
                 CloseStreamWindow();
                 UpdateScreenShareUi();
             });
-        toolbar.Children().Append(leave_button);
+        if (!local) {
+            toolbar.Children().Append(leave_button);
+        }
 
         stream_window_root_.Children().Append(toolbar);
         stream_window_root_.DoubleTapped(
@@ -868,6 +778,7 @@ void ServerView::OpenStreamWindow(bool fullscreen) {
                 stream_window_ = nullptr;
                 stream_window_fullscreen_ = false;
                 stream_window_topmost_ = false;
+                stream_window_local_ = false;
                 UpdateScreenShareUi();
                 ApplyActivityPolicy();
             });
@@ -904,6 +815,7 @@ void ServerView::OpenStreamWindow(bool fullscreen) {
         }
 
         SetStreamWindowFullscreen(fullscreen);
+        ApplyActivityPolicy();
         UpdateStreamWindowLayout();
     } catch (...) {
         CloseStreamWindow();
@@ -984,24 +896,29 @@ void ServerView::UpdateStreamWindowLayout() {
     }
 
     const auto snapshot = screen_runtime_->snapshot();
-    if (!snapshot.remote_viewing) {
+    const bool sharing =
+        snapshot.state == catro::screen::ScreenShareState::starting ||
+        snapshot.state == catro::screen::ScreenShareState::sharing;
+    if (stream_window_local_ ? !sharing : !snapshot.remote_viewing) {
         CloseStreamWindow();
         return;
     }
 
-    if (snapshot.remote_width == 0 ||
-        snapshot.remote_height == 0) {
+    const auto source_width =
+        stream_window_local_
+            ? (snapshot.encoded_width != 0 ? snapshot.encoded_width : snapshot.source_width)
+            : snapshot.remote_width;
+    const auto source_height =
+        stream_window_local_
+            ? (snapshot.encoded_height != 0 ? snapshot.encoded_height : snapshot.source_height)
+            : snapshot.remote_height;
+    if (source_width == 0 || source_height == 0) {
         stream_window_viewport_.Visibility(
             xaml::Visibility::Collapsed);
         return;
     }
     stream_window_viewport_.Visibility(
         xaml::Visibility::Visible);
-
-    const auto source_width =
-        snapshot.remote_width;
-    const auto source_height =
-        snapshot.remote_height;
     const auto available_width =
         std::max(2.0, stream_window_root_.ActualWidth());
     const auto available_height =
@@ -1021,7 +938,9 @@ void ServerView::UpdateStreamWindowLayout() {
     }
 
     const auto swap =
-        screen_runtime_->remote_swap_chain();
+        stream_window_local_
+            ? screen_runtime_->preview_swap_chain()
+            : screen_runtime_->remote_swap_chain();
     if (swap &&
         stream_window_swap_chain_.Get() != swap.Get()) {
         try {
@@ -1066,6 +985,7 @@ void ServerView::CloseStreamWindow() noexcept {
     stream_window_ = nullptr;
     stream_window_fullscreen_ = false;
     stream_window_topmost_ = false;
+    stream_window_local_ = false;
 
     try {
         window.Close();
@@ -1164,9 +1084,11 @@ void ServerView::UpdateScreenShareUi() {
     ShareScreenButton().IsEnabled(can_share);
     ShareScreenIconButton().IsEnabled(can_share);
 
-    if (stream_window_ && !remote_viewing) {
+    if (stream_window_ && !(stream_window_local_ ? local_active : remote_viewing)) {
         CloseStreamWindow();
     }
+    const bool remote_window = stream_window_ && !stream_window_local_;
+    const bool local_window = stream_window_ && stream_window_local_;
 
     const auto panel_width = VoicePanel().ActualWidth();
     const auto panel_height = VoicePanel().ActualHeight();
@@ -1228,7 +1150,7 @@ void ServerView::UpdateScreenShareUi() {
             : xaml::Visibility::Collapsed);
 
     if (remote_viewing) {
-        if (stream_window_) {
+        if (remote_window) {
             RemoteShareHost().Visibility(
                 xaml::Visibility::Collapsed);
             DetachRemoteSwapChain();
@@ -1258,7 +1180,7 @@ void ServerView::UpdateScreenShareUi() {
                 remote_size.height);
         }
 
-        if (!stream_window_) {
+        if (!remote_window) {
             const auto remote_swap =
                 screen_runtime_->remote_swap_chain();
             if (remote_swap &&
@@ -1312,11 +1234,13 @@ void ServerView::UpdateScreenShareUi() {
 
     if (local_active) {
         SharePreviewHost().Visibility(xaml::Visibility::Visible);
-        LocalShareViewport().Visibility(local_preview_enabled_ ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
+        // While the full-screen window shows the preview, the inline box steps aside.
+        const bool inline_preview = local_preview_enabled_ && !local_window;
+        LocalShareViewport().Visibility(inline_preview ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
         LocalPreviewPausedHint().Visibility(local_preview_enabled_ ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
 
         const auto local_swap =
-            local_preview_enabled_ ? screen_runtime_->preview_swap_chain() : nullptr;
+            inline_preview ? screen_runtime_->preview_swap_chain() : nullptr;
         if (local_swap &&
             attached_preview_swap_chain_.Get() !=
                 local_swap.Get()) {
@@ -1409,7 +1333,7 @@ void ServerView::UpdateScreenShareUi() {
             Microsoft::UI::Xaml::Controls::Canvas::SetZIndex(
                 SharePreviewHost(), 0);
         }
-        if (local_preview_enabled_) {
+        if (inline_preview) {
             // Inside the viewport's 1-pixel border.
             fit_swap_chain(
                 attached_preview_swap_chain_.Get(),

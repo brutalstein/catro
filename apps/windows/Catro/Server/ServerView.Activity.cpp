@@ -77,12 +77,16 @@ void ServerView::ApplyActivityPolicy() {
         const auto screen = screen_runtime_->snapshot();
         schedule(screen_timer_, policy.screen,
                  voice_active || screen.state != catro::screen::ScreenShareState::idle);
+        // Watching your own stream full screen keeps the preview running whatever the main
+        // window does.
         const bool preview =
-            policy.local_preview &&
-            server_view_detail::environment("CATRO_LOCAL_PREVIEW").value_or(
-                catro::shell::local_preview_preference() ? "1" : "0") != "0";
+            (stream_window_ && stream_window_local_) ||
+            (policy.local_preview &&
+             server_view_detail::environment("CATRO_LOCAL_PREVIEW").value_or(
+                 catro::shell::local_preview_preference() ? "1" : "0") != "0");
         local_preview_enabled_ = preview;
         screen_runtime_->set_local_preview_enabled(preview);
+        screen_runtime_->set_local_preview_full(stream_window_ && stream_window_local_);
         if (!preview && attached_preview_swap_chain_) {
             DetachPreviewSwapChain();
         }

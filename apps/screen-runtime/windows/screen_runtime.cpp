@@ -523,6 +523,10 @@ struct WindowsScreenShareRuntime::Impl {
         local_preview_enabled_.store(enabled, std::memory_order_release);
     }
 
+    void set_local_preview_full(bool full) noexcept {
+        local_preview_full_.store(full, std::memory_order_release);
+    }
+
     void set_stream_volume(float volume) noexcept {
         counters_.remote_stream_volume.store(
             std::clamp(volume, 0.0F, 2.0F), std::memory_order_relaxed);
@@ -860,13 +864,23 @@ struct WindowsScreenShareRuntime::Impl {
         trace_event("sender-first-frame-ready");
 
         WindowsH264HardwareEncoder encoder;
-        D3D11CompositionVideoPresenter presenter(
-            VideoPresenterConfig{
-                .max_width = 640,
-                .max_height = 360,
-                .frame_rate =
-                    std::min(config.fps, kPreviewMaxFps),
-            });
+        // The inline self-preview is a small 10 FPS thumbnail. Watching your own stream full
+        // screen switches to the stream's own size and frame rate, so it shows what viewers get.
+        bool presenter_full = local_preview_full_.load(std::memory_order_acquire);
+        const auto make_presenter = [&config](bool full) {
+            return std::make_unique<D3D11CompositionVideoPresenter>(
+                full ? VideoPresenterConfig{
+                           .max_width = config.max_width,
+                           .max_height = config.max_height,
+                           .frame_rate = config.fps,
+                       }
+                     : VideoPresenterConfig{
+                           .max_width = 640,
+                           .max_height = 360,
+                           .frame_rate = std::min(config.fps, kPreviewMaxFps),
+                       });
+        };
+        auto presenter = make_presenter(presenter_full);
 
         EncodedAccessUnit access_unit;
         try {
@@ -954,7 +968,7 @@ struct WindowsScreenShareRuntime::Impl {
         };
 
         const auto publish_preview_swap_chain = [&] {
-            const auto swap_chain = presenter.swap_chain();
+            const auto swap_chain = presenter->swap_chain();
             if (!swap_chain) {
                 return;
             }
@@ -982,7 +996,7 @@ struct WindowsScreenShareRuntime::Impl {
                     std::memory_order_acquire)) {
                 preview_accumulator = 0;
                 if (preview_resources_live) {
-                    presenter.reset();
+                    presenter->reset();
                     {
                         std::scoped_lock lock(preview_mutex_);
                         preview_swap_chain_.Reset();
@@ -990,8 +1004,20 @@ struct WindowsScreenShareRuntime::Impl {
                     preview_resources_live = false;
                 }
             } else {
+                const bool want_full = local_preview_full_.load(std::memory_order_acquire);
+                if (want_full != presenter_full) {
+                    presenter->reset();
+                    {
+                        std::scoped_lock lock(preview_mutex_);
+                        preview_swap_chain_.Reset();
+                    }
+                    presenter = make_presenter(want_full);
+                    presenter_full = want_full;
+                    preview_resources_live = false;
+                    preview_accumulator = config.fps;
+                }
                 preview_accumulator +=
-                    std::min(config.fps, kPreviewMaxFps);
+                    want_full ? config.fps : std::min(config.fps, kPreviewMaxFps);
                 if (preview_accumulator >= config.fps) {
                     preview_accumulator -= config.fps;
                     if (!preview_resources_live) {
@@ -1000,7 +1026,7 @@ struct WindowsScreenShareRuntime::Impl {
                     bool preview_ok = true;
                     try {
                         if (const auto error =
-                                presenter.present(
+                                presenter->present(
                                     *frame.texture.Get())) {
                             trace_event("sender-local-preview-disabled-error");
                             preview_ok = false;
@@ -1012,7 +1038,7 @@ struct WindowsScreenShareRuntime::Impl {
                     if (!preview_ok) {
                         local_preview_enabled_.store(
                             false, std::memory_order_release);
-                        presenter.reset();
+                        presenter->reset();
                         {
                             std::scoped_lock lock(preview_mutex_);
                             preview_swap_chain_.Reset();
@@ -1026,7 +1052,7 @@ struct WindowsScreenShareRuntime::Impl {
                     }
                     if (preview_ok) {
                         const auto preview_stats =
-                            presenter.statistics();
+                            presenter->statistics();
                         preview_frames_.store(
                             preview_stats.frames_presented,
                             std::memory_order_relaxed);
@@ -1148,7 +1174,7 @@ struct WindowsScreenShareRuntime::Impl {
 
         const auto encoder_stats = encoder.statistics();
         const auto capture_stats = capture.statistics();
-        const auto preview_stats = presenter.statistics();
+        const auto preview_stats = presenter->statistics();
         frames_encoded_.store(
             encoder_stats.frames_encoded,
             std::memory_order_relaxed);
@@ -1173,7 +1199,7 @@ struct WindowsScreenShareRuntime::Impl {
 
         encoder.stop();
         capture.stop();
-        presenter.reset();
+        presenter->reset();
 
         {
             std::scoped_lock lock(preview_mutex_);
@@ -1368,6 +1394,7 @@ struct WindowsScreenShareRuntime::Impl {
     std::atomic_bool stop_requested_{false};
     std::atomic_bool share_stop_requested_{true};
     std::atomic_bool local_preview_enabled_{true};
+    std::atomic_bool local_preview_full_{false};
     std::atomic<ScreenShareState> state_{
         ScreenShareState::idle};
 
@@ -1415,6 +1442,11 @@ void WindowsScreenShareRuntime::stop_sharing() noexcept {
 void WindowsScreenShareRuntime::set_local_preview_enabled(
     bool enabled) noexcept {
     impl_->set_local_preview_enabled(enabled);
+}
+
+void WindowsScreenShareRuntime::set_local_preview_full(
+    bool full) noexcept {
+    impl_->set_local_preview_full(full);
 }
 
 void WindowsScreenShareRuntime::set_remote_viewing_enabled(

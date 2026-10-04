@@ -572,6 +572,8 @@
                             </StackPanel>
                         </Border>
                         <Border x:Name="LocalShareViewport"
+                                DoubleTapped="OnLocalStreamDoubleTapped"
+                                ToolTipService.ToolTip="Double-click for full screen"
                                 Width="720"
                                 Height="405"
                                 CornerRadius="14"
@@ -604,6 +606,18 @@
                             <ToggleSwitch x:Name="LocalPreviewToggle" Header="Show my preview"
                                           Toggled="OnLocalPreviewChanged"
                                           AutomationProperties.Name="Show my screen-share preview" />
+                            <Button x:Name="LocalFullScreenButton"
+                                    VerticalAlignment="Bottom"
+                                    Click="OnLocalFullScreen"
+                                    Padding="10,5"
+                                    ToolTipService.ToolTip="Watch your own stream full screen. Esc exits."
+                                    AutomationProperties.Name="Watch my stream full screen"
+                                    Style="{StaticResource CatroPrimaryButtonStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon Glyph="&#xE740;" FontSize="12" />
+                                    <TextBlock Text="Full Screen" />
+                                </StackPanel>
+                            </Button>
                             <TextBlock x:Name="ShareSourceText"
                                        FontSize="11"
                                        FontWeight="SemiBold"
