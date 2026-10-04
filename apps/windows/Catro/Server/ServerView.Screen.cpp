@@ -186,6 +186,11 @@ void ServerView::OnFullScreenStream(
     OpenStreamWindow(true);
 }
 
+void ServerView::OnRemoteStreamDoubleTapped(
+    IInspectable const&, xaml::Input::DoubleTappedRoutedEventArgs const&) {
+    OpenStreamWindow(true);
+}
+
 void ServerView::OnSizeChanged(IInspectable const&, xaml::SizeChangedEventArgs const& args) {
     const auto width = args.NewSize().Width;
     const bool show_members = width >= 920.0;
@@ -823,6 +828,21 @@ void ServerView::OpenStreamWindow(bool fullscreen) {
         toolbar.Children().Append(leave_button);
 
         stream_window_root_.Children().Append(toolbar);
+        stream_window_root_.DoubleTapped(
+            [this](auto const&, auto const&) {
+                SetStreamWindowFullscreen(
+                    !stream_window_fullscreen_);
+            });
+        xaml::Input::KeyboardAccelerator escape;
+        escape.Key(Windows::System::VirtualKey::Escape);
+        escape.Invoked(
+            [this](auto const&, xaml::Input::KeyboardAcceleratorInvokedEventArgs const& args) {
+                args.Handled(true);
+                if (stream_window_fullscreen_) {
+                    SetStreamWindowFullscreen(false);
+                }
+            });
+        stream_window_root_.KeyboardAccelerators().Append(escape);
         stream_window_root_.SizeChanged(
             [this](auto const&, auto const&) {
                 UpdateStreamWindowLayout();
@@ -1015,6 +1035,10 @@ void ServerView::UpdateStreamWindowLayout() {
         } catch (...) {
         }
     }
+    fit_swap_chain(
+        stream_window_swap_chain_.Get(),
+        viewport.width,
+        viewport.height);
 }
 
 void ServerView::CloseStreamWindow() noexcept {
@@ -1252,6 +1276,13 @@ void ServerView::UpdateScreenShareUi() {
                     }
                 } catch (...) {
                 }
+            }
+            if (have_remote_geometry) {
+                // Inside the viewport's 1-pixel border.
+                fit_swap_chain(
+                    attached_remote_swap_chain_.Get(),
+                    remote_size.width - 2.0,
+                    remote_size.height - 2.0);
             }
         }
 

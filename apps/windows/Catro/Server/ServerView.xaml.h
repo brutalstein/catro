@@ -43,6 +43,7 @@ struct ServerView : ServerViewT<ServerView> {
     void OnLeaveStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnPopOutStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnFullScreenStream(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnRemoteStreamDoubleTapped(IInspectable const&, Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs const&);
     void OnStreamVolumeChanged(
         IInspectable const&, Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const&);
     void OnSizeChanged(IInspectable const&, Microsoft::UI::Xaml::SizeChangedEventArgs const&);
@@ -144,6 +145,8 @@ private:
     Microsoft::UI::Dispatching::DispatcherQueueTimer access_timer_{nullptr};
     std::unique_ptr<catro::screen::WindowsScreenShareRuntime> screen_runtime_;
     Microsoft::UI::Dispatching::DispatcherQueueTimer screen_timer_{nullptr};
+    bool shown_muted_ = false;
+    bool shown_deafened_ = false;
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> attached_preview_swap_chain_;
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> attached_remote_swap_chain_;
 

@@ -44,6 +44,8 @@ struct StreamViewer: View {
                     if watching {
                         StreamLayer(model: model, preview: false)
                             .accessibilityLabel("Shared screen")
+                            .help("Double-click for full screen")
+                            .onTapGesture(count: 2) { popOut(fullScreen: true) }
                     }
                     HStack {
                         Button(watching ? "Stop Watching" : "Watch Stream") { model.setWatching(!watching) }
@@ -118,6 +120,7 @@ struct StreamWindow: View {
         }
         .frame(minWidth: 480, minHeight: 270)
         .background(Color.black)
+        .onTapGesture(count: 2) { window?.toggleFullScreen(nil) }
         .background(WindowReader { window in
             self.window = window
             guard model.streamFullScreenRequested else { return }

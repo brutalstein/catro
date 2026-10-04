@@ -24,15 +24,19 @@ struct VoiceControls: View {
                               : (snapshot?.connectionMessage ?? "Voice needs online services"))
 
                 Toggle(isOn: Binding(get: { muted }, set: { _ in model.toggleMute() })) {
-                    Label("Mute", systemImage: muted ? "mic.slash" : "mic")
+                    Label(muted || deafened ? "Muted" : "Mute", systemImage: muted || deafened ? "mic.slash.fill" : "mic")
                 }
                 .toggleStyle(.button)
+                .tint(.red)
+                .foregroundStyle(muted || deafened ? Color.red : Color.primary)
                 .disabled(!joined)
 
                 Toggle(isOn: Binding(get: { deafened }, set: { _ in model.toggleDeafen() })) {
-                    Label("Deafen", systemImage: deafened ? "speaker.slash" : "speaker.wave.2")
+                    Label(deafened ? "Deafened" : "Deafen", systemImage: deafened ? "speaker.slash.fill" : "headphones")
                 }
                 .toggleStyle(.button)
+                .tint(.red)
+                .foregroundStyle(deafened ? Color.red : Color.primary)
                 .disabled(!joined)
 
                 if sharing {

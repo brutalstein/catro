@@ -260,10 +260,28 @@ void ServerView::UpdateVoiceUi() {
     controls::ToolTipService::SetToolTip(DeafenVoiceButton(), deafen_tip);
     controls::ToolTipService::SetToolTip(ProfileDeafenButton(), deafen_tip);
 
-    MuteVoiceButton().Opacity(effective_muted ? 1.0 : 0.72);
-    ProfileMuteButton().Opacity(effective_muted ? 1.0 : 0.72);
-    DeafenVoiceButton().Opacity(deafened_ ? 1.0 : 0.72);
-    ProfileDeafenButton().Opacity(deafened_ ? 1.0 : 0.72);
+    // Active mute/deafen swaps to a crossed-out glyph and the rose style. Only touch the
+    // properties when the state flips so the frequent snapshot refresh stays free.
+    if (shown_muted_ != effective_muted || shown_deafened_ != deafened_) {
+        shown_muted_ = effective_muted;
+        shown_deafened_ = deafened_;
+        const auto resources = xaml::Application::Current().Resources();
+        const auto style = [&](wchar_t const* key) {
+            return resources.Lookup(box_value(key)).as<xaml::Style>();
+        };
+        const hstring mic = effective_muted ? hstring{L"÷81"} : hstring{L"ç20"};
+        const hstring speaker = deafened_ ? hstring{L"ç4F"} : hstring{L"çF6"};
+        MuteVoiceIcon().Glyph(mic);
+        ProfileMuteIcon().Glyph(mic);
+        DeafenVoiceIcon().Glyph(speaker);
+        ProfileDeafenIcon().Glyph(speaker);
+        MuteVoiceButton().Style(style(effective_muted ? L"CatroDangerButtonStyle" : L"CatroSecondaryButtonStyle"));
+        DeafenVoiceButton().Style(style(deafened_ ? L"CatroDangerButtonStyle" : L"CatroSecondaryButtonStyle"));
+        ProfileMuteButton().Style(
+            style(effective_muted ? L"CatroQuietDangerIconButtonStyle" : L"CatroQuietIconButtonStyle"));
+        ProfileDeafenButton().Style(
+            style(deafened_ ? L"CatroQuietDangerIconButtonStyle" : L"CatroQuietIconButtonStyle"));
+    }
 
     if (workspace_state_.join_voice.availability ==
         catro::app::Availability::busy) {
