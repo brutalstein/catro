@@ -439,13 +439,9 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
                         graphics::GraphicsCaptureAccessKind::Borderless);
                 borderless_allowed =
                     access == capability::AppCapabilityAccessStatus::Allowed;
-                if (!borderless_allowed) {
-                    VoiceStateText().Text(
-                        L"Windows kept the capture border; streaming continues");
-                }
             } catch (const winrt::hresult_error&) {
-                VoiceStateText().Text(
-                    L"Borderless capture unavailable in this launch; streaming continues");
+                // Without borderless consent Windows only draws its capture border; the stream
+                // itself is unaffected, so this is not worth a warning.
             }
         }
 
@@ -840,7 +836,7 @@ void ServerView::UpdateScreenShareUi() {
                 std::to_wstring(snapshot.encoded_width);
             meta += L"×";
             meta += std::to_wstring(snapshot.encoded_height);
-            meta += L"  ·  SENDING";
+            meta += snapshot.waiting_for_source ? L"  ·  PAUSED UNTIL YOU RETURN TO IT" : L"  ·  SENDING";
             if (snapshot.quality_reduced) {
                 meta += L"  ·  LOWERED TO FIT YOUR GPU";
             }
@@ -852,6 +848,9 @@ void ServerView::UpdateScreenShareUi() {
                 meta += L"  ·  VIDEO ONLY";
             }
             ShareMetaText().Text(hstring{meta});
+        } else if (snapshot.waiting_for_source) {
+            // A full-screen game minimizes on Alt+Tab; Windows shows it again once you switch back.
+            ShareMetaText().Text(L"Switch to it to go live — the stream starts as soon as it is on screen");
         } else {
             ShareMetaText().Text(L"Starting…");
         }

@@ -55,7 +55,6 @@ using transport::UdpErrorCode;
 using transport::UdpPeerSocket;
 
 constexpr auto kFirstFrameTimeout = 3s;
-constexpr auto kGameFirstFrameTimeout = 30s;
 constexpr std::uint32_t kPreviewMaxFps = 10;
 
 struct EncoderBox {
@@ -833,19 +832,20 @@ struct WindowsScreenShareRuntime::Impl {
                 ? "sender-capture-started-dxgi"
                 : "sender-capture-started-wgc");
 
+        // Windows sends no frames for a minimized window, and a full-screen game minimizes itself on
+        // Alt+Tab, which is exactly when the user picks it in Catro. Like Discord, the share waits
+        // for the game for as long as it stays open instead of failing.
+        const auto window =
+            config.source.kind == platform::windows::CaptureSourceKind::window
+                ? reinterpret_cast<HWND>(config.source.native_handle)
+                : nullptr;
+        const auto source_minimized = [window] {
+            return window != nullptr && IsIconic(window);
+        };
         GpuCaptureFrame first;
-        const bool wait_for_game_restore =
-            config.source.kind ==
-                platform::windows::CaptureSourceKind::window &&
-            (config.source.game || IsIconic(
-                reinterpret_cast<HWND>(config.source.native_handle)));
-        const auto first_deadline =
-            Clock::now() +
-            (wait_for_game_restore
-                 ? kGameFirstFrameTimeout
-                 : kFirstFrameTimeout);
+        const bool patient = window != nullptr && (config.source.game || source_minimized());
+        const auto first_deadline = Clock::now() + kFirstFrameTimeout;
         while (!should_stop_sender() &&
-               Clock::now() < first_deadline &&
                !capture.wait_for_latest(first, 50ms)) {
             const auto stats = capture.statistics();
             if (stats.error) {
@@ -857,23 +857,29 @@ struct WindowsScreenShareRuntime::Impl {
                 capture.stop();
                 return;
             }
+            if (window != nullptr && !IsWindow(window)) {
+                fail_share(ScreenShareErrorCode::capture_failed,
+                           "The shared window was closed");
+                capture.stop();
+                return;
+            }
+            waiting_for_source_.store(source_minimized(), std::memory_order_relaxed);
+            if (!patient && !source_minimized() && Clock::now() >= first_deadline) {
+                break;
+            }
         }
+        waiting_for_source_.store(false, std::memory_order_relaxed);
 
         if (should_stop_sender()) {
             capture.stop();
             return;
         }
         if (!first.texture) {
-            const auto backend_name =
-                capture_config.backend ==
-                        platform::windows::ScreenCaptureBackend::desktop_duplication
-                    ? "DXGI Desktop Duplication"
-                    : "Windows Graphics Capture";
-            std::string message{backend_name};
-            message += wait_for_game_restore
-                           ? " did not receive the selected game after waiting for it to be restored"
-                           : " did not produce a GPU frame for the selected source";
-            fail_share(ScreenShareErrorCode::capture_failed, std::move(message));
+            fail_share(ScreenShareErrorCode::capture_failed,
+                       capture_config.backend ==
+                               platform::windows::ScreenCaptureBackend::desktop_duplication
+                           ? "DXGI Desktop Duplication did not produce a GPU frame for the selected source"
+                           : "Windows Graphics Capture did not produce a GPU frame for the selected source");
             capture.stop();
             return;
         }
@@ -1201,6 +1207,9 @@ struct WindowsScreenShareRuntime::Impl {
                     break;
                 }
             }
+            // Alt+Tab out of a full-screen game minimizes it; viewers keep its last frame until
+            // it comes back.
+            waiting_for_source_.store(source_minimized(), std::memory_order_relaxed);
 
             const auto capture_stats = capture.statistics();
             if (capture_stats.error) {
@@ -1346,6 +1355,7 @@ struct WindowsScreenShareRuntime::Impl {
         encoded_width_.store(0, std::memory_order_relaxed);
         encoded_height_.store(0, std::memory_order_relaxed);
         quality_reduced_.store(false, std::memory_order_relaxed);
+        waiting_for_source_.store(false, std::memory_order_relaxed);
         frames_encoded_.store(0, std::memory_order_relaxed);
         preview_frames_.store(0, std::memory_order_relaxed);
         preview_drops_.store(0, std::memory_order_relaxed);
@@ -1386,6 +1396,7 @@ struct WindowsScreenShareRuntime::Impl {
         result.encoded_width = encoded_width_.load(relaxed);
         result.encoded_height = encoded_height_.load(relaxed);
         result.quality_reduced = quality_reduced_.load(relaxed);
+        result.waiting_for_source = waiting_for_source_.load(relaxed);
         result.frames_encoded = frames_encoded_.load(relaxed);
         result.preview_frames = preview_frames_.load(relaxed);
         result.preview_drops = preview_drops_.load(relaxed);
@@ -1446,6 +1457,7 @@ struct WindowsScreenShareRuntime::Impl {
     std::atomic<std::uint32_t> encoded_width_{0};
     std::atomic<std::uint32_t> encoded_height_{0};
     std::atomic<bool> quality_reduced_{false};
+    std::atomic<bool> waiting_for_source_{false};
     std::atomic<std::uint64_t> frames_encoded_{0};
     std::atomic<std::uint64_t> preview_frames_{0};
     std::atomic<std::uint64_t> preview_drops_{0};

@@ -74,6 +74,8 @@ struct ScreenShareSnapshot {
     std::uint32_t encoded_height = 0;
     // The encoder refused the chosen resolution and runs at the smaller encoded size instead.
     bool quality_reduced = false;
+    // The shared window is minimized (a game after Alt+Tab): no frames until it is restored.
+    bool waiting_for_source = false;
     std::uint64_t frames_encoded = 0;
     std::uint64_t frames_sent = 0;
     std::uint64_t frames_dropped = 0;
