@@ -43,6 +43,18 @@ from the local checkout and completed in this branch.
 
 ## Remaining device evidence
 
+## Hosted evidence
+
+- Full CI for implementation commit `97b4ddd` passed all seven jobs: Windows
+  Debug/Release, macOS Intel/Apple Silicon, sanitizers, signaling, and deployment.
+- Release packages for both Mac architectures passed **51/51 tests**, installer
+  checks, and packaged application launch/quit checks.
+- The Intel package checksum matched. Both its application and capability helper
+  are x86_64 Mach-O executables with a **12.3** minimum deployment target; the
+  bundle also declares macOS 12.3.
+
+## Remaining device evidence
+
 This Windows host cannot execute the macOS application. Hosted macOS CI checks
 compilation and tests on Intel/Apple Silicon with the 12.3 deployment target;
 it does not prove operation on Monterey 12.6.7 or this specific Core i5.
