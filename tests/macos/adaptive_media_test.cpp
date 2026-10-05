@@ -31,7 +31,7 @@ TEST_CASE("macOS adaptive share is conservative until capabilities arrive") {
 }
 
 TEST_CASE("macOS adaptive share uses the balanced Apple Silicon media envelope") {
-    const auto snapshot = catro::tests::fixtures::apple_silicon_macbook();
+    const auto snapshot = catro::fixtures::apple_silicon_macbook();
     const auto choices = catro::product::adaptive_share_qualities(&snapshot, display_source());
     REQUIRE_FALSE(choices.empty());
     CHECK(choices.back().max_height <= 1440);
@@ -41,7 +41,7 @@ TEST_CASE("macOS adaptive share uses the balanced Apple Silicon media envelope")
 }
 
 TEST_CASE("macOS adaptive share drops to the thermal-safe envelope") {
-    const auto snapshot = catro::tests::fixtures::hot_apple_silicon();
+    const auto snapshot = catro::fixtures::hot_apple_silicon();
     const auto quality = catro::product::adaptive_share_quality(
         &snapshot, display_source(), 2560, 1440, 60);
     CHECK(quality.max_height <= 720);
