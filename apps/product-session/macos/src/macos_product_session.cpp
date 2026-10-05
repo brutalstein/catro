@@ -115,7 +115,9 @@ struct ProductSession::Impl {
             capability_service_->start([this](capabilities::SnapshotUpdate update) {
                 {
                     std::scoped_lock lock(capability_mutex_);
-                    capability_snapshot_ = std::move(update.snapshot);
+                    capability_snapshot_ =
+                        std::make_shared<const capabilities::CapabilitySnapshot>(
+                            std::move(update.snapshot));
                 }
                 enqueue([this] { adapt_active_share(); });
             });
@@ -474,6 +476,7 @@ struct ProductSession::Impl {
             return;
         }
         refresh_media();
+        adapt_active_share();
         refresh_messages();
         if (++poll_ticks_ % kSlowPollTicks == 0) {
             refresh_members();
@@ -687,13 +690,13 @@ struct ProductSession::Impl {
     }
 
     [[nodiscard]] screen::MacScreenShareConfig planned_share_config(const ShareRequest& request) const {
-        std::optional<capabilities::CapabilitySnapshot> snapshot;
+        std::shared_ptr<const capabilities::CapabilitySnapshot> snapshot;
         {
             std::scoped_lock lock(capability_mutex_);
             snapshot = capability_snapshot_;
         }
         const auto quality = adaptive_share_quality(
-            snapshot ? &*snapshot : nullptr, request.source,
+            snapshot.get(), request.source,
             request.max_width, request.max_height, request.fps);
         screen::MacScreenShareConfig config;
         config.source = request.source;
@@ -741,7 +744,6 @@ struct ProductSession::Impl {
         state_.media.status = "Sharing " + active_share_request_->source.title + " · auto " +
                               std::to_string(desired.max_height) + "p" +
                               std::to_string(desired.fps);
-        refresh_media();
     }
 
     void start_share(const ShareRequest& request) {
@@ -855,7 +857,7 @@ struct ProductSession::Impl {
     std::unique_ptr<screen::MacScreenShareRuntime> screen_;
     std::unique_ptr<platform::macos::CapabilityService> capability_service_;
     mutable std::mutex capability_mutex_;
-    std::optional<capabilities::CapabilitySnapshot> capability_snapshot_;
+    std::shared_ptr<const capabilities::CapabilitySnapshot> capability_snapshot_;
     std::optional<ShareRequest> active_share_request_;
     std::optional<screen::MacScreenShareConfig> active_share_config_;
     std::chrono::steady_clock::time_point next_adaptive_restart_{};
@@ -1152,12 +1154,12 @@ void ProductSession::set_audio_devices(const std::string& input, const std::stri
 
 std::vector<AdaptiveShareQuality>
 ProductSession::share_quality_choices(const platform::macos::CaptureSource& source) const {
-    std::optional<capabilities::CapabilitySnapshot> snapshot;
+    std::shared_ptr<const capabilities::CapabilitySnapshot> snapshot;
     {
         std::scoped_lock lock(impl_->capability_mutex_);
         snapshot = impl_->capability_snapshot_;
     }
-    return adaptive_share_qualities(snapshot ? &*snapshot : nullptr, source);
+    return adaptive_share_qualities(snapshot.get(), source);
 }
 
 float ProductSession::input_level() const {
