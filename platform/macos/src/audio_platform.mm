@@ -128,6 +128,11 @@ std::optional<AudioObjectID> resolve(const std::optional<caps::AudioEndpointId>&
     if (device == kAudioObjectUnknown || !has_streams(device, direction)) {
         return std::nullopt;
     }
+    const auto alive = scalar<UInt32>(
+        device, address(kAudioDevicePropertyDeviceIsAlive));
+    if (alive && *alive == 0) {
+        return std::nullopt;
+    }
     return device;
 }
 
@@ -185,6 +190,13 @@ public:
         if (overload_listener_ != nil) {
             const auto where = address(kAudioDeviceProcessorOverload);
             AudioObjectRemovePropertyListenerBlock(device_, &where, queue_, overload_listener_);
+        }
+        if (route_listener_ != nil) {
+            for (const auto& where : route_addresses_) {
+                AudioObjectRemovePropertyListenerBlock(
+                    device_, &where, queue_, route_listener_);
+            }
+            route_addresses_.clear();
         }
         dispatch_sync(queue_, ^{
                       });
@@ -330,6 +342,28 @@ private:
         if (AudioObjectAddPropertyListenerBlock(device_, &overload, queue_, overload_listener_) != noErr) {
             overload_listener_ = nil;
         }
+
+        // Bluetooth profile changes may keep the same device alive while changing its sample rate
+        // or stream layout. Reopen the AUHAL session so the converter and channel map match the new
+        // route instead of leaving the room with silent or distorted audio.
+        route_listener_ = ^(UInt32, const AudioObjectPropertyAddress*) {
+          if (!failed_.exchange(true)) {
+              failure_(AudioError{AudioErrorCode::device_lost});
+          }
+        };
+        const std::array route_addresses{
+            address(kAudioDevicePropertyNominalSampleRate),
+            address(kAudioDevicePropertyStreamConfiguration, scope_of(direction_)),
+        };
+        for (const auto& where : route_addresses) {
+            if (AudioObjectAddPropertyListenerBlock(
+                    device_, &where, queue_, route_listener_) == noErr) {
+                route_addresses_.push_back(where);
+            }
+        }
+        if (route_addresses_.empty()) {
+            route_listener_ = nil;
+        }
         return std::nullopt;
     }
 
@@ -406,6 +440,8 @@ private:
     dispatch_queue_t queue_;
     AudioObjectPropertyListenerBlock alive_listener_ = nil;
     AudioObjectPropertyListenerBlock overload_listener_ = nil;
+    AudioObjectPropertyListenerBlock route_listener_ = nil;
+    std::vector<AudioObjectPropertyAddress> route_addresses_;
     AudioUnit unit_ = nullptr;
     AudioConverterRef converter_ = nullptr;
     // Preallocated before the stream runs; the real-time callbacks only index into them.
