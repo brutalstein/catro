@@ -58,6 +58,11 @@ CatroVoicePhase voice_phase(product::VoicePhase phase) {
 
 product::ProductSessionDependencies production_dependencies() {
     product::ProductSessionDependencies deps;
+    if (NSURL* executable = NSBundle.mainBundle.executableURL) {
+        deps.capability_probe_helper =
+            std::filesystem::path(executable.URLByDeletingLastPathComponent.fileSystemRepresentation) /
+            "catro-capability-probe";
+    }
     auto state = macos::load_or_create_default_local_state();
     if (auto* local = std::get_if<catro::community::LocalState>(&state)) {
         deps.local_state = std::move(*local);
@@ -100,6 +105,10 @@ product::ProductSessionDependencies production_dependencies() {
 
 @interface CatroServerLookup ()
 - (instancetype)initWithItem:(const product::ServerLookupItem&)item;
+@end
+
+@interface CatroShareQuality ()
+- (instancetype)initWithItem:(const product::AdaptiveShareQuality&)item;
 @end
 
 @interface CatroShareSource ()
@@ -183,6 +192,21 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
         _name = copy_string(item.name);
         _memberCount = item.member_count;
         _relationship = copy_string(item.relationship);
+    }
+    return self;
+}
+@end
+
+@implementation CatroShareQuality
+- (instancetype)initWithItem:(const product::AdaptiveShareQuality&)item {
+    if ((self = [super init])) {
+        _label = copy_string(item.label);
+        _detail = copy_string(item.detail);
+        _maxWidth = item.max_width;
+        _maxHeight = item.max_height;
+        _fps = item.fps;
+        _bitrateMbps = static_cast<double>(item.bitrate) / 1'000'000.0;
+        _recommended = item.recommended;
     }
     return self;
 }
@@ -383,6 +407,18 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
     if (_session) {
         _session->load_sources();
     }
+}
+
+- (NSArray<CatroShareQuality*>*)shareQualitiesForSource:(CatroShareSource*)source {
+    if (!_session) {
+        return @[];
+    }
+    const auto choices = _session->share_quality_choices([source captureSource]);
+    NSMutableArray<CatroShareQuality*>* result = [NSMutableArray arrayWithCapacity:choices.size()];
+    for (const auto& choice : choices) {
+        [result addObject:[[CatroShareQuality alloc] initWithItem:choice]];
+    }
+    return [result copy];
 }
 
 - (void)startShare:(CatroShareSource*)source

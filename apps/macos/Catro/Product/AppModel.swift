@@ -254,6 +254,13 @@ final class AppModel: ObservableObject {
     func toggleMute() { bridge.setMuted(!(snapshot?.muted ?? false)) }
     func toggleDeafen() { bridge.setDeafened(!(snapshot?.deafened ?? false)) }
     func loadSources() { bridge.loadSources() }
+    func shareQualities(for source: CatroShareSource) -> [ShareQuality] {
+        bridge.shareQualities(for: source).map {
+            ShareQuality(label: $0.label, maxWidth: $0.maxWidth, maxHeight: $0.maxHeight,
+                         fps: $0.fps, bitrateMbps: $0.bitrateMbps,
+                         detail: $0.detail, recommended: $0.recommended)
+        }
+    }
     func stopShare() { bridge.stopShare() }
     func setWatching(_ watching: Bool) { bridge.setWatching(watching) }
 

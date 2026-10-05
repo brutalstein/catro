@@ -1,7 +1,9 @@
 #pragma once
 
 #include <PresentationState.hpp>
+#include <catro/capabilities/model.hpp>
 #include <catro/community/directory.hpp>
+#include <catro/macos_adaptive_media.hpp>
 #include <catro/community/model.hpp>
 #include <catro/macos_screen_runtime.hpp>
 #include <catro/platform/macos/directory_client.hpp>
@@ -9,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -162,6 +165,7 @@ struct ProductSessionDependencies {
     ProductMediaApi media = native_media_api();
     // Runs on the session worker; ScreenCaptureKit enumeration must stay off the main thread.
     std::function<platform::macos::CaptureEnumerationResult()> enumerate_sources;
+    std::optional<std::filesystem::path> capability_probe_helper;
 };
 
 // Directory session of the macOS product shell. Every command runs on one serial worker thread,
@@ -230,6 +234,8 @@ public:
     void set_audio_devices(const std::string& input, const std::string& output);
     // Main thread. Microphone level in dBFS after processing; -100 outside voice.
     [[nodiscard]] float input_level() const;
+    [[nodiscard]] std::vector<AdaptiveShareQuality>
+    share_quality_choices(const platform::macos::CaptureSource& source) const;
 
 private:
     struct Impl;

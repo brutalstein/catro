@@ -73,6 +73,18 @@ __attribute__((objc_subclassing_restricted))
 @end
 
 __attribute__((objc_subclassing_restricted))
+@interface CatroShareQuality : NSObject
+@property(nonatomic, readonly, copy) NSString* label;
+@property(nonatomic, readonly, copy) NSString* detail;
+@property(nonatomic, readonly) uint32_t maxWidth;
+@property(nonatomic, readonly) uint32_t maxHeight;
+@property(nonatomic, readonly) uint32_t fps;
+@property(nonatomic, readonly) double bitrateMbps;
+@property(nonatomic, readonly) BOOL recommended;
+- (instancetype)init NS_UNAVAILABLE;
+@end
+
+__attribute__((objc_subclassing_restricted))
 @interface CatroShareSource : NSObject
 @property(nonatomic, readonly) uint64_t nativeID;
 @property(nonatomic, readonly, copy) NSString* title;
@@ -147,6 +159,8 @@ __attribute__((objc_subclassing_restricted))
 - (void)setMuted:(BOOL)muted;
 - (void)setDeafened:(BOOL)deafened;
 - (void)loadSources;
+- (NSArray<CatroShareQuality*>*)shareQualitiesForSource:(CatroShareSource*)source
+    NS_SWIFT_NAME(shareQualities(for:));
 // Same ceilings as the Windows share dialog; out-of-range settings are rejected with a status.
 - (void)startShare:(CatroShareSource*)source
           maxWidth:(uint32_t)maxWidth

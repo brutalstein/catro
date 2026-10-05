@@ -1,4 +1,5 @@
 #include <catro/macos_product_session.hpp>
+#include <catro/platform/macos/capability_service.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -21,6 +22,7 @@ using community::DirectoryError;
 using community::DirectoryErrorCode;
 
 constexpr std::string_view kLocalOnlyMessage = "Online services are not configured. Local mode remains available.";
+constexpr auto kAdaptiveRestartCooldown = std::chrono::seconds(3);
 
 template <class T>
 [[nodiscard]] const DirectoryError* error_of(const std::variant<T, DirectoryError>& result) noexcept {
@@ -107,6 +109,17 @@ struct ProductSession::Impl {
             }
         });
         worker_ = std::thread([this] { run(); });
+        if (deps_.capability_probe_helper) {
+            capability_service_ = std::make_unique<platform::macos::CapabilityService>(
+                *deps_.capability_probe_helper);
+            capability_service_->start([this](capabilities::SnapshotUpdate update) {
+                {
+                    std::scoped_lock lock(capability_mutex_);
+                    capability_snapshot_ = std::move(update.snapshot);
+                }
+                enqueue([this] { adapt_active_share(); });
+            });
+        }
     }
 
     void enqueue(std::function<void()> command) {
@@ -121,6 +134,10 @@ struct ProductSession::Impl {
     }
 
     void stop() noexcept {
+        if (capability_service_) {
+            capability_service_->stop();
+            capability_service_.reset();
+        }
         {
             std::scoped_lock lock(queue_mutex_);
             if (stopping_.exchange(true, std::memory_order_acq_rel)) {
@@ -669,6 +686,64 @@ struct ProductSession::Impl {
         return false;
     }
 
+    [[nodiscard]] screen::MacScreenShareConfig planned_share_config(const ShareRequest& request) const {
+        std::optional<capabilities::CapabilitySnapshot> snapshot;
+        {
+            std::scoped_lock lock(capability_mutex_);
+            snapshot = capability_snapshot_;
+        }
+        const auto quality = adaptive_share_quality(
+            snapshot ? &*snapshot : nullptr, request.source,
+            request.max_width, request.max_height, request.fps);
+        screen::MacScreenShareConfig config;
+        config.source = request.source;
+        config.room_runtime = room_;
+        config.max_width = quality.max_width;
+        config.max_height = quality.max_height;
+        config.fps = quality.fps;
+        config.bitrate = std::min(request.bitrate, quality.bitrate);
+        config.share_audio = request.share_audio;
+        config.ssrc = local_stream_id() ^ 0x56494430U;
+        if (config.ssrc == 0) {
+            config.ssrc = 1;
+        }
+        return config;
+    }
+
+    void adapt_active_share() {
+        if (!state_.media.sharing || !active_share_request_) {
+            return;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (now < next_adaptive_restart_) {
+            return;
+        }
+        auto desired = planned_share_config(*active_share_request_);
+        if (active_share_config_ &&
+            desired.max_width == active_share_config_->max_width &&
+            desired.max_height == active_share_config_->max_height &&
+            desired.fps == active_share_config_->fps) {
+            return;
+        }
+        const auto previous = active_share_config_;
+        if (const auto failure = screen_->start(desired)) {
+            if (previous && !screen_->start(*previous)) {
+                state_.media.status = "Sharing · automatic quality change deferred";
+                next_adaptive_restart_ = now + kAdaptiveRestartCooldown;
+                return;
+            }
+            stop_share();
+            state_.media.status = "Screen share stopped: " + failure->message;
+            return;
+        }
+        active_share_config_ = desired;
+        next_adaptive_restart_ = now + kAdaptiveRestartCooldown;
+        state_.media.status = "Sharing " + active_share_request_->source.title + " · auto " +
+                              std::to_string(desired.max_height) + "p" +
+                              std::to_string(desired.fps);
+        refresh_media();
+    }
+
     void start_share(const ShareRequest& request) {
         auto& media = state_.media;
         if (media.phase != VoicePhase::joined) {
@@ -678,18 +753,7 @@ struct ProductSession::Impl {
         if (media.sharing) {
             return;
         }
-        screen::MacScreenShareConfig config;
-        config.source = request.source;
-        config.room_runtime = room_;
-        config.max_width = request.max_width;
-        config.max_height = request.max_height;
-        config.fps = request.fps;
-        config.bitrate = request.bitrate;
-        config.share_audio = request.share_audio;
-        config.ssrc = local_stream_id() ^ 0x56494430U;
-        if (config.ssrc == 0) {
-            config.ssrc = 1;
-        }
+        auto config = planned_share_config(request);
         // Rejected before claiming, so bad settings never take the room's single share slot.
         if (!screen::valid_share(config)) {
             media.status = "Invalid screen-share settings";
@@ -716,8 +780,12 @@ struct ProductSession::Impl {
             refresh_media();
             return;
         }
+        active_share_request_ = request;
+        active_share_config_ = config;
+        next_adaptive_restart_ = std::chrono::steady_clock::now() + kAdaptiveRestartCooldown;
         media.sharing = true;
-        media.status = "Sharing " + request.source.title;
+        media.status = "Sharing " + request.source.title + " · auto " +
+                       std::to_string(config.max_height) + "p" + std::to_string(config.fps);
         refresh_media();
     }
 
@@ -727,6 +795,8 @@ struct ProductSession::Impl {
         }
         screen_->stop_sharing();
         deps_.media.room_release_screen(room_);
+        active_share_request_.reset();
+        active_share_config_.reset();
         state_.media.sharing = false;
         state_.media.status = "Voice connected";
     }
@@ -783,6 +853,12 @@ struct ProductSession::Impl {
     ProductSessionDependencies deps_;
     Listener listener_;
     std::unique_ptr<screen::MacScreenShareRuntime> screen_;
+    std::unique_ptr<platform::macos::CapabilityService> capability_service_;
+    mutable std::mutex capability_mutex_;
+    std::optional<capabilities::CapabilitySnapshot> capability_snapshot_;
+    std::optional<ShareRequest> active_share_request_;
+    std::optional<screen::MacScreenShareConfig> active_share_config_;
+    std::chrono::steady_clock::time_point next_adaptive_restart_{};
     CatroRoomRuntimeHandle room_ = nullptr;
     CatroVoiceRuntimeHandle voice_ = nullptr;
     // Published for main-thread speaking and volume calls; created once, cleared before destroy.
@@ -1072,6 +1148,16 @@ void ProductSession::set_audio_devices(const std::string& input, const std::stri
     if (voice != nullptr && impl_->deps_.media.voice_set_devices != nullptr) {
         impl_->deps_.media.voice_set_devices(voice, input.c_str(), output.c_str());
     }
+}
+
+std::vector<AdaptiveShareQuality>
+ProductSession::share_quality_choices(const platform::macos::CaptureSource& source) const {
+    std::optional<capabilities::CapabilitySnapshot> snapshot;
+    {
+        std::scoped_lock lock(impl_->capability_mutex_);
+        snapshot = impl_->capability_snapshot_;
+    }
+    return adaptive_share_qualities(snapshot ? &*snapshot : nullptr, source);
 }
 
 float ProductSession::input_level() const {

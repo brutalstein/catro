@@ -1,59 +1,15 @@
 import AppKit
-import Metal
 import SwiftUI
 
-// One resolution choice; frame rate and starting bitrate follow from it and the GPU. These are the
-// Windows presets (apps/windows/Catro/SharePresets.hpp), so both sides offer the same choices.
+// One capability-derived resolution choice. Swift renders it; C++ owns policy.
 struct ShareQuality: Hashable {
     let label: String
     let maxWidth: UInt32
     let maxHeight: UInt32
     let fps: UInt32
     let bitrateMbps: Double
-
-    // Apple silicon and a GPU with its own memory stream 1440p60; Intel integrated graphics stop
-    // at 1080p and keep 60 FPS only at 720p.
-    static let strongGPU: Bool = {
-        #if arch(arm64)
-        return true
-        #else
-        guard let device = MTLCreateSystemDefaultDevice() else { return false }
-        return !device.isLowPower && !device.hasUnifiedMemory
-        #endif
-    }()
-
-    private static func preset(_ label: String, height: UInt32, strongGPU: Bool) -> ShareQuality {
-        let fps: UInt32 = strongGPU || height <= 720 ? 60 : 30
-        // About 0.06 bits per pixel of a 16:9 frame; "p" names the height, so the box is wide.
-        let pixels = Double(height) * Double(height) * 16 / 9
-        return ShareQuality(label: label, maxWidth: height * 32 / 9, maxHeight: height, fps: fps,
-                            bitrateMbps: min(max(pixels * Double(fps) * 0.06 / 1_000_000, 2.5), 25))
-    }
-
-    // Presets never exceed the source, so nothing is upscaled. Windows pass the screen size: a
-    // window can grow while it is shared.
-    static func choices(width: UInt32, height: UInt32, strongGPU: Bool)
-        -> (options: [ShareQuality], recommended: Int) {
-        let ceiling: UInt32 = strongGPU ? 1440 : 1080
-        var options = [UInt32(720), 1080, 1440].filter { $0 <= height && $0 <= ceiling }
-            .map { preset("\($0)p", height: $0, strongGPU: strongGPU) }
-        if height > (options.last?.maxHeight ?? 0) && (strongGPU || height <= ceiling) {
-            // The floor keeps a tiny source inside what the screen runtime accepts.
-            let source = preset("Source", height: min(max(height, 180), 4320), strongGPU: strongGPU)
-            options.append(ShareQuality(label: source.label, maxWidth: min(max(width, 320), 7680),
-                                        maxHeight: source.maxHeight, fps: source.fps,
-                                        bitrateMbps: source.bitrateMbps))
-        }
-        if options.isEmpty {
-            options = [preset("1080p", height: 1080, strongGPU: strongGPU)]
-        }
-        // The best the computer handles, but not a 4K source by default.
-        var recommended = options.count - 1
-        if recommended > 0 && options[recommended].maxHeight > 1440 {
-            recommended -= 1
-        }
-        return (options, recommended)
-    }
+    let detail: String
+    let recommended: Bool
 }
 
 // The name a person recognizes: "Brave - YouTube", "Counter-Strike 2", "Discord".
@@ -107,16 +63,12 @@ struct SourcePicker: View {
     private var sharesDisplay: Bool { selectedSource.map { !$0.window && !$0.camera } ?? false }
     private var sharesCamera: Bool { selectedSource?.camera ?? false }
 
-    private var qualities: (options: [ShareQuality], recommended: Int) {
-        guard let source = selectedSource else { return ([], 0) }
-        let screen = source.window ? screens.max { $0.height < $1.height } : nil
-        return ShareQuality.choices(width: max(source.width, screen?.width ?? 0),
-                                    height: max(source.height, screen?.height ?? 0),
-                                    strongGPU: ShareQuality.strongGPU)
+    private var qualities: [ShareQuality] {
+        guard let source = selectedSource else { return [] }
+        return model.shareQualities(for: source)
     }
     private var quality: ShareQuality? {
-        let options = qualities.options
-        return options.indices.contains(qualityIndex) ? options[qualityIndex] : nil
+        qualities.indices.contains(qualityIndex) ? qualities[qualityIndex] : nil
     }
 
     private var emptyText: String {
@@ -148,14 +100,13 @@ struct SourcePicker: View {
             Form {
                 if let quality {
                     Picker("Resolution", selection: $qualityIndex) {
-                        ForEach(Array(qualities.options.enumerated()), id: \.offset) { index, option in
+                        ForEach(Array(qualities.enumerated()), id: \.offset) { index, option in
                             Text(option.label).tag(index)
                         }
                     }
                     .pickerStyle(.segmented)
                     .help("Frame rate and quality are set for this Mac")
-                    Text("\(quality.label) · \(quality.fps) FPS · "
-                         + (ShareQuality.strongGPU ? "tuned for your graphics" : "tuned for integrated graphics"))
+                    Text("\(quality.label) · \(quality.fps) FPS · \(quality.detail)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -203,7 +154,7 @@ struct SourcePicker: View {
         // because it also carries notifications.
         .onChange(of: selection) { _ in
             audio = screenAudioCaptureAvailable && (selectedSource?.window ?? false)
-            qualityIndex = qualities.recommended
+            qualityIndex = qualities.firstIndex(where: \.recommended) ?? max(0, qualities.count - 1)
         }
     }
 
