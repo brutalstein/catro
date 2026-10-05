@@ -127,6 +127,44 @@ static_assert(oriented_pixels({3840, 2160}, 270) == video::VideoExtent{2160, 384
     return hash != 0 ? hash : 1;
 }
 
+struct CameraMode {
+    __strong AVCaptureDeviceFormat* format = nil;
+    double fps = 0;
+    std::uint64_t pixels = 0;
+};
+
+[[nodiscard]] std::optional<CameraMode> camera_mode(
+    AVCaptureDevice* device,
+    const ScreenCaptureConfig& config) {
+    std::optional<CameraMode> best;
+    for (AVCaptureDeviceFormat* format in device.formats) {
+        const auto dimensions =
+            CMVideoFormatDescriptionGetDimensions(format.formatDescription);
+        if (dimensions.width <= 0 || dimensions.height <= 0 ||
+            static_cast<std::uint32_t>(dimensions.width) > config.max_width ||
+            static_cast<std::uint32_t>(dimensions.height) > config.max_height) {
+            continue;
+        }
+        double supported_fps = 0;
+        for (AVFrameRateRange* range in format.videoSupportedFrameRateRanges) {
+            const double target = std::min<double>(config.frame_rate, range.maxFrameRate);
+            if (target + 0.001 >= range.minFrameRate) {
+                supported_fps = std::max(supported_fps, target);
+            }
+        }
+        if (supported_fps <= 0) {
+            continue;
+        }
+        const auto pixels = static_cast<std::uint64_t>(dimensions.width) *
+                            static_cast<std::uint64_t>(dimensions.height);
+        if (!best || std::tie(pixels, supported_fps) >
+                         std::tie(best->pixels, best->fps)) {
+            best = CameraMode{format, supported_fps, pixels};
+        }
+    }
+    return best;
+}
+
 [[nodiscard]] std::vector<CaptureSource> camera_sources() {
     std::vector<CaptureSource> sources;
     for (AVCaptureDevice* device in cameras()) {
@@ -684,6 +722,22 @@ private:
             return native_error(input_error, ScreenCaptureErrorCode::capture_creation_failed);
         }
 
+        // Pick the best real device format inside the policy ceiling instead of assuming a session
+        // preset's frame rate. This matters for webcams exposing e.g. 1080p30 and 720p60.
+        bool explicit_mode = false;
+        if (const auto mode = camera_mode(device, config)) {
+            NSError* lock_error = nil;
+            if ([device lockForConfiguration:&lock_error]) {
+                device.activeFormat = mode->format;
+                const auto fps = std::max(1LL, std::llround(mode->fps));
+                const CMTime duration = CMTimeMake(1, static_cast<int32_t>(fps));
+                device.activeVideoMinFrameDuration = duration;
+                device.activeVideoMaxFrameDuration = duration;
+                [device unlockForConfiguration];
+                explicit_mode = true;
+            }
+        }
+
         AVCaptureSession* session = [AVCaptureSession new];
         AVCaptureVideoDataOutput* video = [AVCaptureVideoDataOutput new];
         video.videoSettings = @{
@@ -704,14 +758,16 @@ private:
         if (configured) {
             [session addInput:input];
             [session addOutput:video];
-            NSArray<AVCaptureSessionPreset>* presets = config.max_height <= 720
-                ? @[ AVCaptureSessionPreset1280x720, AVCaptureSessionPresetHigh ]
-                : @[ AVCaptureSessionPreset1920x1080, AVCaptureSessionPreset1280x720,
-                     AVCaptureSessionPresetHigh ];
-            for (AVCaptureSessionPreset preset in presets) {
-                if ([session canSetSessionPreset:preset]) {
-                    session.sessionPreset = preset;
-                    break;
+            if (!explicit_mode) {
+                NSArray<AVCaptureSessionPreset>* presets = config.max_height <= 720
+                    ? @[ AVCaptureSessionPreset1280x720, AVCaptureSessionPresetHigh ]
+                    : @[ AVCaptureSessionPreset1920x1080, AVCaptureSessionPreset1280x720,
+                         AVCaptureSessionPresetHigh ];
+                for (AVCaptureSessionPreset preset in presets) {
+                    if ([session canSetSessionPreset:preset]) {
+                        session.sessionPreset = preset;
+                        break;
+                    }
                 }
             }
         }

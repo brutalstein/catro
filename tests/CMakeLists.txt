@@ -193,6 +193,9 @@ if(APPLE)
     target_link_libraries(catro_macos_screen_runtime_test PRIVATE catro_screen_runtime_macos
         "-framework QuartzCore")
 
+    catro_add_test(macos_adaptive_media macos/adaptive_media_test.cpp)
+    target_link_libraries(catro_macos_adaptive_media_test PRIVATE catro_product_session_macos)
+
     catro_add_test(macos_product_session macos/product_session_test.cpp)
     target_link_libraries(catro_macos_product_session_test PRIVATE catro_product_session_macos)
 

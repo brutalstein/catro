@@ -154,7 +154,7 @@ struct SourcePicker: View {
         // because it also carries notifications.
         .onChange(of: selection) { _ in
             audio = screenAudioCaptureAvailable && (selectedSource?.window ?? false)
-            qualityIndex = qualities.firstIndex(where: \.recommended) ?? max(0, qualities.count - 1)
+            qualityIndex = qualities.firstIndex(where: { $0.recommended }) ?? max(0, qualities.count - 1)
         }
     }
 
