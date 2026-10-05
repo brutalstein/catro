@@ -135,6 +135,8 @@ struct ProductMediaApi {
 // Immutable copy published after every completed command; the shell never sees live state.
 struct ProductSnapshot {
     std::uint64_t revision = 0;
+    // Changes only when passive hardware/runtime capability evidence changes.
+    std::uint64_t capability_generation = 0;
     app::WorkspaceSnapshot workspace;
     std::string identity_id;
     std::string identity_name;

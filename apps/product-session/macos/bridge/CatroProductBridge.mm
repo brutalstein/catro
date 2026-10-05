@@ -241,6 +241,7 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
         const auto& workspace = snapshot.workspace;
         const auto& media = snapshot.media;
         _revision = snapshot.revision;
+        _capabilityGeneration = snapshot.capability_generation;
         _connection = connection(workspace.connection);
         _connectionMessage = copy_string(workspace.connection_message);
         _canJoinServer = workspace.join_server.available();

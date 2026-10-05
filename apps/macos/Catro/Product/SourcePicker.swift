@@ -49,6 +49,7 @@ struct SourcePicker: View {
     @Binding var isPresented: Bool
     @State private var selection: UInt64?
     @State private var qualityIndex = 0
+    @State private var qualityOptions: [ShareQuality] = []
     @State private var audio = false
     // Without Screen Recording only cameras are listed; say how to get displays and windows.
     @State private var screensBlocked = !Permissions.screenRecordingAllowed
@@ -63,12 +64,8 @@ struct SourcePicker: View {
     private var sharesDisplay: Bool { selectedSource.map { !$0.window && !$0.camera } ?? false }
     private var sharesCamera: Bool { selectedSource?.camera ?? false }
 
-    private var qualities: [ShareQuality] {
-        guard let source = selectedSource else { return [] }
-        return model.shareQualities(for: source)
-    }
     private var quality: ShareQuality? {
-        qualities.indices.contains(qualityIndex) ? qualities[qualityIndex] : nil
+        qualityOptions.indices.contains(qualityIndex) ? qualityOptions[qualityIndex] : nil
     }
 
     private var emptyText: String {
@@ -100,7 +97,7 @@ struct SourcePicker: View {
             Form {
                 if let quality {
                     Picker("Resolution", selection: $qualityIndex) {
-                        ForEach(Array(qualities.enumerated()), id: \.offset) { index, option in
+                        ForEach(Array(qualityOptions.enumerated()), id: \.offset) { index, option in
                             Text(option.label).tag(index)
                         }
                     }
@@ -154,7 +151,26 @@ struct SourcePicker: View {
         // because it also carries notifications.
         .onChange(of: selection) { _ in
             audio = screenAudioCaptureAvailable && (selectedSource?.window ?? false)
-            qualityIndex = qualities.firstIndex(where: { $0.recommended }) ?? max(0, qualities.count - 1)
+            reloadQualities(preserveSelection: false)
+        }
+        .onChange(of: model.snapshot?.capabilityGeneration) { _ in
+            reloadQualities(preserveSelection: true)
+        }
+    }
+
+    private func reloadQualities(preserveSelection: Bool) {
+        let previous = preserveSelection ? quality?.label : nil
+        guard let source = selectedSource else {
+            qualityOptions = []
+            qualityIndex = 0
+            return
+        }
+        let next = model.shareQualities(for: source)
+        qualityOptions = next
+        if let previous, let index = next.firstIndex(where: { $0.label == previous }) {
+            qualityIndex = index
+        } else {
+            qualityIndex = next.firstIndex(where: { $0.recommended }) ?? max(0, next.count - 1)
         }
     }
 

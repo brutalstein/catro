@@ -114,13 +114,17 @@ struct ProductSession::Impl {
             capability_service_ = std::make_unique<platform::macos::CapabilityService>(
                 *deps_.capability_probe_helper);
             capability_service_->start([this](capabilities::SnapshotUpdate update) {
+                const auto generation = update.snapshot.header.generation;
                 {
                     std::scoped_lock lock(capability_mutex_);
                     capability_snapshot_ =
                         std::make_shared<const capabilities::CapabilitySnapshot>(
                             std::move(update.snapshot));
                 }
-                enqueue([this] { adapt_active_share(); });
+                enqueue([this, generation] {
+                    state_.capability_generation = generation;
+                    adapt_active_share();
+                });
             });
         }
     }

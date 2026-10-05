@@ -101,6 +101,7 @@ __attribute__((objc_subclassing_restricted))
 __attribute__((objc_subclassing_restricted))
 @interface CatroProductSnapshot : NSObject
 @property(nonatomic, readonly) uint64_t revision;
+@property(nonatomic, readonly) uint64_t capabilityGeneration;
 @property(nonatomic, readonly) CatroConnection connection;
 @property(nonatomic, readonly, copy) NSString* connectionMessage;
 @property(nonatomic, readonly) BOOL canJoinServer;
