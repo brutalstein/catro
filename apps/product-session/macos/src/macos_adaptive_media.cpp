@@ -133,8 +133,8 @@ AdaptiveShareQuality safe_quality(
     return {
         .label = target.height >= source_box.height ? "Source" : std::to_string(target.height) + "p",
         .detail = std::move(detail),
-        .max_width = std::max(2U, target.width),
-        .max_height = std::max(2U, target.height),
+        .max_width = std::max(320U, target.width),
+        .max_height = std::max(180U, target.height),
         .fps = target_fps,
         .bitrate = initial_bitrate(target.width, target.height, target_fps),
         .recommended = true,
@@ -163,8 +163,8 @@ AdaptiveShareQuality camera_quality(
     return {
         .label = target.height >= source.height ? "Source" : std::to_string(target.height) + "p",
         .detail = profile_detail(decision),
-        .max_width = std::min(std::max(2U, target.width), std::max(2U, max_width)),
-        .max_height = std::min(std::max(2U, target.height), std::max(2U, max_height)),
+        .max_width = std::max(320U, std::min(target.width, std::max(320U, max_width))),
+        .max_height = std::max(180U, std::min(target.height, std::max(180U, max_height))),
         .fps = target_fps,
         .bitrate = initial_bitrate(target.width, target.height, target_fps),
         .recommended = false,
@@ -211,8 +211,8 @@ AdaptiveShareQuality planned_quality(
     return {
         .label = height >= source.height ? "Source" : std::to_string(height) + "p",
         .detail = profile_detail(plan.profile),
-        .max_width = width,
-        .max_height = height,
+        .max_width = std::max(320U, width),
+        .max_height = std::max(180U, height),
         .fps = target_fps,
         .bitrate = initial_bitrate(width, height, target_fps),
         .recommended = false,
@@ -279,8 +279,8 @@ std::vector<AdaptiveShareQuality> adaptive_share_qualities(
     AdaptiveShareQuality automatic{
         .label = "Auto",
         .detail = "Adapts to hardware, display, power, thermals & network",
-        .max_width = std::max(2U, auto_box.width),
-        .max_height = std::max(2U, auto_box.height),
+        .max_width = std::max(320U, auto_box.width),
+        .max_height = std::max(180U, auto_box.height),
         .fps = 60,
         .bitrate = initial_bitrate(auto_box.width, auto_box.height, 60),
         .recommended = true,
