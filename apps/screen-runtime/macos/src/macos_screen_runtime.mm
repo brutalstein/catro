@@ -252,8 +252,18 @@ public:
             return false;
         }
         device_ = *resolved;
+        device_channels_ = output_channels(device_);
+        device_rate_ = audio_scalar<Float64>(
+            device_,
+            audio_address(
+                kAudioDevicePropertyNominalSampleRate))
+                           .value_or(0.0);
+        if (device_channels_ == 0 || device_rate_ <= 0.0) {
+            device_ = kAudioObjectUnknown;
+            return false;
+        }
         channels_ = std::clamp<std::uint32_t>(
-            output_channels(device_), 1, 2);
+            device_channels_, 1, 2);
         bridge_ = &bridge;
         failed_.store(false, std::memory_order_release);
 
@@ -368,6 +378,15 @@ public:
         if (!desired || *desired != device_) {
             return false;
         }
+        const auto current_rate = audio_scalar<Float64>(
+            device_,
+            audio_address(
+                kAudioDevicePropertyNominalSampleRate));
+        if (!current_rate ||
+            *current_rate != device_rate_ ||
+            output_channels(device_) != device_channels_) {
+            return false;
+        }
         UInt32 running = 0;
         UInt32 size = sizeof(running);
         return AudioUnitGetProperty(
@@ -405,6 +424,8 @@ public:
         bridge_ = nullptr;
         device_ = kAudioObjectUnknown;
         channels_ = 0;
+        device_channels_ = 0;
+        device_rate_ = 0.0;
         stereo_scratch_.clear();
         failed_.store(false, std::memory_order_release);
     }
@@ -426,15 +447,19 @@ private:
                 kAudioDevicePropertyStreamConfiguration,
                 kAudioObjectPropertyScopeOutput),
         };
+        // Some aggregate/virtual devices decline one of these listeners. Polling in healthy()
+        // still detects route, rate and channel changes, so listeners are an acceleration only.
         for (const auto& where : addresses) {
             if (AudioObjectAddPropertyListenerBlock(
                     device_,
                     &where,
                     queue_,
-                    device_listener_) != noErr) {
-                return false;
+                    device_listener_) == noErr) {
+                observed_.push_back(where);
             }
-            observed_.push_back(where);
+        }
+        if (observed_.empty()) {
+            device_listener_ = nil;
         }
         return true;
     }
@@ -526,6 +551,8 @@ private:
     StreamAudioRenderBridge* bridge_ = nullptr;
     AudioObjectID device_ = kAudioObjectUnknown;
     std::uint32_t channels_ = 0;
+    std::uint32_t device_channels_ = 0;
+    Float64 device_rate_ = 0.0;
     std::atomic_bool failed_{false};
 };
 
