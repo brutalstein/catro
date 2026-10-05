@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Foundation
 
 // Owns the product bridge for the main window. Snapshots arrive on the main queue; the model only
@@ -42,6 +43,8 @@ final class AppModel: ObservableObject {
     @Published var stage: StageSource?
     // Discord-like startup screen: up until the first sign-in settles or the user goes offline.
     @Published var starting = true
+    // Microphone access is denied; the workspace offers the Microphone settings.
+    @Published var microphoneBlocked = false
 
     private let bridge = CatroProductBridge()
     private var timer: Timer?
@@ -228,7 +231,22 @@ final class AppModel: ObservableObject {
     func toggleVoice() {
         if inVoice || snapshot?.voicePhase == .failed {
             bridge.leaveVoice()
-        } else {
+            return
+        }
+        // Ask for the microphone up front so the system prompt appears; a denial still joins to
+        // listen and points to the Microphone settings.
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                Task { @MainActor [weak self] in
+                    self?.microphoneBlocked = !granted
+                    self?.bridge.joinVoice()
+                }
+            }
+        case .denied, .restricted:
+            microphoneBlocked = true
+            bridge.joinVoice()
+        default:
             bridge.joinVoice()
         }
     }

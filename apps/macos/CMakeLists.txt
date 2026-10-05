@@ -22,6 +22,7 @@ add_executable(catro_macos_app MACOSX_BUNDLE
     Catro/Product/StreamViewer.swift
     Catro/Product/SettingsView.swift
     Catro/Product/PushToTalk.swift
+    Catro/Product/Permissions.swift
     Catro/Product/Updater.swift
     Catro/Bridge/CatroCapabilitiesBridge.mm
     Catro/Bridge/CatroAudioBridge.mm

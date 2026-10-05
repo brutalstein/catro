@@ -407,6 +407,11 @@ TEST_CASE("macOS product shell stays native accessible and free of view-body med
     // In-app updates, like Windows.
     CHECK(read(root / "Product/ServerWorkspace.swift").find("updater.install()") != std::string::npos);
     CHECK(read(root / "Product/Updater.swift").find("CATRO_WAIT_PID") != std::string::npos);
+    // macOS lists Catro under Screen Recording and Microphone only after Catro asks.
+    const auto permissions = read(root / "Product/Permissions.swift");
+    CHECK(permissions.find("CGRequestScreenCaptureAccess()") != std::string::npos);
+    CHECK(permissions.find("System Preferences") != std::string::npos);
+    CHECK(read(root / "Product/AppModel.swift").find("requestAccess(for: .audio)") != std::string::npos);
     for (const auto* file : {"Product/ServerWorkspace.swift", "Product/ChannelSidebar.swift",
                              "Product/MemberSidebar.swift", "Product/SourcePicker.swift"}) {
         INFO(file);
@@ -421,6 +426,8 @@ TEST_CASE("macOS product shell stays native accessible and free of view-body med
     CHECK(picker.find("\"Share app audio\"") != std::string::npos);
     CHECK(picker.find("\"Share computer audio\"") != std::string::npos);
     CHECK(picker.find(".disabled(true)") == std::string::npos);
+    CHECK(picker.find("Permissions.requestScreenRecording()") != std::string::npos);
+    CHECK(picker.find("\"Restart Catro\"") != std::string::npos);
 
     const auto app = read(root / "CatroApp.swift");
     CHECK(app.find(".keyboardShortcut(\"j\", modifiers: [.command, .shift])") != std::string::npos);

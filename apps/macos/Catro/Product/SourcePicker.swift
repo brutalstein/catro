@@ -94,6 +94,8 @@ struct SourcePicker: View {
     @State private var selection: UInt64?
     @State private var qualityIndex = 0
     @State private var audio = false
+    // Without Screen Recording only cameras are listed; say how to get displays and windows.
+    @State private var screensBlocked = !Permissions.screenRecordingAllowed
 
     private var sources: [CatroShareSource] { model.snapshot?.sources ?? [] }
     private var games: [CatroShareSource] { sources.filter { $0.game } }
@@ -104,8 +106,6 @@ struct SourcePicker: View {
     private var selectedSource: CatroShareSource? { sources.first { $0.nativeID == selection } }
     private var sharesDisplay: Bool { selectedSource.map { !$0.window && !$0.camera } ?? false }
     private var sharesCamera: Bool { selectedSource?.camera ?? false }
-    // Only cameras listed: Screen Recording is off, so say how to get displays and windows.
-    private var screensBlocked: Bool { !sources.isEmpty && sources.allSatisfy { $0.camera } }
 
     private var qualities: (options: [ShareQuality], recommended: Int) {
         guard let source = selectedSource else { return ([], 0) }
@@ -127,6 +127,9 @@ struct SourcePicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Share your screen").font(.title2)
+            if screensBlocked {
+                ScreenRecordingNotice()
+            }
             List {
                 group("Games", games)
                 group("Screens", screens)
@@ -134,16 +137,8 @@ struct SourcePicker: View {
                 group("Cameras", cameras)
             }
             .frame(minHeight: 260)
-            .overlay(alignment: .bottom) {
-                if screensBlocked {
-                    Text("Allow Screen Recording in System Settings to share displays and windows.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(8)
-                }
-            }
             .overlay {
-                if sources.isEmpty {
+                if sources.isEmpty && !screensBlocked {
                     Text(emptyText)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -179,7 +174,10 @@ struct SourcePicker: View {
                 }
             }
             HStack {
-                Button("Refresh") { model.loadSources() }
+                Button("Refresh") {
+                    screensBlocked = !Permissions.screenRecordingAllowed
+                    model.loadSources()
+                }
                 Spacer()
                 Button("Cancel", role: .cancel) { isPresented = false }
                     .keyboardShortcut(.cancelAction)
@@ -190,7 +188,11 @@ struct SourcePicker: View {
         }
         .padding(20)
         .frame(minWidth: 480, minHeight: 540)
-        .onAppear { model.loadSources() }
+        .onAppear {
+            // Asking is what adds Catro to the Screen Recording list; macOS prompts only once.
+            if screensBlocked { Permissions.requestScreenRecording() }
+            model.loadSources()
+        }
         // A detected game is picked for you; choosing anything else keeps your choice.
         .onChange(of: firstGame) { game in
             if selection == nil, let game {
@@ -291,5 +293,28 @@ private struct SourceRow: View {
             .fill(selected ? Color.accentColor.opacity(0.18) : Color.clear))
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+}
+
+// Screen Recording is off: where to turn it on, and the restart macOS needs before it applies.
+private struct ScreenRecordingNotice: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Catro needs Screen Recording permission to share displays and windows.")
+                .font(.callout.weight(.semibold))
+            Text("Turn on Catro in \(Permissions.location(of: .screenRecording)), then restart Catro.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Open Settings") { Permissions.openSettings(.screenRecording) }
+                    .help("Opens the Screen Recording list")
+                Button("Restart Catro") { Permissions.relaunch() }
+                    .help("macOS applies Screen Recording permission after Catro restarts")
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.12)))
     }
 }

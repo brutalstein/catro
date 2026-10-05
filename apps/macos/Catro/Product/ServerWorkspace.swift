@@ -52,6 +52,13 @@ struct ServerWorkspace: View {
         } message: {
             Text(updater.failure ?? "")
         })
+        .background(Color.clear.alert("Catro can't use your microphone", isPresented: $model.microphoneBlocked) {
+            Button("Open Settings") { Permissions.openSettings(.microphone) }
+            Button("Not Now", role: .cancel) {}
+        } message: {
+            Text("You can listen, but others can't hear you. Turn on Catro in "
+                 + "\(Permissions.location(of: .microphone)).")
+        })
         .sheet(isPresented: $picking) {
             SourcePicker(model: model, isPresented: $picking)
         }
