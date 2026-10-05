@@ -934,7 +934,7 @@ struct WindowsScreenShareRuntime::Impl {
 
         const auto configure_encoder =
             [&](const GpuCaptureFrame& frame) -> bool {
-            auto extent = video::fit_even_video_extent(
+            auto extent = video::fit_encodable_video_extent(
                 frame.width,
                 frame.height,
                 config.max_width,
@@ -971,7 +971,7 @@ struct WindowsScreenShareRuntime::Impl {
                 if (!error) {
                     break;
                 }
-                const auto smaller = video::fit_even_video_extent(
+                const auto smaller = video::fit_encodable_video_extent(
                     frame.width,
                     frame.height,
                     std::min(config.max_width, box.width),

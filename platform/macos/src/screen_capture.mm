@@ -477,7 +477,7 @@ public:
         if ([NSThread isMainThread]) {
             return ScreenCaptureError{ScreenCaptureErrorCode::wrong_thread, 0};
         }
-        const auto extent = video::fit_even_video_extent(
+        const auto extent = video::fit_encodable_video_extent(
             source.width,
             source.height,
             config.max_width,
@@ -862,7 +862,7 @@ std::optional<ScreenCaptureError> MacScreenCapture::start_source(
     stop();
     if (source.native_id == 0 || source.width < 2 || source.height < 2 ||
         config.frame_rate == 0 ||
-        !video::fit_even_video_extent(
+        !video::fit_encodable_video_extent(
             source.width, source.height, config.max_width, config.max_height)) {
         return ScreenCaptureError{ScreenCaptureErrorCode::invalid_config, 0};
     }

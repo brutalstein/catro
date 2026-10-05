@@ -109,4 +109,30 @@ namespace detail {
     return VideoExtent{width, height_bound};
 }
 
+// Hardware H.264 encoders refuse tiny frames: NVENC rejects anything under about 145x49 at
+// media-type negotiation. Smaller sources (a window caught mid-resize, a launcher splash) are
+// scaled up by a whole factor, which keeps the aspect exact, until both sides reach this.
+inline constexpr std::uint32_t kMinEncodedSide = 160;
+
+// fit_even_video_extent for an encoder: the same fit, after scaling tiny sources up.
+[[nodiscard]] constexpr std::optional<VideoExtent> fit_encodable_video_extent(
+    std::uint32_t source_width,
+    std::uint32_t source_height,
+    std::uint32_t max_width,
+    std::uint32_t max_height) noexcept {
+    const auto shorter = detail::min_u32(source_width, source_height);
+    if (shorter == 0) {
+        return std::nullopt;
+    }
+    const std::uint64_t factor =
+        shorter >= kMinEncodedSide ? 1U : (kMinEncodedSide + shorter - 1U) / shorter;
+    const auto width = source_width * factor;
+    const auto height = source_height * factor;
+    if (width > UINT32_MAX || height > UINT32_MAX) {
+        return std::nullopt;
+    }
+    return fit_even_video_extent(static_cast<std::uint32_t>(width),
+                                 static_cast<std::uint32_t>(height), max_width, max_height);
+}
+
 } // namespace catro::video

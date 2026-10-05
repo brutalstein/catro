@@ -402,7 +402,7 @@ winrt::fire_and_forget ServerView::BeginScreenShare() {
         const auto fps = quality.fps;
         const auto bitrate = quality.bitrate;
 
-        const auto fitted = catro::video::fit_even_video_extent(
+        const auto fitted = catro::video::fit_encodable_video_extent(
             sources[static_cast<std::size_t>(selected)].width,
             sources[static_cast<std::size_t>(selected)].height,
             width,

@@ -24,6 +24,13 @@ TEST_CASE("even video fit never upscales a smaller source") {
           VideoExtent{1280, 720});
 }
 
+TEST_CASE("encodable fit scales tiny sources up to a size hardware encoders accept") {
+    CHECK(fit_encodable_video_extent(144, 90, 1920, 1080) == VideoExtent{288, 180});
+    CHECK(fit_encodable_video_extent(1, 1, 1920, 1080) == VideoExtent{160, 160});
+    CHECK(fit_encodable_video_extent(2560, 1600, 1920, 1080) == VideoExtent{1728, 1080});
+    CHECK_FALSE(fit_encodable_video_extent(0, 1080, 1920, 1080));
+}
+
 TEST_CASE("even video fit rejects dimensions that cannot form an NV12 frame") {
     CHECK_FALSE(fit_even_video_extent(0, 1080, 1920, 1080));
     CHECK_FALSE(fit_even_video_extent(1, 1, 1920, 1080));

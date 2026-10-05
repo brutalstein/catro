@@ -348,10 +348,15 @@ struct WindowsH264HardwareEncoder::Impl {
 
         const auto output_type = make_output_type(config_);
         const auto input_type = make_input_type(config_);
-        if (!output_type || !input_type ||
-            FAILED(transform_->SetOutputType(0, output_type.Get(), 0)) ||
-            FAILED(transform_->SetInputType(0, input_type.Get(), 0))) {
+        if (!output_type || !input_type) {
             return fail(HardwareEncoderError{HardwareEncoderErrorCode::media_type_failed});
+        }
+        result = transform_->SetOutputType(0, output_type.Get(), 0);
+        if (SUCCEEDED(result)) {
+            result = transform_->SetInputType(0, input_type.Get(), 0);
+        }
+        if (FAILED(result)) {
+            return fail(HardwareEncoderError{HardwareEncoderErrorCode::media_type_failed, result});
         }
 
         if (ComPtr<ICodecAPI> codec; SUCCEEDED(transform_.As(&codec)) && codec) {
