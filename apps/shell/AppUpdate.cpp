@@ -1,5 +1,6 @@
 #include "AppUpdate.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 
@@ -49,9 +50,13 @@ std::optional<std::string> release_tag(std::string_view final_url) {
     if (tag.ends_with('/')) {
         tag.remove_suffix(1);
     }
-    if (tag.empty() ||
-        tag.find_first_not_of("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-_") !=
-            std::string_view::npos) {
+    // A plain loop: the vectorized find_first_not_of needs an STL runtime symbol the app's
+    // MSBuild toolset may not link.
+    const auto plain = [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '.' ||
+               c == '-' || c == '_';
+    };
+    if (tag.empty() || !std::all_of(tag.begin(), tag.end(), plain)) {
         return std::nullopt;
     }
     return std::string{tag};
