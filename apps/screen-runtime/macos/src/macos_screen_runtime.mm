@@ -5,9 +5,16 @@
 #include <catro/platform/macos/video_presenter.hpp>
 
 #include <AudioToolbox/AudioToolbox.h>
+#include <CoreAudio/CoreAudio.h>
+#include <CoreFoundation/CoreFoundation.h>
+#include <dispatch/dispatch.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <cstddef>
+#include <cstring>
+#include <vector>
 #include <chrono>
 #include <condition_variable>
 #include <exception>
@@ -99,73 +106,430 @@ struct AudioPump {
     return std::nullopt;
 }
 
-// Default-output AudioUnit rendering 48 kHz interleaved stereo stream audio from the render bridge.
+namespace {
+
+constexpr UInt32 kAudioInputElement = 1;
+constexpr UInt32 kAudioOutputElement = 0;
+
+AudioObjectPropertyAddress audio_address(
+    AudioObjectPropertySelector selector,
+    AudioObjectPropertyScope scope = kAudioObjectPropertyScopeGlobal) {
+    return {selector, scope, kAudioObjectPropertyElementMain};
+}
+
+template <class T>
+std::optional<T> audio_scalar(
+    AudioObjectID object,
+    const AudioObjectPropertyAddress& where) {
+    T value{};
+    UInt32 size = sizeof(T);
+    if (AudioObjectGetPropertyData(
+            object, &where, 0, nullptr, &size, &value) != noErr ||
+        size != sizeof(T)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+std::uint32_t output_channels(AudioObjectID device) {
+    const auto where = audio_address(
+        kAudioDevicePropertyStreamConfiguration,
+        kAudioObjectPropertyScopeOutput);
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(
+            device, &where, 0, nullptr, &size) != noErr ||
+        size < sizeof(AudioBufferList)) {
+        return 0;
+    }
+    std::vector<std::byte> bytes(size);
+    if (AudioObjectGetPropertyData(
+            device, &where, 0, nullptr, &size, bytes.data()) != noErr) {
+        return 0;
+    }
+    const auto* list =
+        reinterpret_cast<const AudioBufferList*>(bytes.data());
+    std::uint32_t channels = 0;
+    for (UInt32 index = 0;
+         index < list->mNumberBuffers;
+         ++index) {
+        channels += list->mBuffers[index].mNumberChannels;
+    }
+    return channels;
+}
+
+std::optional<AudioObjectID> resolve_output_device(
+    std::string_view endpoint) {
+    AudioObjectID device = kAudioObjectUnknown;
+    if (endpoint.empty()) {
+        device = audio_scalar<AudioObjectID>(
+            kAudioObjectSystemObject,
+            audio_address(
+                kAudioHardwarePropertyDefaultOutputDevice))
+                     .value_or(kAudioObjectUnknown);
+    } else {
+        constexpr std::string_view prefix = "coreaudio:";
+        constexpr std::string_view suffix = ":output";
+        if (!endpoint.starts_with(prefix) ||
+            !endpoint.ends_with(suffix) ||
+            endpoint.size() <=
+                prefix.size() + suffix.size()) {
+            return std::nullopt;
+        }
+        const auto uid = endpoint.substr(
+            prefix.size(),
+            endpoint.size() - prefix.size() - suffix.size());
+        CFStringRef text = CFStringCreateWithBytes(
+            nullptr,
+            reinterpret_cast<const UInt8*>(uid.data()),
+            static_cast<CFIndex>(uid.size()),
+            kCFStringEncodingUTF8,
+            false);
+        if (text == nullptr) {
+            return std::nullopt;
+        }
+        const auto where = audio_address(
+            kAudioHardwarePropertyTranslateUIDToDevice);
+        UInt32 size = sizeof(device);
+        const auto status = AudioObjectGetPropertyData(
+            kAudioObjectSystemObject,
+            &where,
+            sizeof(text),
+            &text,
+            &size,
+            &device);
+        CFRelease(text);
+        if (status != noErr) {
+            return std::nullopt;
+        }
+    }
+    if (device == kAudioObjectUnknown ||
+        output_channels(device) == 0) {
+        return std::nullopt;
+    }
+    const auto alive = audio_scalar<UInt32>(
+        device,
+        audio_address(kAudioDevicePropertyDeviceIsAlive));
+    if (alive && *alive == 0) {
+        return std::nullopt;
+    }
+    return device;
+}
+
+std::optional<AudioObjectID> effective_output_device(
+    std::string_view requested) {
+    if (!requested.empty()) {
+        if (const auto chosen =
+                resolve_output_device(requested)) {
+            return chosen;
+        }
+    }
+    return resolve_output_device({});
+}
+
+// AUHAL keeps watched stream audio on the same selected output as voice. If a Bluetooth/USB device
+// disappears, playback falls back to the current system default and returns to the saved endpoint
+// when it reappears. These CoreAudio APIs predate Monterey and keep the 12.3 deployment floor.
 class CoreAudioStreamOutput final : public StreamAudioOutput {
 public:
+    using DeviceProvider = std::function<std::string()>;
+
+    explicit CoreAudioStreamOutput(DeviceProvider provider)
+        : provider_(std::move(provider)),
+          queue_(dispatch_queue_create(
+              "dev.catro.stream-audio.device",
+              DISPATCH_QUEUE_SERIAL)) {}
+
     ~CoreAudioStreamOutput() override { stop(); }
 
-    [[nodiscard]] bool start(StreamAudioRenderBridge& bridge) override {
+    [[nodiscard]] bool start(
+        StreamAudioRenderBridge& bridge) override {
         stop();
-        AudioComponentDescription description{};
-        description.componentType = kAudioUnitType_Output;
-        description.componentSubType = kAudioUnitSubType_DefaultOutput;
-        description.componentManufacturer = kAudioUnitManufacturer_Apple;
-        AudioComponent component = AudioComponentFindNext(nullptr, &description);
-        if (component == nullptr || AudioComponentInstanceNew(component, &unit_) != noErr) {
-            unit_ = nullptr;
+
+        const auto requested = provider_();
+        const auto resolved =
+            effective_output_device(requested);
+        if (!resolved) {
             return false;
         }
+        device_ = *resolved;
+        channels_ = std::clamp<std::uint32_t>(
+            output_channels(device_), 1, 2);
+        bridge_ = &bridge;
+        failed_.store(false, std::memory_order_release);
+
+        AudioComponentDescription description{};
+        description.componentType = kAudioUnitType_Output;
+        description.componentSubType =
+            kAudioUnitSubType_HALOutput;
+        description.componentManufacturer =
+            kAudioUnitManufacturer_Apple;
+        const auto component =
+            AudioComponentFindNext(nullptr, &description);
+        if (component == nullptr ||
+            AudioComponentInstanceNew(component, &unit_) != noErr) {
+            unit_ = nullptr;
+            bridge_ = nullptr;
+            return false;
+        }
+
+        const UInt32 input_enabled = 0;
+        const UInt32 output_enabled = 1;
+        if (AudioUnitSetProperty(
+                unit_,
+                kAudioOutputUnitProperty_EnableIO,
+                kAudioUnitScope_Input,
+                kAudioInputElement,
+                &input_enabled,
+                sizeof(input_enabled)) != noErr ||
+            AudioUnitSetProperty(
+                unit_,
+                kAudioOutputUnitProperty_EnableIO,
+                kAudioUnitScope_Output,
+                kAudioOutputElement,
+                &output_enabled,
+                sizeof(output_enabled)) != noErr ||
+            AudioUnitSetProperty(
+                unit_,
+                kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global,
+                kAudioOutputElement,
+                &device_,
+                sizeof(device_)) != noErr) {
+            stop();
+            return false;
+        }
+
         AudioStreamBasicDescription format{};
         format.mSampleRate = 48'000.0;
         format.mFormatID = kAudioFormatLinearPCM;
-        format.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked;
-        format.mChannelsPerFrame = static_cast<UInt32>(kStreamAudioChannels);
+        format.mFormatFlags =
+            kAudioFormatFlagIsFloat |
+            kAudioFormatFlagIsPacked;
+        format.mChannelsPerFrame = channels_;
         format.mBitsPerChannel = 32;
-        format.mBytesPerFrame = static_cast<UInt32>(sizeof(float) * kStreamAudioChannels);
+        format.mBytesPerFrame =
+            static_cast<UInt32>(
+                sizeof(float) * channels_);
         format.mFramesPerPacket = 1;
-        format.mBytesPerPacket = format.mBytesPerFrame;
-        AURenderCallbackStruct callback{&CoreAudioStreamOutput::render, &bridge};
-        if (AudioUnitSetProperty(unit_, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &format,
-                                 sizeof(format)) != noErr ||
-            AudioUnitSetProperty(unit_, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &callback,
-                                 sizeof(callback)) != noErr ||
-            AudioUnitInitialize(unit_) != noErr) {
-            AudioComponentInstanceDispose(unit_);
-            unit_ = nullptr;
+        format.mBytesPerPacket =
+            format.mBytesPerFrame;
+
+        UInt32 max_frames = 4096;
+        UInt32 max_frames_size = sizeof(max_frames);
+        (void)AudioUnitGetProperty(
+            unit_,
+            kAudioUnitProperty_MaximumFramesPerSlice,
+            kAudioUnitScope_Global,
+            0,
+            &max_frames,
+            &max_frames_size);
+        if (channels_ == 1) {
+            stereo_scratch_.assign(
+                static_cast<std::size_t>(max_frames) * 2U,
+                0.0F);
+        }
+
+        const AURenderCallbackStruct callback{
+            &CoreAudioStreamOutput::render, this};
+        if (AudioUnitSetProperty(
+                unit_,
+                kAudioUnitProperty_StreamFormat,
+                kAudioUnitScope_Input,
+                kAudioOutputElement,
+                &format,
+                sizeof(format)) != noErr ||
+            AudioUnitSetProperty(
+                unit_,
+                kAudioUnitProperty_SetRenderCallback,
+                kAudioUnitScope_Input,
+                kAudioOutputElement,
+                &callback,
+                sizeof(callback)) != noErr ||
+            AudioUnitInitialize(unit_) != noErr ||
+            !observe_device()) {
+            stop();
             return false;
         }
+
         if (AudioOutputUnitStart(unit_) != noErr) {
-            AudioUnitUninitialize(unit_);
-            AudioComponentInstanceDispose(unit_);
-            unit_ = nullptr;
+            stop();
             return false;
         }
         return true;
     }
 
-    void stop() noexcept override {
-        if (unit_ == nullptr) {
-            return;
+    [[nodiscard]] bool healthy() override {
+        if (unit_ == nullptr ||
+            failed_.load(std::memory_order_acquire)) {
+            return false;
         }
-        AudioOutputUnitStop(unit_);
-        AudioUnitUninitialize(unit_);
-        AudioComponentInstanceDispose(unit_);
-        unit_ = nullptr;
+        const auto desired =
+            effective_output_device(provider_());
+        if (!desired || *desired != device_) {
+            return false;
+        }
+        UInt32 running = 0;
+        UInt32 size = sizeof(running);
+        return AudioUnitGetProperty(
+                   unit_,
+                   kAudioOutputUnitProperty_IsRunning,
+                   kAudioUnitScope_Global,
+                   kAudioOutputElement,
+                   &running,
+                   &size) == noErr &&
+               running != 0;
+    }
+
+    void stop() noexcept override {
+        if (unit_ != nullptr) {
+            (void)AudioOutputUnitStop(unit_);
+        }
+        if (device_listener_ != nil) {
+            for (const auto& where : observed_) {
+                AudioObjectRemovePropertyListenerBlock(
+                    device_,
+                    &where,
+                    queue_,
+                    device_listener_);
+            }
+            observed_.clear();
+            dispatch_sync(queue_, ^{
+            });
+            device_listener_ = nil;
+        }
+        if (unit_ != nullptr) {
+            AudioUnitUninitialize(unit_);
+            AudioComponentInstanceDispose(unit_);
+            unit_ = nullptr;
+        }
+        bridge_ = nullptr;
+        device_ = kAudioObjectUnknown;
+        channels_ = 0;
+        stereo_scratch_.clear();
+        failed_.store(false, std::memory_order_release);
     }
 
 private:
-    static OSStatus render(void* context, AudioUnitRenderActionFlags*, const AudioTimeStamp*, UInt32, UInt32,
-                           AudioBufferList* data) {
-        auto* bridge = static_cast<StreamAudioRenderBridge*>(context);
-        for (UInt32 index = 0; index < data->mNumberBuffers; ++index) {
-            auto& buffer = data->mBuffers[index];
-            bridge->on_render(std::span<float>(static_cast<float*>(buffer.mData), buffer.mDataByteSize / sizeof(float)));
+    [[nodiscard]] bool observe_device() {
+        device_listener_ =
+            ^(UInt32,
+              const AudioObjectPropertyAddress*) {
+              failed_.store(
+                  true, std::memory_order_release);
+            };
+        const std::array addresses{
+            audio_address(
+                kAudioDevicePropertyDeviceIsAlive),
+            audio_address(
+                kAudioDevicePropertyNominalSampleRate),
+            audio_address(
+                kAudioDevicePropertyStreamConfiguration,
+                kAudioObjectPropertyScopeOutput),
+        };
+        for (const auto& where : addresses) {
+            if (AudioObjectAddPropertyListenerBlock(
+                    device_,
+                    &where,
+                    queue_,
+                    device_listener_) != noErr) {
+                return false;
+            }
+            observed_.push_back(where);
+        }
+        return true;
+    }
+
+    static OSStatus render(
+        void* context,
+        AudioUnitRenderActionFlags*,
+        const AudioTimeStamp*,
+        UInt32,
+        UInt32 frames,
+        AudioBufferList* data) noexcept {
+        auto& output =
+            *static_cast<CoreAudioStreamOutput*>(context);
+        if (data == nullptr ||
+            data->mNumberBuffers == 0 ||
+            output.bridge_ == nullptr) {
+            return noErr;
+        }
+
+        auto& first = data->mBuffers[0];
+        if (first.mData == nullptr) {
+            return noErr;
+        }
+        auto* samples =
+            static_cast<float*>(first.mData);
+        const auto available =
+            static_cast<std::size_t>(
+                first.mDataByteSize / sizeof(float));
+
+        if (output.channels_ == 1) {
+            const auto stereo_count =
+                static_cast<std::size_t>(frames) * 2U;
+            if (stereo_count >
+                output.stereo_scratch_.size()) {
+                std::fill(
+                    samples,
+                    samples + std::min<std::size_t>(
+                                  available, frames),
+                    0.0F);
+                output.failed_.store(
+                    true, std::memory_order_release);
+                return noErr;
+            }
+            output.bridge_->on_render(
+                std::span<float>(
+                    output.stereo_scratch_.data(),
+                    stereo_count));
+            const auto mono_count =
+                std::min<std::size_t>(
+                    available, frames);
+            for (std::size_t index = 0;
+                 index < mono_count;
+                 ++index) {
+                samples[index] =
+                    0.5F *
+                    (output.stereo_scratch_[index * 2U] +
+                     output.stereo_scratch_[
+                         index * 2U + 1U]);
+            }
+        } else {
+            const auto wanted =
+                static_cast<std::size_t>(frames) * 2U;
+            output.bridge_->on_render(
+                std::span<float>(
+                    samples,
+                    std::min(available, wanted)));
+        }
+
+        for (UInt32 index = 1;
+             index < data->mNumberBuffers;
+             ++index) {
+            auto& extra = data->mBuffers[index];
+            if (extra.mData != nullptr) {
+                std::memset(
+                    extra.mData,
+                    0,
+                    extra.mDataByteSize);
+            }
         }
         return noErr;
     }
 
+    DeviceProvider provider_;
+    dispatch_queue_t queue_;
+    AudioObjectPropertyListenerBlock device_listener_ = nil;
+    std::vector<AudioObjectPropertyAddress> observed_;
+    std::vector<float> stereo_scratch_;
     AudioComponentInstance unit_ = nullptr;
+    StreamAudioRenderBridge* bridge_ = nullptr;
+    AudioObjectID device_ = kAudioObjectUnknown;
+    std::uint32_t channels_ = 0;
+    std::atomic_bool failed_{false};
 };
+
+} // namespace
 
 } // namespace
 
@@ -356,6 +720,16 @@ struct MacScreenShareRuntime::Impl {
 
     void set_stream_volume(float volume) noexcept {
         counters_.remote_stream_volume.store(std::clamp(volume, 0.0F, 2.0F), std::memory_order_relaxed);
+    }
+
+    void set_output_device(std::string endpoint) {
+        std::scoped_lock lock(output_device_mutex_);
+        output_device_ = std::move(endpoint);
+    }
+
+    [[nodiscard]] std::string output_device() const {
+        std::scoped_lock lock(output_device_mutex_);
+        return output_device_;
     }
 
     void set_remote_viewing_enabled(bool enabled) noexcept {
@@ -692,7 +1066,8 @@ struct MacScreenShareRuntime::Impl {
 
     void run_stream_audio_receiver_guarded(const ScreenTransportConfig& config) noexcept {
         try {
-            CoreAudioStreamOutput output;
+            CoreAudioStreamOutput output(
+                [this] { return output_device(); });
             run_stream_audio_receive_loop(api_, config.room_runtime, counters_, stop_requested_, output);
         } catch (...) {
             counters_.remote_stream_audio_decode_failures.fetch_add(1, std::memory_order_relaxed);
@@ -785,11 +1160,13 @@ struct MacScreenShareRuntime::Impl {
     RoomScreenApi api_;
     std::mutex lifecycle_mutex_;
     mutable std::mutex metadata_mutex_;
+    mutable std::mutex output_device_mutex_;
     std::mutex stop_mutex_;
     std::condition_variable stop_cv_;
     std::string source_title_;
     std::string error_;
     std::string stream_audio_error_;
+    std::string output_device_;
     std::optional<ScreenTransportConfig> transport_config_;
     MacVideoPresenter preview_presenter_;
     MacVideoPresenter remote_presenter_;
@@ -845,6 +1222,10 @@ void MacScreenShareRuntime::set_remote_viewing_enabled(bool enabled) noexcept {
 
 void MacScreenShareRuntime::set_stream_volume(float volume) noexcept {
     impl_->set_stream_volume(volume);
+}
+
+void MacScreenShareRuntime::set_output_device(std::string endpoint) {
+    impl_->set_output_device(std::move(endpoint));
 }
 
 void MacScreenShareRuntime::set_echo_sink(std::function<void(std::span<const float>)> sink) {

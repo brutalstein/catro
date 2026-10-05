@@ -139,6 +139,8 @@ TEST_CASE("macOS screen runtime attaches and detaches caller-owned surfaces on t
     REQUIRE([NSThread isMainThread]);
     FakeRoom room;
     MacScreenShareRuntime runtime(fake_api());
+    runtime.set_output_device("coreaudio:dev.catro.saved-headset:output");
+    runtime.set_output_device("");
     REQUIRE_FALSE(runtime.start_listening(transport_for(room)));
 
     CALayer* preview = [CALayer layer];

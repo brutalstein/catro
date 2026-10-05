@@ -166,6 +166,9 @@ if(APPLE)
     catro_add_test(macos_directory_client macos/directory_client_test.mm)
     target_link_libraries(catro_macos_directory_client_test PRIVATE Catro::Macos "-framework Security")
 
+    catro_add_test(macos_audio_platform macos/audio_platform_test.mm)
+    target_link_libraries(catro_macos_audio_platform_test PRIVATE Catro::Macos)
+
     catro_add_test(macos_rtc_trust macos/rtc_trust_test.mm)
     target_include_directories(catro_macos_rtc_trust_test PRIVATE
         ${CMAKE_SOURCE_DIR}/core/rtc/src)

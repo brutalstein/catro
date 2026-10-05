@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 
 namespace catro::screen {
 
@@ -51,6 +52,9 @@ public:
     void set_remote_viewing_enabled(bool enabled) noexcept;
     // 0 silences the watched stream's audio, 1 is unchanged, 2 doubles.
     void set_stream_volume(float volume) noexcept;
+    // Empty follows the current macOS default output. A saved CoreAudio endpoint falls back to the
+    // system default while absent and moves back automatically when the device returns.
+    void set_output_device(std::string endpoint);
     // Before the first start: receives stream audio this Mac plays or shares, for the voice echo
     // canceller (48 kHz interleaved stereo).
     void set_echo_sink(std::function<void(std::span<const float>)> sink);

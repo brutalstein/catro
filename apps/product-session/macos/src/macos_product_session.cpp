@@ -1067,6 +1067,7 @@ void ProductSession::set_audio_devices(const std::string& input, const std::stri
         impl_->input_device_ = input;
         impl_->output_device_ = output;
     }
+    impl_->screen_->set_output_device(output);
     const auto voice = impl_->live_voice_.load(std::memory_order_acquire);
     if (voice != nullptr && impl_->deps_.media.voice_set_devices != nullptr) {
         impl_->deps_.media.voice_set_devices(voice, input.c_str(), output.c_str());
