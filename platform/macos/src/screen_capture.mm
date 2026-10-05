@@ -169,16 +169,42 @@ struct CameraMode {
 [[nodiscard]] std::vector<CaptureSource> camera_sources() {
     std::vector<CaptureSource> sources;
     for (AVCaptureDevice* device in cameras()) {
-        const auto size = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription);
-        if (size.width <= 0 || size.height <= 0) {
-            continue;
+        std::uint32_t best_width = 0;
+        std::uint32_t best_height = 0;
+        std::uint64_t best_pixels = 0;
+        // activeFormat is only the device's current mode, not its capability ceiling. Discover the
+        // largest real video mode so the policy can offer 1080p/4K when a camera actually has it.
+        for (AVCaptureDeviceFormat* format in device.formats) {
+            const auto size =
+                CMVideoFormatDescriptionGetDimensions(format.formatDescription);
+            if (size.width <= 0 || size.height <= 0 ||
+                size.width > 7680 || size.height > 4320 ||
+                format.videoSupportedFrameRateRanges.count == 0) {
+                continue;
+            }
+            const auto pixels = static_cast<std::uint64_t>(size.width) *
+                                static_cast<std::uint64_t>(size.height);
+            if (pixels > best_pixels) {
+                best_pixels = pixels;
+                best_width = static_cast<std::uint32_t>(size.width);
+                best_height = static_cast<std::uint32_t>(size.height);
+            }
+        }
+        if (best_pixels == 0) {
+            const auto active =
+                CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription);
+            if (active.width <= 0 || active.height <= 0) {
+                continue;
+            }
+            best_width = static_cast<std::uint32_t>(active.width);
+            best_height = static_cast<std::uint32_t>(active.height);
         }
         sources.push_back(CaptureSource{
             .kind = CaptureSourceKind::camera,
             .native_id = camera_id(device),
             .title = utf8(device.localizedName),
-            .width = static_cast<std::uint32_t>(size.width),
-            .height = static_cast<std::uint32_t>(size.height),
+            .width = best_width,
+            .height = best_height,
         });
     }
     return sources;
