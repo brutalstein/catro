@@ -42,6 +42,7 @@
     <ClCompile Include="$(GeneratedFilesDir)module.g.cpp" />
     <ClCompile Include="MainWindow.xaml.cpp" />
     <ClCompile Include="MainWindow.Directory.cpp" />
+    <ClCompile Include="MainWindow.Update.cpp" />
     <ClCompile Include="Diagnostics\DiagnosticsView.xaml.cpp"><Filter>Diagnostics</Filter></ClCompile>
     <ClCompile Include="Audio\AudioView.xaml.cpp"><Filter>Audio</Filter></ClCompile>
     <ClCompile Include="Server\ServerView.xaml.cpp"><Filter>Server</Filter></ClCompile>

@@ -132,6 +132,8 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
         _publicCode = copy_string(item.public_code);
         _owner = item.owner;
         _hasVoice = !item.voice_channel_id.empty();
+        _textChannelID = copy_string(item.text_channel_id);
+        _voiceChannelID = copy_string(item.voice_channel_id);
         _memberCount = item.member_count;
     }
     return self;
@@ -145,6 +147,7 @@ NSArray<Object*>* objects(const std::vector<Item>& items) {
         _displayName = copy_string(item.display_name);
         _owner = item.owner;
         _isSelf = item.is_self;
+        _voiceChannelID = copy_string(item.voice_channel_id);
     }
     return self;
 }

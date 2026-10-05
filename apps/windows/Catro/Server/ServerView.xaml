@@ -167,6 +167,17 @@
                                 </StackPanel>
                             </Button>
                         </Grid>
+                        <ListView x:Name="VoiceParticipantList"
+                                  Margin="22,0,0,0"
+                                  MaxHeight="250"
+                                  ItemTemplate="{StaticResource CatroMemberTemplate}"
+                                  SelectionMode="None"
+                                  IsItemClickEnabled="True"
+                                  ItemClick="OnMemberClick"
+                                  AutomationProperties.Name="Connected voice participants"
+                                  ScrollViewer.HorizontalScrollMode="Disabled"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                  ContainerContentChanging="OnMemberContainerChanging" />
                     </StackPanel>
                 </StackPanel>
 
@@ -530,6 +541,9 @@
                                                 ValueChanged="OnStreamVolumeChanged"
                                                 ToolTipService.ToolTip="Stream volume"
                                                 AutomationProperties.Name="Stream volume" />
+                                        <TextBlock x:Name="StreamVolumePercent" Text="100%"
+                                                   Width="38" VerticalAlignment="Center"
+                                                   Foreground="{ThemeResource CatroTextBrush}" />
                                         <Button x:Name="PopOutStreamButton"
                                                 Content="Pop Out"
                                                 Click="OnPopOutStream"
@@ -722,8 +736,8 @@
                           Grid.Row="1"
                           Margin="0,8,0,0"
                           SelectionMode="None"
-                          IsItemClickEnabled="False"
-                          IsTabStop="False"
+                          IsItemClickEnabled="True"
+                          ItemClick="OnMemberClick"
                           ScrollViewer.HorizontalScrollMode="Disabled"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                           ScrollViewer.VerticalScrollMode="Auto"

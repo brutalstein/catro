@@ -5,6 +5,21 @@ catro_enable_warnings(catro_test_fixtures)
 
 add_custom_target(catro_tests)
 
+if(APPLE AND TARGET catro_macos_app)
+    add_executable(catro_message_timestamp_test
+        ../apps/macos/Catro/Product/MessageTimestamp.swift
+        macos/message_timestamp_test.swift)
+    set_target_properties(catro_message_timestamp_test PROPERTIES Swift_LANGUAGE_VERSION 5)
+    add_dependencies(catro_tests catro_message_timestamp_test)
+    add_test(NAME catro_message_timestamp COMMAND catro_message_timestamp_test)
+    add_executable(catro_release_tag_test
+        ../apps/macos/Catro/Product/Updater.swift
+        macos/release_tag_test.swift)
+    set_target_properties(catro_release_tag_test PROPERTIES Swift_LANGUAGE_VERSION 5)
+    add_dependencies(catro_tests catro_release_tag_test)
+    add_test(NAME catro_release_tag COMMAND catro_release_tag_test)
+endif()
+
 # One executable per suite so `ctest -R catro_<suite>` runs a focused set.
 function(catro_add_test name source)
     add_executable(catro_${name}_test ${source})
@@ -111,6 +126,8 @@ target_link_libraries(catro_audio_view_model_test PRIVATE catro_diagnostics)
 catro_add_test(shell_model apps/shell_model_test.cpp)
 target_link_libraries(catro_shell_model_test PRIVATE Catro::Shell)
 catro_add_test(presentation_state apps/presentation_state_test.cpp)
+catro_add_test(app_update apps/app_update_test.cpp)
+target_link_libraries(catro_app_update_test PRIVATE Catro::Shell)
 target_link_libraries(catro_presentation_state_test PRIVATE Catro::Shell)
 
 catro_add_test(ui_policy apps/ui_policy_test.cpp)

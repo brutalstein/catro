@@ -124,6 +124,7 @@ void MainWindow::InitializeComponent() {
         window_closed_ = true;
         join_request_timer_.Stop();
         startup_timer_.Stop();
+        if (update_timer_) update_timer_.Stop();
     });
     VisibilityChanged([this](auto&&, auto&&) { UpdateWindowActivity(); });
     AppWindow().Changed([this](auto&&, auto&&) { UpdateWindowActivity(); });
@@ -139,6 +140,7 @@ void MainWindow::InitializeComponent() {
     Activate(catro::app::AppDestination::server);
     UpdateConnectionUi();
     BeginDirectoryBootstrap();
+    StartUpdateChecks();
 }
 
 void MainWindow::OnServer(IInspectable const&, xaml::RoutedEventArgs const&) {

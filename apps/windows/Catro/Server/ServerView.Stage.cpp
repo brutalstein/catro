@@ -2,6 +2,7 @@
 
 #include "Server/ServerView.xaml.h"
 #include "Server/StreamViewport.hpp"
+#include "Settings/Voice.hpp"
 
 #include <catro/screen_runtime.hpp>
 
@@ -220,6 +221,38 @@ void ServerView::OpenStreamWindow() {
         live_badge.Child(live_text);
         toolbar.Children().Append(live_badge);
 
+        controls::Border volume_background;
+        volume_background.Padding(xaml::Thickness{8.0, 0.0, 8.0, 0.0});
+        volume_background.CornerRadius(xaml::CornerRadius{7.0});
+        volume_background.Background(media::SolidColorBrush(Windows::UI::Color{220, 35, 35, 35}));
+        controls::StackPanel volume_controls;
+        volume_controls.Orientation(controls::Orientation::Horizontal);
+        volume_controls.Spacing(6);
+        controls::TextBlock volume_title;
+        volume_title.Text(L"Stream");
+        volume_title.VerticalAlignment(xaml::VerticalAlignment::Center);
+        volume_title.Foreground(media::SolidColorBrush(Windows::UI::Color{255, 255, 255, 255}));
+        volume_controls.Children().Append(volume_title);
+        stream_window_volume_slider_ = controls::Slider{};
+        stream_window_volume_slider_.Minimum(0);
+        stream_window_volume_slider_.Maximum(200);
+        stream_window_volume_slider_.StepFrequency(5);
+        stream_window_volume_slider_.Width(110);
+        stream_window_volume_slider_.VerticalAlignment(xaml::VerticalAlignment::Center);
+        stream_window_volume_slider_.Value(catro::shell::voice_preferences().stream_volume * 100.0);
+        xaml::Automation::AutomationProperties::SetName(stream_window_volume_slider_, L"Stream volume");
+        stream_window_volume_slider_.ValueChanged(
+            [this](auto const& sender, auto const& args) { OnStreamVolumeChanged(sender, args); });
+        volume_controls.Children().Append(stream_window_volume_slider_);
+        stream_window_volume_label_ = controls::TextBlock{};
+        stream_window_volume_label_.Width(38);
+        stream_window_volume_label_.VerticalAlignment(xaml::VerticalAlignment::Center);
+        stream_window_volume_label_.Foreground(volume_title.Foreground());
+        volume_controls.Children().Append(stream_window_volume_label_);
+        volume_background.Child(volume_controls);
+        toolbar.Children().Append(volume_background);
+        ApplyStreamVolume();
+
         const auto add_button = [&toolbar](hstring const& label) {
             controls::Button button;
             button.Content(box_value(label));
@@ -350,6 +383,8 @@ void ServerView::ReleaseStreamWindow() noexcept {
     stream_window_viewport_ = nullptr;
     stream_window_root_ = nullptr;
     stream_window_topmost_button_ = nullptr;
+    stream_window_volume_slider_ = nullptr;
+    stream_window_volume_label_ = nullptr;
     stream_window_ = nullptr;
     stream_window_topmost_ = false;
 }

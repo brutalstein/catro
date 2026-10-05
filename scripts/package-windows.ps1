@@ -107,6 +107,8 @@ try {
     # Linker by-products and symbols are build outputs, not runtime files.
     Copy-Item -Path (Join-Path $source '*') -Destination $staging -Recurse -Force `
         -Exclude '*.pdb', '*.ilk', '*.exp', '*.lib'
+    # The in-app updater runs the same installer the download page uses.
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install-windows.ps1') -Destination $staging
 
     if (-not $Engineering) {
         $networkConfig = [ordered]@{

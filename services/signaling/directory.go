@@ -112,6 +112,7 @@ type directory struct {
 	path   string
 	secret []byte
 	state  directoryState
+	signaling *service
 
 	signalingURL           string
 	iceServers             []string
@@ -156,6 +157,7 @@ type memberDescriptor struct {
 	UserID      string `json:"user_id"`
 	DisplayName string `json:"display_name"`
 	Role        string `json:"role"`
+	VoiceChannelID string `json:"voice_channel_id,omitempty"`
 }
 
 type messageDescriptor struct {
@@ -997,6 +999,15 @@ func (d *directory) handleMembers(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	d.mu.Unlock()
+
+	if d.signaling != nil {
+		present := d.signaling.voicePeers(serverID, server.VoiceChannelID)
+		for index := range members {
+			if present[members[index].UserID] {
+				members[index].VoiceChannelID = server.VoiceChannelID
+			}
+		}
+	}
 
 	sort.Slice(members, func(left, right int) bool {
 		a := members[left]

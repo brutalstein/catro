@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Settings/Appearance.hpp"
+#include "Settings/UserVolumes.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -25,6 +26,8 @@ struct VoicePreferences {
     bool sounds = true;
     // Watched stream audio: 0 silences, 1 is unchanged, 2 doubles.
     float stream_volume = 1.0F;
+    // Listener-side voice gain by the stable directory user ID.
+    std::map<std::string, float> user_volumes;
 };
 
 inline std::filesystem::path voice_preferences_path() {
@@ -68,6 +71,8 @@ inline VoicePreferences& voice_preferences() {
                     loaded.sounds = on;
                 } else if (key == "stream-volume") {
                     loaded.stream_volume = std::clamp(std::stof(text), 0.0F, 2.0F);
+                } else {
+                    read_user_volume(loaded.user_volumes, key, text);
                 }
             } catch (...) {
                 // A damaged value keeps its default.
@@ -105,6 +110,7 @@ inline bool save_voice_preferences(const VoicePreferences& preferences) {
            << "output-device=" << preferences.output_device << '\n'
            << "sounds=" << flag(preferences.sounds) << '\n'
            << "stream-volume=" << preferences.stream_volume << '\n';
+    write_user_volumes(output, preferences.user_volumes);
     output.close();
     return static_cast<bool>(output);
 }

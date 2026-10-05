@@ -7,11 +7,15 @@ struct ServerWorkspace: View {
     @ObservedObject var model: AppModel
     @State private var draft = ""
     @State private var picking = false
+    @StateObject private var updater = Updater()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
-            if model.starting {
+            if updater.installing {
+                StartupSplash(model: model, status: "Downloading Catro \(updateVersion)…")
+                    .transition(.opacity)
+            } else if model.starting {
                 StartupSplash(model: model)
                     .transition(.opacity)
             } else if let stage = model.stage {
@@ -21,11 +25,47 @@ struct ServerWorkspace: View {
             }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: model.starting)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: updater.installing)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if updater.available != nil && !updater.installing {
+                    Button { updater.confirming = true } label: {
+                        Label("Update", systemImage: "arrow.down.circle.fill")
+                    }
+                    .labelStyle(.titleAndIcon)
+                    .tint(.green)
+                    .help("Update to Catro \(updateVersion)")
+                    .accessibilityLabel("Update to Catro \(updateVersion)")
+                }
+            }
+        }
+        .alert("Catro \(updateVersion) is ready", isPresented: $updater.confirming) {
+            Button("Install Update") { updater.install() }
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text("Catro downloads the update, quits, and opens again on the new version in a few seconds. "
+                 + "Calls and streams stop during the restart.")
+        }
+        // A separate view: two alerts on one view can hide each other on macOS 12.
+        .background(Color.clear.alert("Update failed", isPresented: failureShown) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(updater.failure ?? "")
+        })
         .sheet(isPresented: $picking) {
             SourcePicker(model: model, isPresented: $picking)
         }
-        .onAppear { model.start() }
+        .onAppear {
+            model.start()
+            updater.start()
+        }
         .onDisappear { model.stop() }
+    }
+
+    private var updateVersion: String { ReleaseTag.display(updater.available ?? "") }
+
+    private var failureShown: Binding<Bool> {
+        Binding(get: { updater.failure != nil }, set: { if !$0 { updater.failure = nil } })
     }
 
     // NavigationSplitView needs macOS 13; Monterey gets the same three columns from NavigationView.
@@ -73,19 +113,34 @@ struct ServerWorkspace: View {
     }
 
     private var messages: some View {
-        ScrollViewReader { proxy in
-            List(model.snapshot?.messages ?? [], id: \.sequence) { message in
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(message.author).font(.headline)
-                        Text(message.createdAt, style: .time)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+        let items = model.snapshot?.messages ?? []
+        let calendar = Calendar.current
+        let now = Date()
+        return ScrollViewReader { proxy in
+            List {
+                ForEach(Array(items.enumerated()), id: \.element.sequence) { index, message in
+                    VStack(alignment: .leading, spacing: 2) {
+                        let day = MessageTimestamp.dayLabel(for: message.createdAt, now: now)
+                        if index == 0 || !calendar.isDate(items[index - 1].createdAt, inSameDayAs: message.createdAt) {
+                            VStack(spacing: 4) {
+                                Text(day).font(.caption).foregroundStyle(.secondary)
+                                Divider()
+                            }
+                            .padding(.vertical, 8)
+                        }
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(message.author).font(.headline)
+                            Text(day).font(.caption).foregroundStyle(.secondary)
+                            Text(message.createdAt, style: .time)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .help(message.createdAt.formatted(date: .complete, time: .complete))
+                        Text(message.content).textSelection(.enabled)
                     }
-                    Text(message.content).textSelection(.enabled)
+                    .accessibilityElement(children: .combine)
+                    .id(message.sequence)
                 }
-                .accessibilityElement(children: .combine)
-                .id(message.sequence)
             }
             .overlay {
                 if model.snapshot?.messages.isEmpty ?? true {
@@ -161,12 +216,15 @@ struct NoticeBar: View {
 }
 
 // Shown at launch until the first sign-in settles, like Discord's loading screen. Sign-in keeps
-// retrying behind it; after a few seconds the user may go on offline.
+// retrying behind it; after a few seconds the user may go on offline. An in-app update reuses it
+// with its own status and no way out.
 struct StartupSplash: View {
     @ObservedObject var model: AppModel
+    var status: String? = nil
     @State private var slow = false
 
     private var message: String {
+        if let status = status { return status }
         let text = model.snapshot?.connectionMessage ?? ""
         return text.isEmpty ? "Starting Catro…" : text
     }
@@ -186,7 +244,7 @@ struct StartupSplash: View {
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
-            if slow {
+            if slow && status == nil {
                 Button("Continue Offline") { model.starting = false }
             }
         }

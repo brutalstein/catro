@@ -147,6 +147,11 @@
                                 AutomationProperties.Name="Add server">
                             <FontIcon Glyph="&#xE710;" FontSize="16" />
                         </Button>
+                        <!-- Shown when a newer Catro is published; installs it and reopens Catro. -->
+                        <Button x:Name="UpdateButton" Width="44" Height="44" Padding="0" CornerRadius="22" Visibility="Collapsed"
+                                Click="OnInstallUpdate" BorderThickness="0" Background="{ThemeResource CatroSageSoftBrush}">
+                            <FontIcon Glyph="&#xE896;" FontSize="16" Foreground="{ThemeResource CatroSageBrush}" />
+                        </Button>
                     </StackPanel>
 
                     <StackPanel Grid.Row="1"

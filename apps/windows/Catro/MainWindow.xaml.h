@@ -35,12 +35,16 @@ struct MainWindow : MainWindowT<MainWindow> {
     void OnSettings(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnProfile(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnContinueOffline(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnInstallUpdate(IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
 
 private:
     Microsoft::UI::Xaml::UIElement PageFor(catro::app::AppDestination destination);
     void Activate(catro::app::AppDestination destination);
     void ActivateDirectoryServer(std::string_view server_id);
     winrt::fire_and_forget BeginDirectoryBootstrap();
+    void StartUpdateChecks();
+    winrt::fire_and_forget BeginUpdateCheck();
+    winrt::fire_and_forget InstallUpdate();
     void ApplyDirectoryLink(
         catro::platform::windows::DirectoryServiceConfig service,
         DirectoryLink link);
@@ -80,6 +84,10 @@ private:
     // Offers "Continue offline" on a slow start, then collapses the startup screen after its fade.
     Microsoft::UI::Dispatching::DispatcherQueueTimer startup_timer_{nullptr};
     bool startup_splash_ = true;
+    // In-app updates: a newer release tag (shown as the rail's update button) and the install run.
+    Microsoft::UI::Dispatching::DispatcherQueueTimer update_timer_{nullptr};
+    std::string available_update_;
+    bool installing_update_ = false;
     std::unordered_set<std::string> observed_join_request_ids_;
     std::unordered_set<std::string> approved_join_requests_waiting_refresh_;
     bool join_request_refresh_pending_ = false;

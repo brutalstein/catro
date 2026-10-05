@@ -125,10 +125,12 @@
     <ClInclude Include="Settings\Profile.hpp" />
     <ClInclude Include="Settings\Performance.hpp" />
     <ClInclude Include="Settings\Voice.hpp" />
+    <ClInclude Include="Settings\UserVolumes.hpp" />
     <ClInclude Include="UiActivityPolicy.hpp" />
     <ClInclude Include="SharePresets.hpp" />
     <ClInclude Include="Server\SharePicker.hpp" />
     <ClInclude Include="Server\StreamViewport.hpp" />
+    <ClInclude Include="Server\ChatTimeline.hpp" />
     <ClInclude Include="Settings\SettingsView.xaml.h">
       <DependentUpon>Settings\SettingsView.xaml</DependentUpon>
     </ClInclude>
@@ -155,6 +157,9 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
     </ClCompile>
     <ClCompile Include="MainWindow.Directory.cpp">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </ClCompile>
+    <ClCompile Include="MainWindow.Update.cpp">
       <DependentUpon>MainWindow.xaml</DependentUpon>
     </ClCompile>
     <ClCompile Include="Diagnostics\DiagnosticsView.xaml.cpp">

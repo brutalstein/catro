@@ -171,6 +171,14 @@ struct ProductSession::Impl {
 
     // Listener runs on the worker without any session lock held, so it may issue new commands.
     void publish() {
+        const auto* server = state_.active_server();
+        const bool joined = server != nullptr && state_.media.phase == VoicePhase::joined &&
+                            state_.media.voice_server_id == server->id;
+        for (auto& member : state_.members) {
+            if (member.is_self) {
+                member.voice_channel_id = joined ? server->voice_channel_id : std::string{};
+            }
+        }
         ++state_.revision;
         {
             std::scoped_lock lock(published_mutex_);
@@ -314,7 +322,7 @@ struct ProductSession::Impl {
         state_.members.clear();
         for (const auto& member : std::get<std::vector<community::DirectoryMember>>(members)) {
             state_.members.push_back(MemberItem{member.user_id, member.display_name, member.role == "owner",
-                                                member.user_id == state_.identity_id});
+                                                member.user_id == state_.identity_id, member.voice_channel_id});
         } // the roster parser already guarantees the single owner comes first
     }
 

@@ -13,6 +13,7 @@ add_executable(catro_macos_app MACOSX_BUNDLE
     Catro/Audio/AudioView.swift
     Catro/Audio/AudioViewModel.swift
     Catro/Product/AppModel.swift
+    Catro/Product/MessageTimestamp.swift
     Catro/Product/ServerWorkspace.swift
     Catro/Product/ChannelSidebar.swift
     Catro/Product/MemberSidebar.swift
@@ -21,6 +22,7 @@ add_executable(catro_macos_app MACOSX_BUNDLE
     Catro/Product/StreamViewer.swift
     Catro/Product/SettingsView.swift
     Catro/Product/PushToTalk.swift
+    Catro/Product/Updater.swift
     Catro/Bridge/CatroCapabilitiesBridge.mm
     Catro/Bridge/CatroAudioBridge.mm
     ${bridge_header})
@@ -47,4 +49,10 @@ target_link_libraries(catro_macos_app PRIVATE catro_diagnostics Catro::Macos cat
 add_dependencies(catro_macos_app catro_capability_probe)
 add_custom_command(TARGET catro_macos_app POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:catro_capability_probe> $<TARGET_FILE_DIR:catro_macos_app>
+    VERBATIM)
+# The in-app updater runs the same installer the download page uses.
+add_custom_command(TARGET catro_macos_app POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_BUNDLE_CONTENT_DIR:catro_macos_app>/Resources
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/scripts/install-macos.sh
+        $<TARGET_BUNDLE_CONTENT_DIR:catro_macos_app>/Resources/install-macos.sh
     VERBATIM)

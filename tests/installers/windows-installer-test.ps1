@@ -185,6 +185,30 @@ public static class CatroLaunchProbe
     Assert-True (-not (Test-Path -LiteralPath $launchMarker)) 'Installer launched Catro automatically.'
     Assert-Equal 'untouched' ((Get-Content -LiteralPath $sentinel -Raw).Trim()) 'Installer modified a sibling path.'
 
+    # In-app update: a rejected build reports failure and never reopens Catro.
+    $statusFile = Join-Path $testRoot 'update-status.txt'
+    $result = Invoke-TestInstaller -Version 'mismatch' -Overrides @{
+        CATRO_WAIT_PID = "$PID"; CATRO_STATUS_FILE = $statusFile; CATRO_RELAUNCH = '1' }
+    Assert-True ($result.ExitCode -ne 0) 'In-app update of a bad package unexpectedly succeeded.'
+    Assert-True ((Get-Content -LiteralPath $statusFile -Raw).Trim().StartsWith('failed')) 'Failed update did not report failure.'
+    Assert-True (-not (Test-Path -LiteralPath $launchMarker)) 'Failed update reopened Catro.'
+    Assert-InstalledVersion 'v2'
+
+    # In-app update: the installer reports 'ready', waits for the running app to exit, then swaps
+    # the build and reopens it.
+    $app = Start-Process -FilePath powershell.exe -ArgumentList '-NoProfile', '-Command', 'Start-Sleep -Seconds 2' `
+        -WindowStyle Hidden -PassThru
+    $result = Invoke-TestInstaller -Version 'v1' -Overrides @{
+        CATRO_WAIT_PID = "$($app.Id)"; CATRO_STATUS_FILE = $statusFile; CATRO_RELAUNCH = '1' }
+    Assert-Equal 0 $result.ExitCode "In-app update failed. Output: $($result.Output)"
+    Assert-True $app.HasExited 'Installer swapped files before the running app exited.'
+    Assert-Equal 'ready' ((Get-Content -LiteralPath $statusFile -Raw).Trim()) 'Update did not report ready.'
+    Assert-InstalledVersion 'v1'
+    for ($attempt = 0; $attempt -lt 50 -and -not (Test-Path -LiteralPath $launchMarker); $attempt++) {
+        Start-Sleep -Milliseconds 100
+    }
+    Assert-True (Test-Path -LiteralPath $launchMarker) 'In-app update did not reopen Catro.'
+
     Write-Host 'Windows installer tests passed.'
 } finally {
     if ($server -and -not $server.HasExited) {

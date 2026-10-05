@@ -1,13 +1,18 @@
 import SwiftUI
 
-// Server list plus the join/invite entry points, mirroring the Windows server rail.
+// Server list, the active server's channels and connected voice participants.
 struct ChannelSidebar: View {
     @ObservedObject var model: AppModel
     @State private var joining = false
 
     private var selection: Binding<String?> {
         Binding(get: { model.snapshot?.activeServerID },
-                set: { if let identifier = $0 { model.select(server: identifier) } })
+                set: {
+                    if let identifier = $0,
+                       model.snapshot?.servers.contains(where: { $0.identifier == identifier }) == true {
+                        model.select(server: identifier)
+                    }
+                })
     }
 
     var body: some View {
@@ -26,6 +31,34 @@ struct ChannelSidebar: View {
                     }
                     .tag(server.identifier)
                     .accessibilityLabel("\(server.name), \(server.memberCount) members\(server.owner ? ", owner" : "")")
+                }
+            }
+            if let server = model.activeServer {
+                Section(server.name) {
+                    if !server.textChannelID.isEmpty {
+                        Label("Text", systemImage: "number")
+                    }
+                    if server.hasVoice {
+                        Button { model.toggleVoice() } label: {
+                            Label("Voice", systemImage: "speaker.wave.2")
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!model.inVoice && !(model.snapshot?.canJoinVoice ?? false))
+                        .help(model.inVoice ? "Leave this voice channel" : "Join this voice channel")
+                        let participants = (model.snapshot?.members ?? []).filter {
+                            $0.voiceChannelID == server.voiceChannelID
+                        }
+                        ForEach(participants, id: \.identifier) { member in
+                            MemberRow(model: model, member: member)
+                                .padding(.leading, 20)
+                        }
+                        if participants.isEmpty {
+                            Text("Nobody in voice")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 20)
+                        }
+                    }
                 }
             }
             if let server = model.activeServer, server.owner, model.connected {

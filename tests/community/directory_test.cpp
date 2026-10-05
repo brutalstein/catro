@@ -106,6 +106,27 @@ TEST_CASE("directory member rosters require one first owner and unique bounded m
               .code == DirectoryErrorCode::malformed_response);
 }
 
+TEST_CASE("directory member voice presence validates optional channel identities") {
+    for (const auto& field : {std::string{}, std::string{R"(,"voice_channel_id":"")"},
+                              std::string{R"(,"voice_channel_id":"voice-1")"}}) {
+        const auto result = parse_directory_members(
+            R"({"members":[{"user_id":"user-1","display_name":"Owner","role":"owner")" +
+            field + "}]}");
+        REQUIRE(std::holds_alternative<DirectoryMembers>(result));
+        CHECK(std::get<DirectoryMembers>(result).front().voice_channel_id ==
+              (field.find("voice-1") == std::string::npos ? "" : "voice-1"));
+    }
+    CHECK(failure(parse_directory_members(
+              R"({"members":[{"user_id":"user-1","display_name":"Owner","role":"owner","voice_channel_id":17}]})"))
+              .code == DirectoryErrorCode::malformed_response);
+    CHECK(failure(parse_directory_members(
+              R"({"members":[{"user_id":"user-1","display_name":"Owner","role":"owner","voice_channel_id":"invalid/channel"}]})"))
+              .code == DirectoryErrorCode::malformed_response);
+    CHECK(failure(parse_directory_members(
+              R"({"members":[{"user_id":"user-1","display_name":"Owner","role":"owner","voice_channel_id":null}]})"))
+              .code == DirectoryErrorCode::malformed_response);
+}
+
 TEST_CASE("directory lookup and join requests enforce codes roles bounds and uniqueness") {
     const auto lookup = parse_directory_server_lookup(
         R"({"public_code":"CAT-1234-5678-9ABC-DEF0-1234","name":"Catro","member_count":2,"relationship":"pending","request_id":"request-1"})");

@@ -14,13 +14,16 @@ struct StreamViewer: View {
         let visible = ((sharing && model.localPreviewEnabled) || watching) && !model.streamPoppedOut
         Group {
             if model.streamPoppedOut, sharing || watching {
-                HStack {
-                    shareStatus
-                    Text("The stream is open in its own window.").foregroundStyle(.secondary)
-                    Button("Bring Back") { model.streamPoppedOut = false }
-                    if sharing {
-                        Toggle("Show my preview", isOn: $model.localPreviewEnabled)
+                VStack(spacing: 6) {
+                    HStack {
+                        shareStatus
+                        Text("The stream is open in its own window.").foregroundStyle(.secondary)
+                        Button("Bring Back") { model.streamPoppedOut = false }
+                        if sharing {
+                            Toggle("Show my preview", isOn: $model.localPreviewEnabled)
+                        }
                     }
+                    if watching { StreamVolume(model: model) }
                 }
             } else if sharing {
                 VStack(spacing: 6) {
@@ -52,9 +55,9 @@ struct StreamViewer: View {
                             .help(watching ? "Stop decoding the shared screen" : "Decode and show the shared screen")
                         if watching {
                             windowButtons(.remote)
-                            StreamVolume(model: model)
                         }
                     }
+                    if watching { StreamVolume(model: model) }
                 }
             }
         }
@@ -117,6 +120,8 @@ struct StreamStage: View {
                     .keyboardShortcut(.cancelAction)
                     .help("Back to the channel (Esc)")
             }
+            .padding(8)
+            .background(.bar)
             .padding(12)
         }
     }
@@ -143,6 +148,17 @@ struct StreamWindow: View {
         }
         .frame(minWidth: 480, minHeight: 270)
         .background(Color.black)
+        .overlay(alignment: .bottomTrailing) {
+            if model.streamPoppedOut, snapshot?.watching ?? false {
+                HStack {
+                    StreamVolume(model: model)
+                    Button("Bring Back") { model.streamPoppedOut = false }
+                }
+                .padding(8)
+                .background(.bar)
+                .padding(12)
+            }
+        }
         .background(WindowReader { window in self.window = window })
         .onChange(of: model.streamPoppedOut) { poppedOut in
             if !poppedOut { window?.close() }
@@ -162,7 +178,12 @@ private struct StreamVolume: View {
             Slider(value: $model.streamVolume, in: 0...200, step: 5)
                 .frame(width: 120)
                 .accessibilityLabel("Stream volume")
+                .accessibilityValue("\(Int(model.streamVolume)) percent")
                 .help("Stream volume: \(Int(model.streamVolume))%")
+            Text("\(Int(model.streamVolume))%")
+                .font(.callout)
+                .monospacedDigit()
+                .frame(minWidth: 40, alignment: .trailing)
         }
     }
 }

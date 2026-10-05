@@ -122,6 +122,10 @@ void ServerView::ApplyVoicePreferences() {
                                        preferences.automatic_gain ? 1U : 0U);
     catro_voice_runtime_set_input_threshold(
         voice_runtime_, preferences.automatic_sensitivity ? NAN : preferences.sensitivity_db);
+    catro::shell::sync_user_volumes(
+        applied_user_volumes_, preferences.user_volumes, [this](const std::string& id, float volume) {
+            catro_voice_runtime_set_user_volume(voice_runtime_, id.c_str(), volume);
+        });
     if (preferences.input_device != applied_input_device_ ||
         preferences.output_device != applied_output_device_) {
         applied_input_device_ = preferences.input_device;
@@ -146,9 +150,22 @@ void ServerView::PlayCue(wchar_t const* file) const {
 }
 
 void ServerView::ApplyStreamVolume() {
+    const auto volume = catro::shell::voice_preferences().stream_volume;
     if (screen_runtime_) {
         screen_runtime_->set_stream_volume(
-            deafened_ ? 0.0F : catro::shell::voice_preferences().stream_volume);
+            deafened_ ? 0.0F : volume);
+    }
+    const auto percent = volume * 100.0;
+    const hstring label{std::to_wstring(static_cast<int>(std::lround(percent))) + L"%"};
+    StreamVolumePercent().Text(label);
+    if (std::abs(StreamVolumeSlider().Value() - percent) > 0.01) {
+        StreamVolumeSlider().Value(percent);
+    }
+    if (stream_window_volume_label_) {
+        stream_window_volume_label_.Text(label);
+    }
+    if (stream_window_volume_slider_ && std::abs(stream_window_volume_slider_.Value() - percent) > 0.01) {
+        stream_window_volume_slider_.Value(percent);
     }
 }
 

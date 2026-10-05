@@ -163,6 +163,25 @@ assert_installed_version intel
 [ ! -e "$launch_marker" ] || { echo 'Installer launched Catro automatically.' >&2; exit 1; }
 assert_eq untouched "$(tr -d '\r\n' <"$sentinel")" 'Installer modified a sibling path.'
 
+# In-app update: a rejected build reports failure.
+status_file="$test_root/update-status"
+export CATRO_STATUS_FILE="$status_file" CATRO_WAIT_PID=$$
+run_installer mismatch arm64
+[ "$run_status" -ne 0 ] || { echo 'In-app update of a bad package unexpectedly succeeded.' >&2; exit 1; }
+assert_eq failed "$(tr -d '\r\n' <"$status_file")" 'Failed update did not report failure.'
+assert_installed_version intel
+
+# In-app update: the installer reports ready and swaps the app only after the running app exits.
+# The stand-in app is reparented so it is reaped on exit instead of lingering as a zombie.
+app_pid=$(sh -c 'sleep 2 >/dev/null 2>&1 & echo $!')
+export CATRO_WAIT_PID="$app_pid"
+run_installer v1 arm64
+assert_eq 0 "$run_status" "In-app update failed: $run_output"
+! kill -0 "$app_pid" 2>/dev/null || { echo 'Installer swapped the app before it exited.' >&2; exit 1; }
+assert_eq ready "$(tr -d '\r\n' <"$status_file")" 'Update did not report ready.'
+assert_installed_version v1
+unset CATRO_STATUS_FILE CATRO_WAIT_PID
+
 if [ -n "${CATRO_TEST_BUILT_APP:-}" ]; then
     assert_file "$CATRO_TEST_BUILT_APP/Contents/MacOS/Catro" 'CI-built Catro.app executable is missing.'
     "$package_script" Release

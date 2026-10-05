@@ -39,6 +39,7 @@ struct MemberItem {
     std::string display_name;
     bool owner = false;
     bool is_self = false;
+    std::string voice_channel_id;
 };
 
 struct MessageItem {

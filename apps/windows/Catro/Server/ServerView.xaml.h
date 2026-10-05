@@ -5,6 +5,7 @@
 #include <PresentationState.hpp>
 #include <ShellModel.hpp>
 #include "UiActivityPolicy.hpp"
+#include "Server/ChatTimeline.hpp"
 
 #include <catro/community/model.hpp>
 #include <catro/platform/windows/directory_client.hpp>
@@ -12,7 +13,6 @@
 #include <catro/screen_runtime.hpp>
 #include <catro/voice_runtime.h>
 
-#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -60,6 +60,7 @@ struct ServerView : ServerViewT<ServerView> {
     void OnMemberContainerChanging(
         Microsoft::UI::Xaml::Controls::ListViewBase const&,
         Microsoft::UI::Xaml::Controls::ContainerContentChangingEventArgs const&);
+    void OnMemberClick(IInspectable const&, Microsoft::UI::Xaml::Controls::ItemClickEventArgs const&);
     void SetLocalState(const catro::community::LocalState& state);
     void SetWindowActivity(catro::shell::WindowActivity activity);
     void SetDirectorySession(
@@ -144,6 +145,7 @@ private:
     // Push-to-talk reads the key every 15 ms only while joined in push-to-talk mode.
     Microsoft::UI::Dispatching::DispatcherQueueTimer push_to_talk_timer_{nullptr};
     std::uint32_t applied_voice_preferences_ = ~0U;
+    std::map<std::string, float> applied_user_volumes_;
     bool push_to_talk_down_ = false;
     // Devices last sent to the voice runtime, so unrelated preference saves never reopen audio.
     std::string applied_input_device_;
@@ -166,6 +168,8 @@ private:
     Microsoft::UI::Xaml::Controls::Border stream_window_viewport_{nullptr};
     Microsoft::UI::Xaml::Controls::SwapChainPanel stream_window_swap_chain_panel_{nullptr};
     Microsoft::UI::Xaml::Controls::Button stream_window_topmost_button_{nullptr};
+    Microsoft::UI::Xaml::Controls::Slider stream_window_volume_slider_{nullptr};
+    Microsoft::UI::Xaml::Controls::TextBlock stream_window_volume_label_{nullptr};
     ::Microsoft::WRL::ComPtr<IDXGISwapChain1> stream_window_swap_chain_;
     bool stream_window_topmost_ = false;
     bool stage_active_ = false;
@@ -174,8 +178,6 @@ private:
     Microsoft::UI::Dispatching::DispatcherQueueTimer stage_idle_timer_{nullptr};
 
     std::vector<catro::platform::windows::DirectoryMember> roster_;
-    // Per-user volume in percent (0-200) by user id, for this session.
-    std::map<std::string, double> member_volumes_;
     std::string member_volume_user_;
     Microsoft::UI::Xaml::Controls::Flyout member_volume_flyout_{nullptr};
     std::uint64_t member_generation_ = 1;
@@ -185,6 +187,7 @@ private:
     std::vector<catro::platform::windows::DirectoryJoinRequest>
         pending_join_requests_;
     std::uint64_t message_cursor_ = 0;
+    std::optional<std::chrono::sys_days> message_display_day_;
     std::uint64_t message_generation_ = 1;
     std::uint64_t message_refresh_generation_ = 0;
     std::uint64_t message_send_generation_ = 0;

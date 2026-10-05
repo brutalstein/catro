@@ -47,8 +47,23 @@ staged_app="$staging/Catro.app"
 backup="$install_root.backup-$$"
 backup_created=0
 
+# In-app updates: the running Catro (CATRO_WAIT_PID) waits until this script has downloaded and
+# verified the new build ('ready' in CATRO_STATUS_FILE), then quits; the app is swapped once it has
+# exited, and CATRO_RELAUNCH=1 opens Catro again (the old build if anything failed).
+wait_pid=${CATRO_WAIT_PID:-}
+status_file=${CATRO_STATUS_FILE:-}
+relaunch=${CATRO_RELAUNCH:-}
+app_closed=0
+
 cleanup() {
+    status=$?
     rm -rf "$temporary_root"
+    if [ "$status" -ne 0 ] && [ -n "$status_file" ]; then
+        echo failed > "$status_file"
+    fi
+    if [ "$relaunch" = 1 ] && [ "$app_closed" -eq 1 ] && [ -d "$install_root" ]; then
+        open "$install_root" || true
+    fi
 }
 trap cleanup 0
 trap 'exit 1' HUP INT TERM
@@ -84,6 +99,20 @@ ditto -x -k "$archive" "$staging"
     echo 'Release package does not contain an executable Catro.app/Contents/MacOS/Catro.' >&2
     exit 1
 }
+
+if [ -n "$wait_pid" ]; then
+    [ -z "$status_file" ] || echo ready > "$status_file"
+    waited=0
+    while kill -0 "$wait_pid" 2>/dev/null; do
+        [ "$waited" -lt 600 ] || {
+            echo 'Catro did not close for the update.' >&2
+            exit 1
+        }
+        sleep 0.2
+        waited=$((waited + 1))
+    done
+    app_closed=1
+fi
 
 install_parent=$(dirname "$install_root")
 mkdir -p "$install_parent"

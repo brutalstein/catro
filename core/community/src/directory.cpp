@@ -161,9 +161,12 @@ struct ParsedNetworkUrl {
             value.at("user_id").get<std::string>(),
             value.at("display_name").get<std::string>(),
             value.at("role").get<std::string>(),
+            value.value("voice_channel_id", std::string{}),
         };
         if (!valid_remote_directory_id(member.user_id) || member.display_name.empty() ||
-            member.display_name.size() > kMaxDisplayNameBytes || !valid_role(member.role)) {
+            member.display_name.size() > kMaxDisplayNameBytes || !valid_role(member.role) ||
+            (!member.voice_channel_id.empty() &&
+             !valid_remote_directory_id(member.voice_channel_id))) {
             return std::nullopt;
         }
         return member;

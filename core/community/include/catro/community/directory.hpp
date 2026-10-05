@@ -77,6 +77,7 @@ struct DirectoryMember {
     std::string user_id;
     std::string display_name;
     std::string role;
+    std::string voice_channel_id{};
 
     friend bool operator==(const DirectoryMember&, const DirectoryMember&) = default;
 };

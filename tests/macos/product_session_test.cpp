@@ -752,6 +752,46 @@ TEST_CASE("macOS product session joins voice through provisioning, room, voice a
     CHECK(media.calls.back() == "room_destroy");
 }
 
+TEST_CASE("macOS voice roster projects remote presence and corrects stale self presence immediately") {
+    MediaScope scope;
+    auto directory = seeded_directory();
+    const auto self = community::to_hex(local_state().identity.id);
+    directory->members["server-1"] = {
+        R"({"user_id":")" + self +
+            R"(","display_name":"Owner","role":"owner","voice_channel_id":"voice-1"})",
+        R"({"user_id":"user-2","display_name":"Guest","role":"member","voice_channel_id":"voice-1"})",
+        R"({"user_id":"user-4","display_name":"Offline","role":"member"})"};
+    product::ProductSession session(online(directory), {});
+    session.start();
+    REQUIRE(wait_until(session, synchronized_with_messages));
+    auto snapshot = session.snapshot();
+    REQUIRE(snapshot.members.size() == 3);
+    CHECK(snapshot.members[0].voice_channel_id.empty()); // stale HTTP self says joined
+    CHECK(snapshot.members[1].voice_channel_id == "voice-1"); // silent remote is still connected
+    CHECK(snapshot.members[2].voice_channel_id.empty());
+    CHECK(session.speaking_members().empty());
+
+    session.join_voice();
+    REQUIRE(wait_until(session, joined));
+    CHECK(session.snapshot().members[0].voice_channel_id == "voice-1");
+    {
+        std::scoped_lock lock(directory->mutex);
+        directory->members["server-1"][0] = R"({"user_id":")" + self +
+            R"(","display_name":"Owner","role":"owner"})";
+    }
+    for (std::uint32_t tick = 0; tick < product::kSlowPollTicks; ++tick) {
+        poll_once(session);
+    }
+    CHECK(session.snapshot().members[0].voice_channel_id == "voice-1"); // stale HTTP self says left
+
+    session.leave_voice();
+    REQUIRE(wait_until(session, [](const auto& s) { return s.media.phase == product::VoicePhase::idle; }));
+    snapshot = session.snapshot();
+    CHECK(snapshot.members[0].voice_channel_id.empty());
+    CHECK(snapshot.members[1].voice_channel_id == "voice-1"); // leaving does not erase remote presence
+    session.stop();
+}
+
 TEST_CASE("macOS product session shows a rejoining room without leaving voice") {
     MediaScope scope;
     auto& media = scope.media;

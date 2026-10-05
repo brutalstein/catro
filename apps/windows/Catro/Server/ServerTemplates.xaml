@@ -4,6 +4,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <DataTemplate x:Key="CatroMessageTemplate">
         <StackPanel Margin="8,7" Spacing="2">
+            <Border Margin="0,8,0,10" Padding="0,5"
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="{ThemeResource CatroStrokeBrush}">
+                <TextBlock HorizontalAlignment="Center" FontSize="11"
+                           Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+            </Border>
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock FontWeight="SemiBold"
                            Foreground="{ThemeResource CatroTextBrush}" />

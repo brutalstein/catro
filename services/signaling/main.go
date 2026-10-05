@@ -282,6 +282,7 @@ func main() {
 		trustProxyHeaders: *trustProxyHeaders,
 		rooms:             make(map[string]*room),
 	}
+	directory.signaling = s
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.health)
@@ -608,6 +609,21 @@ func (s *service) roomFor(serverID, channelID string) *room {
 	rm := &room{key: key, peers: make(map[string]*client), maxPeers: s.maxRoomPeers}
 	s.rooms[key] = rm
 	return rm
+}
+
+func (s *service) voicePeers(serverID, channelID string) map[string]bool {
+	s.roomsMu.Lock()
+	rm := s.rooms[serverID+"/"+channelID]
+	s.roomsMu.Unlock()
+	present := make(map[string]bool)
+	if rm != nil {
+		rm.mu.RLock()
+		for id := range rm.peers {
+			present[id] = true
+		}
+		rm.mu.RUnlock()
+	}
+	return present
 }
 
 func (s *service) dropEmptyRoom(rm *room) {

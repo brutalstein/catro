@@ -60,6 +60,14 @@ $checksumPath = Join-Path $temporaryRoot $checksumName
 $stagingRoot = Join-Path $temporaryRoot 'staging'
 $backupPath = "$installRoot.backup-$([Guid]::NewGuid().ToString('N'))"
 
+# In-app updates: the running Catro (CATRO_WAIT_PID) waits until this script has downloaded and
+# verified the new build ('ready' in CATRO_STATUS_FILE), then closes; the files are swapped once it
+# has exited, and CATRO_RELAUNCH=1 opens Catro again (the old build if anything failed).
+$waitPid = $env:CATRO_WAIT_PID
+$statusFile = $env:CATRO_STATUS_FILE
+$relaunch = $env:CATRO_RELAUNCH -eq '1'
+$appClosed = $false
+
 try {
     New-Item -ItemType Directory -Force -Path $temporaryRoot, $stagingRoot | Out-Null
 
@@ -84,6 +92,19 @@ try {
     $stagedExecutable = Join-Path $stagingRoot 'Catro.exe'
     if (-not (Test-Path -LiteralPath $stagedExecutable -PathType Leaf)) {
         throw 'Release package does not contain Catro.exe at its root.'
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($waitPid)) {
+        if ($statusFile) {
+            Set-Content -LiteralPath $statusFile -Value 'ready' -Encoding ASCII
+        }
+        $running = Get-Process -Id ([int]$waitPid) -ErrorAction SilentlyContinue
+        if ($running -and -not $running.WaitForExit(120000)) {
+            throw 'Catro did not close for the update.'
+        }
+        $appClosed = $true
+        # Give Windows a moment to release the exited app's files before they move.
+        Start-Sleep -Milliseconds 500
     }
 
     $installParent = Split-Path -Parent $installRoot
@@ -132,7 +153,19 @@ try {
     $installedVersion = if ([string]::IsNullOrWhiteSpace($requestedVersion)) { 'latest' } else { $requestedVersion }
     Write-Host "[catro] Installed version: $installedVersion"
     Write-Host "[catro] Executable: $(Join-Path $installRoot 'Catro.exe')"
+} catch {
+    if ($statusFile) {
+        Set-Content -LiteralPath $statusFile -Value "failed: $($_.Exception.Message)" -Encoding UTF8
+    }
+    throw
 } finally {
+    if ($relaunch -and $appClosed) {
+        try {
+            Start-Process -FilePath (Join-Path $installRoot 'Catro.exe') -WorkingDirectory $installRoot
+        } catch {
+            Write-Warning "Catro could not be reopened: $($_.Exception.Message)"
+        }
+    }
     if (Test-Path -LiteralPath $temporaryRoot) {
         Remove-Item -LiteralPath $temporaryRoot -Recurse -Force
     }

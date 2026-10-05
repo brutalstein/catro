@@ -40,22 +40,22 @@ struct MemberSidebar: View {
     }
 }
 
-// A green ring shows who is talking; right-click a friend for their volume, like Discord.
-private struct MemberRow: View {
+// Shared by the member list and connected participants beneath the voice channel.
+struct MemberRow: View {
     @ObservedObject var model: AppModel
     let member: CatroMember
     @State private var showVolume = false
 
     var body: some View {
-        let speaking = model.speaking.contains(member.identifier)
-        Label {
-            Text(member.isSelf ? "\(member.displayName) (you)" : member.displayName)
-        } icon: {
-            Image(systemName: member.owner ? "crown" : "person")
-                .padding(3)
-                .overlay(Circle().stroke(Color.green, lineWidth: 2).opacity(speaking ? 1 : 0))
+        Group {
+            if member.isSelf {
+                label
+            } else {
+                Button { showVolume = true } label: { label }
+                    .buttonStyle(.plain)
+                    .help("Adjust \(member.displayName)'s voice volume")
+            }
         }
-        .accessibilityLabel("\(member.displayName)\(member.owner ? ", owner" : "")\(member.isSelf ? ", you" : "")\(speaking ? ", speaking" : "")")
         .contextMenu {
             if !member.isSelf {
                 Button("User Volume…") { showVolume = true }
@@ -63,10 +63,11 @@ private struct MemberRow: View {
         }
         .popover(isPresented: $showVolume) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("User volume").font(.headline)
+                Text("\(member.displayName)'s voice volume").font(.headline)
                 Slider(value: Binding(get: { model.volume(for: member.identifier) },
                                       set: { model.setVolume($0, for: member.identifier) }),
                        in: 0...200, step: 1)
+                    .accessibilityLabel("Voice volume for \(member.displayName)")
                 Text("\(Int(model.volume(for: member.identifier)))%")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -74,5 +75,17 @@ private struct MemberRow: View {
             .padding()
             .frame(width: 240)
         }
+    }
+
+    private var label: some View {
+        let speaking = model.speaking.contains(member.identifier)
+        return Label {
+            Text(member.isSelf ? "\(member.displayName) (you)" : member.displayName)
+        } icon: {
+            Image(systemName: member.owner ? "crown" : "person")
+                .padding(3)
+                .overlay(Circle().stroke(Color.green, lineWidth: 2).opacity(speaking ? 1 : 0))
+        }
+        .accessibilityLabel("\(member.displayName)\(member.owner ? ", owner" : "")\(member.isSelf ? ", you" : "")\(speaking ? ", speaking" : "")")
     }
 }

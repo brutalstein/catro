@@ -29,6 +29,8 @@ __attribute__((objc_subclassing_restricted))
 @property(nonatomic, readonly, copy) NSString* publicCode;
 @property(nonatomic, readonly) BOOL owner;
 @property(nonatomic, readonly) BOOL hasVoice;
+@property(nonatomic, readonly, copy) NSString* textChannelID;
+@property(nonatomic, readonly, copy) NSString* voiceChannelID;
 @property(nonatomic, readonly) NSUInteger memberCount;
 - (instancetype)init NS_UNAVAILABLE;
 @end
@@ -39,6 +41,7 @@ __attribute__((objc_subclassing_restricted))
 @property(nonatomic, readonly, copy) NSString* displayName;
 @property(nonatomic, readonly) BOOL owner;
 @property(nonatomic, readonly) BOOL isSelf;
+@property(nonatomic, readonly, copy) NSString* voiceChannelID;
 - (instancetype)init NS_UNAVAILABLE;
 @end
 

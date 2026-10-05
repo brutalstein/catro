@@ -1,12 +1,12 @@
 #include "pch.h"
 
 #include "Server/ServerView.xaml.h"
+#include "Settings/Voice.hpp"
 
 #include <winrt/Windows.UI.Text.h>
 
 #include <chrono>
 #include <ctime>
-#include <cwchar>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -20,20 +20,49 @@ namespace xaml = Microsoft::UI::Xaml;
 namespace controls = Microsoft::UI::Xaml::Controls;
 using namespace std::chrono_literals;
 
-std::wstring message_time(std::int64_t unix_milliseconds) {
-    if (unix_milliseconds <= 0) {
-        return {};
-    }
+std::tm message_local_time(std::int64_t unix_milliseconds) {
     const auto seconds = static_cast<std::time_t>(unix_milliseconds / 1000);
     std::tm local{};
-    if (localtime_s(&local, &seconds) != 0) {
-        return {};
-    }
-    wchar_t buffer[16]{};
-    if (std::wcsftime(buffer, 16, L"%H:%M", &local) == 0) {
-        return {};
-    }
+    (void)localtime_s(&local, &seconds);
+    return local;
+}
+
+std::wstring message_date(const std::tm& local, bool exact = false) {
+    const SYSTEMTIME value{
+        static_cast<WORD>(local.tm_year + 1900), static_cast<WORD>(local.tm_mon + 1),
+        static_cast<WORD>(local.tm_wday), static_cast<WORD>(local.tm_mday),
+        static_cast<WORD>(local.tm_hour), static_cast<WORD>(local.tm_min),
+        static_cast<WORD>(local.tm_sec), 0};
+    wchar_t buffer[128]{};
+    (void)GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, exact ? DATE_LONGDATE : DATE_SHORTDATE,
+                         &value, nullptr, buffer, 128, nullptr);
     return buffer;
+}
+
+std::wstring message_time(const std::tm& local) {
+    SYSTEMTIME value{};
+    value.wHour = static_cast<WORD>(local.tm_hour);
+    value.wMinute = static_cast<WORD>(local.tm_min);
+    value.wSecond = static_cast<WORD>(local.tm_sec);
+    wchar_t buffer[64]{};
+    (void)GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &value, nullptr, buffer, 64);
+    return buffer;
+}
+
+std::wstring message_day_label(const std::tm& local) {
+    const auto now = message_local_time(
+        static_cast<std::int64_t>(std::time(nullptr)) * 1000);
+    const auto age = catro::shell::message_day_age(local, now);
+    wchar_t locale[LOCALE_NAME_MAX_LENGTH]{};
+    (void)GetUserDefaultLocaleName(locale, LOCALE_NAME_MAX_LENGTH);
+    const bool turkish = std::wstring_view{locale}.starts_with(L"tr");
+    if (age == 0) {
+        return turkish ? L"Bugün" : L"Today";
+    }
+    if (age == 1) {
+        return turkish ? L"Dün" : L"Yesterday";
+    }
+    return message_date(local);
 }
 
 // List rows are stored as line-separated fields so a recycled container can be refilled
@@ -53,7 +82,7 @@ controls::TextBlock text_at(controls::Panel const& panel, uint32_t index) {
 } // namespace
 
 void ServerView::OnMessageContainerChanging(
-    controls::ListViewBase const&,
+    controls::ListViewBase const& list,
     controls::ContainerContentChangingEventArgs const& args) {
     const auto root = args.ItemContainer().ContentTemplateRoot().try_as<controls::StackPanel>();
     if (args.InRecycleQueue() || !root) {
@@ -62,15 +91,33 @@ void ServerView::OnMessageContainerChanging(
     const auto row = unbox_value<hstring>(args.Item());
     const auto [author_id, content] = split_line(row);
     const auto [author, rest] = split_line(content);
-    const auto [time, body] = split_line(rest);
-    const auto header = root.Children().GetAt(0).as<controls::StackPanel>();
+    const auto [timestamp, body] = split_line(rest);
+    const auto milliseconds = std::stoll(std::wstring{timestamp});
+    const auto local = message_local_time(milliseconds);
+    const auto day_label = message_day_label(local);
+    const auto time = day_label + L" · " + message_time(local);
+    const auto exact = message_date(local, true) + L" · " + message_time(local);
+    bool first_of_day = args.ItemIndex() == 0;
+    if (!first_of_day && args.ItemIndex() < list.Items().Size()) {
+        const auto previous = unbox_value<hstring>(list.Items().GetAt(args.ItemIndex() - 1));
+        const auto previous_content = split_line(previous).second;
+        const auto previous_rest = split_line(previous_content).second;
+        const auto previous_timestamp = split_line(previous_rest).first;
+        first_of_day = catro::shell::message_day(local) != catro::shell::message_day(
+            message_local_time(std::stoll(std::wstring{previous_timestamp})));
+    }
+    const auto divider = root.Children().GetAt(0).as<controls::Border>();
+    divider.Child().as<controls::TextBlock>().Text(hstring{day_label});
+    divider.Visibility(first_of_day ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
+    const auto header = root.Children().GetAt(1).as<controls::StackPanel>();
     text_at(header, 0).Text(hstring{author});
     constexpr wchar_t const* colors[] = {L"CatroChatCopperStyle", L"CatroChatSageStyle", L"CatroChatRoseStyle"};
     const auto color = author_id.empty() ? 0U : static_cast<unsigned>(author_id.back()) % 3U;
     text_at(header, 0).Style(xaml::Application::Current().Resources().Lookup(
         box_value(hstring{colors[color]})).as<xaml::Style>());
     text_at(header, 1).Text(hstring{time});
-    text_at(root, 1).Text(hstring{body});
+    controls::ToolTipService::SetToolTip(text_at(header, 1), box_value(hstring{exact}));
+    text_at(root, 2).Text(hstring{body});
     // The row's internal author ID chooses a stable colour; Narrator reads the useful content only.
     std::wstring announcement{author};
     announcement += L" ";
@@ -106,8 +153,14 @@ void ServerView::OnMemberContainerChanging(
     }
     const auto labels = root.Children().GetAt(1).as<controls::StackPanel>();
     text_at(labels, 0).Text(hstring{name});
-    text_at(labels, 1).Text(hstring{role});
-    // Right-click a friend to change how loud they are, like Discord's user volume.
+    std::wstring detail{role};
+    if (speaking) {
+        detail += L" · Speaking";
+    }
+    text_at(labels, 1).Text(hstring{detail});
+    xaml::Automation::AutomationProperties::SetName(args.ItemContainer(),
+        hstring{std::wstring{name} + L" · " + detail});
+    // Click or right-click a participant to change only their voice in your headphones.
     const auto container = args.ItemContainer();
     container.Tag(box_value(hstring{user_id}));
     if (self || user_id.empty()) {
@@ -118,21 +171,33 @@ void ServerView::OnMemberContainerChanging(
     args.Handled(true);
 }
 
+void ServerView::OnMemberClick(IInspectable const& sender, controls::ItemClickEventArgs const& args) {
+    const auto list = sender.as<controls::ListView>();
+    const auto container = list.ContainerFromItem(args.ClickedItem()).try_as<controls::ListViewItem>();
+    if (container && container.ContextFlyout()) {
+        MemberVolumeFlyout().ShowAt(container);
+    }
+}
+
 controls::Flyout ServerView::MemberVolumeFlyout() {
     if (member_volume_flyout_) {
         return member_volume_flyout_;
     }
     controls::Slider slider;
-    slider.Header(box_value(L"User volume"));
+    slider.Header(box_value(L"Voice volume — 100%"));
     slider.Minimum(0);
     slider.Maximum(200);
     slider.StepFrequency(1);
     slider.Width(220);
-    slider.ValueChanged([this](auto&&, controls::Primitives::RangeBaseValueChangedEventArgs const& args) {
+    slider.ValueChanged([this](IInspectable const& sender, controls::Primitives::RangeBaseValueChangedEventArgs const& args) {
+        sender.as<controls::Slider>().Header(box_value(
+            hstring{L"Voice volume — " + std::to_wstring(static_cast<int>(args.NewValue())) + L"%"}));
         if (member_volume_user_.empty()) {
             return;
         }
-        member_volumes_[member_volume_user_] = args.NewValue();
+        auto preferences = catro::shell::voice_preferences();
+        preferences.user_volumes[member_volume_user_] = static_cast<float>(args.NewValue() / 100.0);
+        catro::shell::save_voice_preferences(preferences);
         if (voice_runtime_ != nullptr) {
             catro_voice_runtime_set_user_volume(
                 voice_runtime_, member_volume_user_.c_str(), static_cast<float>(args.NewValue() / 100.0));
@@ -146,10 +211,11 @@ controls::Flyout ServerView::MemberVolumeFlyout() {
         // Clear first so moving the slider to the stored value does not write it back.
         member_volume_user_.clear();
         const auto id = target ? to_string(unbox_value_or<hstring>(target.Tag(), hstring{})) : std::string{};
-        const auto stored = member_volumes_.find(id);
-        opened.Content().as<controls::Slider>().Value(stored == member_volumes_.end() ? 100.0 : stored->second);
+        opened.Content().as<controls::Slider>().Value(
+            catro::shell::user_volume(catro::shell::voice_preferences().user_volumes, id) * 100.0);
         member_volume_user_ = id;
     });
+    flyout.Closed([this](auto&&, auto&&) { member_volume_user_.clear(); });
     member_volume_flyout_ = flyout;
     return flyout;
 }
@@ -159,6 +225,7 @@ void ServerView::ResetMembers() {
         member_generation_ = 1;
     }
     MemberList().Items().Clear();
+    VoiceParticipantList().Items().Clear();
     roster_.clear();
 }
 
@@ -189,12 +256,12 @@ void ServerView::ApplyMemberRoster(
 }
 
 void ServerView::RenderMemberRows() {
-    if (roster_.empty()) {
-        return; // the local fallback row stays until a roster arrives
-    }
     const auto voice = voice_runtime_ != nullptr ? catro_voice_runtime_snapshot(voice_runtime_)
                                                  : CatroVoiceRuntimeSnapshot{};
-    const bool in_voice = room_mode_active_ && voice.state == CATRO_VOICE_JOINED;
+    const auto room = room_mode_active_ && room_runtime_ != nullptr
+        ? catro_room_runtime_snapshot(room_runtime_) : CatroRoomRuntimeSnapshot{};
+    const bool in_voice = room_mode_active_ && voice.state == CATRO_VOICE_JOINED &&
+        room.state == CATRO_ROOM_JOINED;
     std::string local_id;
     if (local_state_) {
         local_id =
@@ -203,9 +270,20 @@ void ServerView::RenderMemberRows() {
     }
 
     auto items = MemberList().Items();
+    auto participants = VoiceParticipantList().Items();
     uint32_t index = 0;
+    uint32_t participant_index = 0;
+    bool found_self = false;
+    const auto put_row = [](auto const& rows, uint32_t at, const hstring& value) {
+        if (at >= rows.Size()) {
+            rows.Append(box_value(value));
+        } else if (unbox_value<hstring>(rows.GetAt(at)) != value) {
+            rows.SetAt(at, box_value(value));
+        }
+    };
     for (const auto& member : roster_) {
         const bool self = !local_id.empty() && member.user_id == local_id;
+        found_self = found_self || self;
         const bool speaking = in_voice &&
             (self ? voice.speaking != 0
                   : catro_voice_runtime_user_speaking(voice_runtime_, member.user_id.c_str()) != 0);
@@ -227,16 +305,28 @@ void ServerView::RenderMemberRows() {
             row += L" · You";
         }
         const hstring value{row};
-        if (index >= items.Size()) {
-            items.Append(box_value(value));
-        } else if (unbox_value<hstring>(items.GetAt(index)) != value) {
-            items.SetAt(index, box_value(value));
-        }
+        put_row(items, index, value);
         ++index;
+        if (directory_server_ && catro::shell::voice_member_visible(
+                self, in_voice, member.voice_channel_id, directory_server_->voice_channel_id)) {
+            put_row(participants, participant_index++, value);
+        }
     }
-    while (items.Size() > index) {
+    if (!found_self && in_voice && local_state_) {
+        std::wstring row = to_hstring(local_id).c_str();
+        row += voice.speaking != 0 ? L"\nsy\n" : L"\ny\n";
+        row += to_hstring(local_state_->identity.display_name).c_str();
+        row += L"\nYou";
+        put_row(participants, participant_index++, hstring{row});
+    }
+    while (!roster_.empty() && items.Size() > index) {
         items.RemoveAtEnd();
     }
+    while (participants.Size() > participant_index) {
+        participants.RemoveAtEnd();
+    }
+    VoiceParticipantList().Visibility(participant_index == 0
+        ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
 }
 
 winrt::fire_and_forget
@@ -444,8 +534,8 @@ ServerView::ShowAccessDialog() {
                 request.requester_display_name)
                 .c_str();
         const auto submitted =
-            message_time(
-                request.created_at * 1000);
+            message_time(message_local_time(
+                request.created_at * 1000));
         if (!submitted.empty()) {
             row += L"  ·  ";
             row += submitted;
@@ -596,6 +686,7 @@ void ServerView::ResetMessages() {
         message_generation_ = 1;
     }
     message_cursor_ = 0;
+    message_display_day_.reset();
     MessageList().Items().Clear();
     TextEmptyState().Visibility(
         xaml::Visibility::Visible);
@@ -613,10 +704,8 @@ void ServerView::AppendMessage(
     std::wstring display = to_hstring(message.author_id).c_str();
     display += L"\n";
     display += to_hstring(message.author_display_name).c_str();
-    const auto timestamp =
-        message_time(message.created_at);
     display += L"\n";
-    display += timestamp;
+    display += std::to_wstring(message.created_at);
     display += L"\n";
     display += to_hstring(message.content).c_str();
 
@@ -656,6 +745,16 @@ ServerView::BeginMessageRefresh() {
         !directory_server_ ||
         directory_server_->text_channel_id.empty()) {
         co_return;
+    }
+
+    const auto today = catro::shell::message_day(message_local_time(
+        static_cast<std::int64_t>(std::time(nullptr)) * 1000));
+    if (message_display_day_ != today) {
+        message_display_day_ = today;
+        auto rows = MessageList().Items();
+        for (uint32_t index = 0; index < rows.Size(); ++index) {
+            rows.SetAt(index, rows.GetAt(index));
+        }
     }
 
     const auto generation = message_generation_;
