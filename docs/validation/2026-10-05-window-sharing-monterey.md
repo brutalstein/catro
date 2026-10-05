@@ -41,8 +41,6 @@ from the local checkout and completed in this branch.
   smoke test passed.
 - Graphify was refreshed with the AST-only `graphify update .` command.
 
-## Remaining device evidence
-
 ## Hosted evidence
 
 - Full CI for implementation commit `97b4ddd` passed all seven jobs: Windows
