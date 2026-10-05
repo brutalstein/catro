@@ -22,7 +22,8 @@ using community::DirectoryError;
 using community::DirectoryErrorCode;
 
 constexpr std::string_view kLocalOnlyMessage = "Online services are not configured. Local mode remains available.";
-constexpr auto kAdaptiveRestartCooldown = std::chrono::seconds(3);
+constexpr auto kAdaptiveRestartCooldown = std::chrono::seconds(2);
+constexpr auto kAdaptiveUpgradeStability = std::chrono::seconds(12);
 
 template <class T>
 [[nodiscard]] const DirectoryError* error_of(const std::variant<T, DirectoryError>& result) noexcept {
@@ -713,19 +714,56 @@ struct ProductSession::Impl {
         return config;
     }
 
+    [[nodiscard]] static bool same_operating_point(
+        const screen::MacScreenShareConfig& lhs,
+        const screen::MacScreenShareConfig& rhs) noexcept {
+        return lhs.max_width == rhs.max_width &&
+               lhs.max_height == rhs.max_height &&
+               lhs.fps == rhs.fps;
+    }
+
+    [[nodiscard]] static bool strictly_more_constrained(
+        const screen::MacScreenShareConfig& desired,
+        const screen::MacScreenShareConfig& current) noexcept {
+        const bool never_higher =
+            desired.max_width <= current.max_width &&
+            desired.max_height <= current.max_height &&
+            desired.fps <= current.fps;
+        return never_higher &&
+               (desired.max_width < current.max_width ||
+                desired.max_height < current.max_height ||
+                desired.fps < current.fps);
+    }
+
     void adapt_active_share() {
-        if (!state_.media.sharing || !active_share_request_) {
+        if (!state_.media.sharing || !active_share_request_ || !active_share_config_) {
             return;
         }
         const auto now = std::chrono::steady_clock::now();
-        if (now < next_adaptive_restart_) {
+        auto desired = planned_share_config(*active_share_request_);
+        if (same_operating_point(desired, *active_share_config_)) {
+            pending_upgrade_config_.reset();
             return;
         }
-        auto desired = planned_share_config(*active_share_request_);
-        if (active_share_config_ &&
-            desired.max_width == active_share_config_->max_width &&
-            desired.max_height == active_share_config_->max_height &&
-            desired.fps == active_share_config_->fps) {
+
+        const bool downgrade = strictly_more_constrained(desired, *active_share_config_);
+        if (!downgrade) {
+            // Recover quality only after the better state has stayed stable. This prevents a Mac
+            // hovering around a thermal/power threshold from repeatedly rebuilding capture/encode.
+            if (!pending_upgrade_config_ ||
+                !same_operating_point(desired, *pending_upgrade_config_)) {
+                pending_upgrade_config_ = desired;
+                pending_upgrade_since_ = now;
+                return;
+            }
+            if (now - pending_upgrade_since_ < kAdaptiveUpgradeStability) {
+                return;
+            }
+        } else {
+            pending_upgrade_config_.reset();
+        }
+
+        if (now < next_adaptive_restart_) {
             return;
         }
         const auto previous = active_share_config_;
@@ -740,10 +778,11 @@ struct ProductSession::Impl {
             return;
         }
         active_share_config_ = desired;
+        pending_upgrade_config_.reset();
         next_adaptive_restart_ = now + kAdaptiveRestartCooldown;
         state_.media.status = "Sharing " + active_share_request_->source.title + " · auto " +
-                              std::to_string(desired.max_height) + "p" +
-                              std::to_string(desired.fps);
+                              std::to_string(desired.max_height) + "p " +
+                              std::to_string(desired.fps) + " FPS";
     }
 
     void start_share(const ShareRequest& request) {
@@ -787,7 +826,8 @@ struct ProductSession::Impl {
         next_adaptive_restart_ = std::chrono::steady_clock::now() + kAdaptiveRestartCooldown;
         media.sharing = true;
         media.status = "Sharing " + request.source.title + " · auto " +
-                       std::to_string(config.max_height) + "p" + std::to_string(config.fps);
+                       std::to_string(config.max_height) + "p " +
+                       std::to_string(config.fps) + " FPS";
         refresh_media();
     }
 
@@ -799,6 +839,7 @@ struct ProductSession::Impl {
         deps_.media.room_release_screen(room_);
         active_share_request_.reset();
         active_share_config_.reset();
+        pending_upgrade_config_.reset();
         state_.media.sharing = false;
         state_.media.status = "Voice connected";
     }
@@ -860,6 +901,8 @@ struct ProductSession::Impl {
     std::shared_ptr<const capabilities::CapabilitySnapshot> capability_snapshot_;
     std::optional<ShareRequest> active_share_request_;
     std::optional<screen::MacScreenShareConfig> active_share_config_;
+    std::optional<screen::MacScreenShareConfig> pending_upgrade_config_;
+    std::chrono::steady_clock::time_point pending_upgrade_since_{};
     std::chrono::steady_clock::time_point next_adaptive_restart_{};
     CatroRoomRuntimeHandle room_ = nullptr;
     CatroVoiceRuntimeHandle voice_ = nullptr;

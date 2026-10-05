@@ -271,9 +271,24 @@ std::vector<AdaptiveShareQuality> adaptive_share_qualities(
     for (auto& quality : result) {
         quality.recommended = false;
     }
-    // Highest currently achievable option is the automatic recommendation; runtime adaptation
-    // may still lower it later if power or thermal state changes.
-    result.back().recommended = true;
+
+    // "Auto" keeps a generous user ceiling while the policy chooses the current operating point.
+    // This is deliberately different from the current highest choice: starting on battery or under
+    // thermal pressure must not permanently prevent the share from rising again after recovery.
+    const auto auto_box = fit_box(source.width, source.height, std::min(source.height, 2160U));
+    AdaptiveShareQuality automatic{
+        .label = "Auto",
+        .detail = "Adapts to hardware, display, power, thermals & network",
+        .max_width = std::max(2U, auto_box.width),
+        .max_height = std::max(2U, auto_box.height),
+        .fps = 60,
+        .bitrate = initial_bitrate(auto_box.width, auto_box.height, 60),
+        .recommended = true,
+        .profile = snapshot
+            ? caps::derive_operating_profile(*snapshot, caps::OperatingPreference::automatic).profile
+            : caps::OperatingProfile::safe_local_envelope,
+    };
+    result.insert(result.begin(), std::move(automatic));
     return result;
 }
 

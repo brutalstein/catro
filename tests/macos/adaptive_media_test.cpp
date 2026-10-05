@@ -48,3 +48,18 @@ TEST_CASE("macOS adaptive share drops to the thermal-safe envelope") {
     CHECK(quality.fps <= 30);
     CHECK(quality.profile == catro::capabilities::OperatingProfile::thermal_constrained);
 }
+
+TEST_CASE("macOS adaptive Auto keeps recovery headroom while current quality is constrained") {
+    const auto snapshot = catro::fixtures::hot_apple_silicon();
+    const auto source = display_source();
+    const auto choices = catro::product::adaptive_share_qualities(&snapshot, source);
+    REQUIRE_FALSE(choices.empty());
+    REQUIRE(choices.front().recommended);
+    CHECK(choices.front().label == "Auto");
+    CHECK(choices.front().max_height > 720);
+
+    const auto current = catro::product::adaptive_share_quality(
+        &snapshot, source, choices.front().max_width, choices.front().max_height, choices.front().fps);
+    CHECK(current.max_height <= 720);
+    CHECK(current.fps <= 30);
+}
