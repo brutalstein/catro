@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <utility>
 
 namespace catro::product {
 namespace {

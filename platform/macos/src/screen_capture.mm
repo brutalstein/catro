@@ -785,7 +785,12 @@ private:
         if (configured) {
             [session addInput:input];
             [session addOutput:video];
-            if (!explicit_mode) {
+            if (explicit_mode &&
+                [session canSetSessionPreset:AVCaptureSessionPresetInputPriority]) {
+                // Preserve the explicit AVCaptureDeviceFormat chosen above; ordinary presets are
+                // allowed to pick a different mode behind our back.
+                session.sessionPreset = AVCaptureSessionPresetInputPriority;
+            } else if (!explicit_mode) {
                 NSArray<AVCaptureSessionPreset>* presets = config.max_height <= 720
                     ? @[ AVCaptureSessionPreset1280x720, AVCaptureSessionPresetHigh ]
                     : @[ AVCaptureSessionPreset1920x1080, AVCaptureSessionPreset1280x720,
