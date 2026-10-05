@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <exception>
 #include <memory>
 #include <optional>
 #include <span>
@@ -24,10 +25,9 @@ constexpr auto kRoomVoiceFrame = std::chrono::milliseconds{20};
 constexpr int kRoomEncodeDrain = 4;
 constexpr int kRoomReceiveDrain = 64;
 constexpr int kRoomPlayoutCatchup = 3;
-// Default devices are compared once a second; a lost device is reopened every 500 ms for 10 s.
+// Device recovery is paced and stays alive until the user leaves the room.
 constexpr auto kDeviceCheck = std::chrono::seconds{1};
 constexpr auto kAudioRetry = std::chrono::milliseconds{500};
-constexpr int kAudioRetries = 20;
 
 // True when the session runs on a system default that is no longer the default, e.g. after a
 // headset was plugged in. Explicitly chosen devices are never switched.
@@ -68,6 +68,7 @@ int run_room_voice(const tools::VoicePeerOptions& options,
                    tools::VoicePeerControl& control,
                    voice::StreamControls& streams,
                    const LiveVoiceSettings& settings,
+                   const std::function<void(std::string)>& report_error,
                    std::string& error_text) {
     voice::VoicePipelineConfig media_config;
     media_config.local_stream_id = options.stream_id;
@@ -88,30 +89,43 @@ int run_room_voice(const tools::VoicePeerOptions& options,
     }
     auto pipeline = std::move(std::get<std::unique_ptr<voice::VoicePipeline>>(pipeline_result));
 
-    std::atomic_bool audio_failed{false};
-    audio::ExternalAudioSession audio_session(
-        platform, [&](audio::AudioError) { audio_failed.store(true, std::memory_order_release); });
-
-    audio::ExternalSessionConfig audio_config;
-    audio_config.mode = audio::ExternalSessionMode::duplex;
-    audio_config.input = options.input;
-    audio_config.output = options.output;
-    if (const auto failure = audio_session.start(audio_config, pipeline->capture(), pipeline->render())) {
-        error_text = std::string{"audio: "} + std::string{audio::name(failure->code)};
-        return tools::voice_peer_audio_failed;
+    // A missing microphone must not silence the other participants (and vice versa).
+    std::array<std::atomic_bool, 2> audio_failed{};
+    std::array<std::unique_ptr<audio::ExternalAudioSession>, 2> audio_sessions;
+    std::array<audio::ExternalSessionConfig, 2> audio_configs;
+    audio_configs[0].mode = audio::ExternalSessionMode::capture_only;
+    audio_configs[1].mode = audio::ExternalSessionMode::render_only;
+    std::array requested_devices{options.input, options.output};
+    const std::array directions{audio::DeviceDirection::capture, audio::DeviceDirection::render};
+    std::array<std::chrono::steady_clock::time_point, 2> next_audio_retry{};
+    const auto effective_device = [&](std::size_t index) {
+        const auto& requested = requested_devices[index];
+        return requested && !platform.device_available(*requested, directions[index])
+                   ? std::optional<capabilities::AudioEndpointId>{} : requested;
+    };
+    const auto reopen_audio = [&](std::size_t index) {
+        auto& config = audio_configs[index];
+        (index == 0 ? config.input : config.output) = effective_device(index);
+        audio_failed[index].store(false, std::memory_order_release);
+        const auto failure = audio_sessions[index]->start(config, pipeline->capture(), pipeline->render());
+        if (failure) {
+            audio_failed[index].store(true, std::memory_order_release);
+            // Destruction is the callback barrier; retry without keeping a dead device open.
+            audio_sessions[index]->stop();
+        }
+        return failure;
+    };
+    for (std::size_t index = 0; index < audio_sessions.size(); ++index) {
+        audio_sessions[index] = std::make_unique<audio::ExternalAudioSession>(
+            platform, [&, index](audio::AudioError) { audio_failed[index].store(true, std::memory_order_release); });
+        if (const auto failure = reopen_audio(index);
+            failure && (failure->code == audio::AudioErrorCode::permission_denied ||
+                        failure->code == audio::AudioErrorCode::format_unsupported)) {
+            error_text = std::string{"audio: "} + std::string{audio::name(failure->code)};
+            return tools::voice_peer_audio_failed;
+        }
     }
     auto next_device_check = std::chrono::steady_clock::now() + kDeviceCheck;
-    auto next_audio_retry = std::chrono::steady_clock::time_point{};
-    int audio_retries = 0;
-    // Reopens both streams on the current devices; the call itself never drops.
-    const auto reopen_audio = [&]() -> bool {
-        audio_failed.store(false, std::memory_order_release);
-        if (audio_session.start(audio_config, pipeline->capture(), pipeline->render())) {
-            audio_failed.store(true, std::memory_order_release);
-            return false;
-        }
-        return true;
-    };
 
     control.media_started.store(true, std::memory_order_release);
 
@@ -139,6 +153,7 @@ int run_room_voice(const tools::VoicePeerOptions& options,
     // Forces the first pass to apply the threshold and processing settings.
     auto applied_settings = settings.version.load(std::memory_order_acquire) - 1U;
     auto applied_devices = settings.device_version.load(std::memory_order_acquire);
+    bool audio_recovering = false;
     while (!control.stop_requested.load(std::memory_order_acquire)) {
         const bool deafened = control.deafened.load(std::memory_order_acquire);
         pipeline->set_deafened(deafened);
@@ -158,13 +173,18 @@ int run_room_voice(const tools::VoicePeerOptions& options,
         if (const auto version = settings.device_version.load(std::memory_order_acquire);
             version != applied_devices) {
             applied_devices = version;
+            std::array<std::optional<capabilities::AudioEndpointId>, 2> next_devices;
             {
                 std::scoped_lock lock(settings.device_mutex);
-                audio_config.input = endpoint(settings.input_device.c_str());
-                audio_config.output = endpoint(settings.output_device.c_str());
+                next_devices = {endpoint(settings.input_device.c_str()), endpoint(settings.output_device.c_str())};
             }
-            if (reopen_audio()) {
-                control.audio_restarts.fetch_add(1, std::memory_order_relaxed);
+            for (std::size_t index = 0; index < next_devices.size(); ++index) {
+                if (requested_devices[index] != next_devices[index]) {
+                    requested_devices[index] = next_devices[index];
+                    if (!reopen_audio(index)) {
+                        control.audio_restarts.fetch_add(1, std::memory_order_relaxed);
+                    }
+                }
             }
         }
 
@@ -174,24 +194,29 @@ int run_room_voice(const tools::VoicePeerOptions& options,
             exit_code = tools::voice_peer_network_failed;
             break;
         }
-        if (const auto now = std::chrono::steady_clock::now(); audio_failed.load(std::memory_order_acquire)) {
-            if (now >= next_audio_retry) {
-                if (++audio_retries > kAudioRetries) {
-                    error_text = "audio session failed";
-                    exit_code = tools::voice_peer_audio_failed;
-                    break;
-                }
-                next_audio_retry = now + kAudioRetry;
-                if (reopen_audio()) {
-                    audio_retries = 0;
+        const auto device_now = std::chrono::steady_clock::now();
+        const bool check_devices = device_now >= next_device_check;
+        if (check_devices) {
+            next_device_check = device_now + kDeviceCheck;
+        }
+        for (std::size_t index = 0; index < audio_sessions.size(); ++index) {
+            const auto& config = audio_configs[index];
+            const auto& chosen = index == 0 ? config.input : config.output;
+            const bool retry = audio_failed[index].load(std::memory_order_acquire);
+            const bool moved = check_devices &&
+                (chosen != effective_device(index) || default_moved(platform, *audio_sessions[index], config));
+            if ((retry && device_now >= next_audio_retry[index]) || (!retry && moved)) {
+                next_audio_retry[index] = device_now + kAudioRetry;
+                if (!reopen_audio(index)) {
                     control.audio_restarts.fetch_add(1, std::memory_order_relaxed);
                 }
             }
-        } else if (now >= next_device_check) {
-            next_device_check = now + kDeviceCheck;
-            if (default_moved(platform, audio_session, audio_config) && reopen_audio()) {
-                control.audio_restarts.fetch_add(1, std::memory_order_relaxed);
-            }
+        }
+        const bool recovering = audio_failed[0].load(std::memory_order_acquire) ||
+                                audio_failed[1].load(std::memory_order_acquire);
+        if (recovering != audio_recovering) {
+            audio_recovering = recovering;
+            report_error(recovering ? "Audio device unavailable; reconnecting while the room stays connected" : "");
         }
 
         for (int drained = 0; drained < kRoomEncodeDrain; ++drained) {
@@ -268,7 +293,9 @@ int run_room_voice(const tools::VoicePeerOptions& options,
         }
     }
 
-    audio_session.stop();
+    for (auto& session : audio_sessions) {
+        session->stop();
+    }
     control.media_started.store(false, std::memory_order_release);
     control.last_exit_code.store(exit_code, std::memory_order_release);
     return exit_code;
@@ -329,13 +356,23 @@ std::int32_t VoiceRuntimeHost::start(const CatroVoiceRuntimeConfig& config) noex
         worker_ = std::thread([this, room, options = std::move(options)] {
             std::string error;
             int code = tools::voice_peer_ok;
-            if (room != nullptr) {
-                code = run_room_voice(options, room, room_, platform_, control_, streams_, settings_, error);
-            } else {
-                std::ostringstream stream;
-                code = direct_(options, control_, stream);
-                error = stream.str();
+            try {
+                if (room != nullptr) {
+                    code = run_room_voice(options, room, room_, platform_, control_, streams_, settings_,
+                                          [this](std::string message) { set_error(std::move(message)); }, error);
+                } else {
+                    std::ostringstream stream;
+                    code = direct_(options, control_, stream);
+                    error = stream.str();
+                }
+            } catch (const std::exception& failure) {
+                code = tools::voice_peer_audio_failed;
+                error = failure.what();
+            } catch (...) {
+                code = tools::voice_peer_audio_failed;
+                error = "voice worker failed";
             }
+            control_.media_started.store(false, std::memory_order_release);
 
             exit_code_.store(code, std::memory_order_release);
             if (!error.empty()) {

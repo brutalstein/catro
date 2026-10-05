@@ -104,7 +104,8 @@ public:
     void set_processing(const VoiceProcessingConfig& config) noexcept;
     [[nodiscard]] bool processing_available() const noexcept { return processor_ != nullptr; }
     // Voice activity gate, worker thread only: microphone frames quieter than the threshold (dBFS)
-    // are sent as silence. nullopt picks the threshold automatically. Off until first called.
+    // are sent as silence. Automatic (nullopt) leaves noise handling to the voice processor,
+    // preserving quiet speech instead of imposing a fixed cutoff. Off until first called.
     void set_input_threshold(std::optional<float> dbfs) noexcept;
 
     [[nodiscard]] std::variant<EncodeStep, CodecError> encode_next(OutboundDatagram& datagram) noexcept;

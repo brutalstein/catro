@@ -4,8 +4,25 @@
 
 #include <d3d11.h>
 #include <wrl/client.h>
+#include "../../apps/windows/Catro/Server/StreamViewport.hpp"
+#include <cmath>
+#include <limits>
 
 using namespace catro::platform::windows;
+
+TEST_CASE("stream viewports fit every aspect ratio without exceeding available space") {
+    using winrt::Catro::implementation::stream_viewport::fit_viewport;
+    for (const auto source : {std::pair{1920U, 1080U}, {1080U, 1920U}, {3440U, 1440U}}) {
+        for (const auto box : {std::pair{900.0, 600.0}, {150.0, 80.0}, {1.0, 0.5}}) {
+            const auto size = fit_viewport(source.first, source.second, box.first, box.second);
+            CHECK(size.width <= box.first + 1e-9);
+            CHECK(size.height <= box.second + 1e-9);
+            CHECK(std::abs(size.width / size.height - static_cast<double>(source.first) / source.second) < 1e-9);
+        }
+    }
+    CHECK(fit_viewport(1920, 1080, 0, 600).width == 0);
+    CHECK(fit_viewport(1920, 1080, 600, std::numeric_limits<double>::quiet_NaN()).height == 0);
+}
 
 TEST_CASE("D3D11 composition video presenter shows only the visible part of a padded frame") {
     Microsoft::WRL::ComPtr<ID3D11Device> device;

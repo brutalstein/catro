@@ -103,7 +103,9 @@
                                   SelectionChanged="OnDeviceChanged" AutomationProperties.Name="Microphone" />
                         <ComboBox x:Name="OutputDeviceBox" Header="Output" HorizontalAlignment="Stretch"
                                   SelectionChanged="OnDeviceChanged" AutomationProperties.Name="Output device" />
-                        <TextBlock Text="Changes apply right away, even during a call. Default follows Windows when you plug in a headset."
+                        <TextBlock Text="Changes apply during a call. Unplugged devices temporarily use Windows defaults and return when reconnected."
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                        <TextBlock Text="If a Bluetooth headset changes or interrupts game/browser sound when its microphone is active, choose your computer or USB microphone here to keep headset playback in its media mode."
                                    FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource CatroTextTertiaryBrush}" />
                         <ToggleSwitch x:Name="SoundsToggle" Header="Join, leave, mute and deafen sounds"
                                       Toggled="OnVoiceToggleChanged" AutomationProperties.Name="Voice sounds" />

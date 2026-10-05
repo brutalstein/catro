@@ -1,6 +1,7 @@
 #include <catro/screen_runtime.hpp>
 
 #include <catro/audio/realtime.hpp>
+#include <catro/platform/windows/audio_platform.hpp>
 #include <catro/platform/windows/process_loopback_audio.hpp>
 #include <catro/platform/windows/video_decoder.hpp>
 #include <catro/platform/windows/video_encoder.hpp>
@@ -182,6 +183,8 @@ void trace_event(std::string_view event) noexcept {
 class WasapiStreamOutput final : public StreamAudioOutput {
 public:
     [[nodiscard]] bool start(StreamAudioRenderBridge& bridge) override {
+        device_ = platform_.default_device(audio::DeviceDirection::render);
+        next_device_check_ = Clock::now() + 1s;
         return !renderer_.start(
             [&bridge](std::span<float> samples) noexcept {
                 bridge.on_render(samples);
@@ -192,8 +195,24 @@ public:
         renderer_.stop();
     }
 
+    bool healthy() override {
+        if (!renderer_.statistics().running) {
+            return false;
+        }
+        if (Clock::now() >= next_device_check_) {
+            next_device_check_ = Clock::now() + 1s;
+            if (platform_.default_device(audio::DeviceDirection::render) != device_) {
+                return false;
+            }
+        }
+        return true;
+    }
+
 private:
     platform::windows::WasapiStreamAudioRenderer renderer_;
+    platform::windows::WasapiAudioPlatform platform_;
+    std::optional<capabilities::AudioEndpointId> device_;
+    Clock::time_point next_device_check_{};
 };
 
 } // namespace
@@ -719,55 +738,53 @@ struct WindowsScreenShareRuntime::Impl {
                 failure->native_code);
             return;
         }
-        StreamAudioCaptureBridge bridge;
-        platform::windows::ProcessLoopbackAudioCapture
-            capture;
-        const auto capture_failure =
-            capture.start(
-                display ? static_cast<std::uint32_t>(
-                              GetCurrentProcessId())
-                        : config.source.process_id,
-                [&bridge](
-                    std::span<const float> samples) noexcept {
-                    bridge.on_captured(samples);
-                },
-                display);
-        if (capture_failure) {
-            set_stream_audio_error(
-                platform::windows::name(
-                    capture_failure->code),
-                capture_failure->native_code);
-            return;
-        }
-        {
-            std::scoped_lock lock(metadata_mutex_);
-            stream_audio_error_.clear();
-        }
-        stream_audio_active_.store(
-            true, std::memory_order_release);
-        trace_event("stream-audio-capture-started");
-        StreamAudioPcmFrame pcm{};
         while (!should_stop_sender()) {
-            if (!bridge.try_pop(pcm)) {
-                std::unique_lock stop_lock(stop_mutex_);
-                stop_cv_.wait_for(
-                    stop_lock,
-                    2ms,
-                    [this] {
-                        return should_stop_sender();
-                    });
-                continue;
+            // Keep the codec sequence alive across device/profile resets. Each capture gets a
+            // fresh bridge after its old callback has joined, so stale audio cannot be replayed.
+            StreamAudioCaptureBridge bridge;
+            platform::windows::ProcessLoopbackAudioCapture capture;
+            auto failure = capture.start(
+                display ? static_cast<std::uint32_t>(GetCurrentProcessId()) : config.source.process_id,
+                [&bridge](std::span<const float> samples) noexcept { bridge.on_captured(samples); },
+                display, &share_stop_requested_);
+            if (!failure) {
+                set_stream_audio_error("");
+                stream_audio_active_.store(true, std::memory_order_release);
+                trace_event("stream-audio-capture-started");
+                StreamAudioPcmFrame pcm{};
+                while (!should_stop_sender()) {
+                    const auto statistics = capture.statistics();
+                    if (!statistics.running || statistics.error) {
+                        failure = statistics.error.value_or(platform::windows::StreamAudioError{
+                            platform::windows::StreamAudioErrorCode::device_unavailable});
+                        break;
+                    }
+                    if (bridge.try_pop(pcm)) {
+                        sender.send(pcm);
+                        if (counters_.echo_sink) {
+                            counters_.echo_sink(pcm);
+                        }
+                    } else {
+                        std::unique_lock stop_lock(stop_mutex_);
+                        stop_cv_.wait_for(stop_lock, 2ms, [this] { return should_stop_sender(); });
+                    }
+                }
             }
-            sender.send(pcm);
-            // Shared audio also plays on this PC's speakers.
-            if (counters_.echo_sink) {
-                counters_.echo_sink(pcm);
+            capture.stop();
+            stream_audio_active_.store(false, std::memory_order_release);
+            counters_.stream_audio_capture_drops.fetch_add(bridge.dropped_callbacks(), std::memory_order_relaxed);
+            if (failure && !should_stop_sender()) {
+                set_stream_audio_error(platform::windows::name(failure->code), failure->native_code);
+                trace_event("stream-audio-capture-retry");
+                if (failure->code == platform::windows::StreamAudioErrorCode::unsupported ||
+                    failure->native_code == E_ACCESSDENIED ||
+                    failure->native_code == HRESULT_FROM_WIN32(ERROR_TIMEOUT)) {
+                    return;
+                }
+                std::unique_lock stop_lock(stop_mutex_);
+                stop_cv_.wait_for(stop_lock, 500ms, [this] { return should_stop_sender(); });
             }
         }
-        capture.stop();
-        counters_.stream_audio_capture_drops.store(
-            bridge.dropped_callbacks(),
-            std::memory_order_relaxed);
     }
 
     void run_stream_audio_receiver_guarded(

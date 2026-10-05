@@ -1,7 +1,10 @@
 #include <catro/platform/windows/process_loopback_audio.hpp>
 
+#include "process_loopback_activation.hpp"
+
 #include <Windows.h>
 #include <audioclient.h>
+#include <audiopolicy.h>
 #include <audioclientactivationparams.h>
 #include <avrt.h>
 #include <mmdeviceapi.h>
@@ -13,6 +16,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -27,10 +31,6 @@ namespace catro::platform::windows {
 namespace {
 
 using Microsoft::WRL::ComPtr;
-using Microsoft::WRL::FtmBase;
-using Microsoft::WRL::RuntimeClass;
-using Microsoft::WRL::RuntimeClassFlags;
-using Microsoft::WRL::ClassicCom;
 
 using Handle =
     std::unique_ptr<std::remove_pointer_t<HANDLE>,
@@ -71,79 +71,21 @@ using Handle =
     return format;
 }
 
-class ActivationHandler final
-    : public RuntimeClass<
-          RuntimeClassFlags<ClassicCom>,
-          FtmBase,
-          IActivateAudioInterfaceCompletionHandler> {
-public:
-    ActivationHandler(
-        HANDLE completed,
-        ComPtr<IAudioClient>* destination,
-        HRESULT* result) noexcept
-        : completed_(completed),
-          destination_(destination),
-          result_(result) {}
-
-    STDMETHODIMP ActivateCompleted(
-        IActivateAudioInterfaceAsyncOperation*
-            operation) override {
-        HRESULT activation = E_UNEXPECTED;
-        ComPtr<IUnknown> unknown;
-        auto result = operation != nullptr
-            ? operation->GetActivateResult(
-                  &activation, &unknown)
-            : E_POINTER;
-        if (SUCCEEDED(result)) {
-            result = activation;
-        }
-        if (SUCCEEDED(result)) {
-            result = unknown.As(destination_);
-        }
-        if (result_ != nullptr) {
-            *result_ = result;
-        }
-        if (completed_ != nullptr) {
-            SetEvent(completed_);
-        }
-        return S_OK;
-    }
-
-private:
-    HANDLE completed_ = nullptr;
-    ComPtr<IAudioClient>* destination_ = nullptr;
-    HRESULT* result_ = nullptr;
-};
+using detail::ActivationHandler;
 
 [[nodiscard]] HRESULT activate_process_loopback(
     std::uint32_t process_id,
     bool exclude_target,
-    HANDLE completed,
+    HANDLE stop,
+    const std::atomic_bool* cancelled,
     ComPtr<IAudioClient>& client) noexcept {
-    AUDIOCLIENT_ACTIVATION_PARAMS activation{};
-    activation.ActivationType =
-        AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
-    activation.ProcessLoopbackParams.TargetProcessId =
-        static_cast<DWORD>(process_id);
-    activation.ProcessLoopbackParams.ProcessLoopbackMode =
-        exclude_target
-            ? PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE
-            : PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE;
-
-    PROPVARIANT parameters{};
-    parameters.vt = VT_BLOB;
-    parameters.blob.cbSize =
-        sizeof(activation);
-    parameters.blob.pBlobData =
-        reinterpret_cast<BYTE*>(&activation);
-
-    HRESULT activation_result = E_PENDING;
+    if (cancelled && cancelled->load(std::memory_order_acquire)) {
+        return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+    }
     auto handler =
         Microsoft::WRL::Make<ActivationHandler>(
-            completed,
-            &client,
-            &activation_result);
-    if (!handler) {
+            process_id, exclude_target);
+    if (!handler || !handler->completed()) {
         return E_OUTOFMEMORY;
     }
 
@@ -152,21 +94,32 @@ private:
     const auto begin = ActivateAudioInterfaceAsync(
         VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
         __uuidof(IAudioClient),
-        &parameters,
+        handler->parameters(),
         handler.Get(),
         &operation);
     if (FAILED(begin)) {
         return begin;
     }
 
-    const auto waited =
-        WaitForSingleObject(completed, 10'000);
-    if (waited != WAIT_OBJECT_0) {
+    const HANDLE waits[] = {stop, handler->completed()};
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+    DWORD waited = WAIT_TIMEOUT;
+    do {
+        if (cancelled && cancelled->load(std::memory_order_acquire)) {
+            return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+        }
+        waited = WaitForMultipleObjects(2, waits, FALSE, 50);
+    } while (waited == WAIT_TIMEOUT && std::chrono::steady_clock::now() < deadline);
+    if (waited != WAIT_OBJECT_0 + 1) {
+        if (waited == WAIT_OBJECT_0) {
+            return HRESULT_FROM_WIN32(ERROR_CANCELLED);
+        }
         return waited == WAIT_TIMEOUT
             ? HRESULT_FROM_WIN32(ERROR_TIMEOUT)
             : HRESULT_FROM_WIN32(GetLastError());
     }
-    return activation_result;
+    client = handler->client();
+    return handler->result();
 }
 
 void publish_error(
@@ -210,7 +163,8 @@ struct ProcessLoopbackAudioCapture::Impl {
     std::optional<StreamAudioError> start(
         std::uint32_t process_id,
         Sink next_sink,
-        bool exclude_target) {
+        bool exclude_target,
+        const std::atomic_bool* cancelled) {
         stop();
 
         if (process_id == 0 || !next_sink) {
@@ -220,7 +174,7 @@ struct ProcessLoopbackAudioCapture::Impl {
         }
 
         sink_ = std::move(next_sink);
-        stop_event_ = make_event();
+        stop_event_ = make_event(true);
         if (!stop_event_) {
             return StreamAudioError{
                 StreamAudioErrorCode::os_failure,
@@ -237,8 +191,9 @@ struct ProcessLoopbackAudioCapture::Impl {
                 [this,
                  process_id,
                  exclude_target,
+                 cancelled,
                  ready = std::move(ready)]() mutable {
-                    run(process_id, exclude_target, std::move(ready));
+                    run(process_id, exclude_target, cancelled, std::move(ready));
                 });
         } catch (...) {
             sink_ = {};
@@ -271,6 +226,7 @@ struct ProcessLoopbackAudioCapture::Impl {
     void run(
         std::uint32_t process_id,
         bool exclude_target,
+        const std::atomic_bool* cancelled,
         std::promise<
             std::optional<StreamAudioError>> ready) noexcept {
         const auto apartment =
@@ -292,9 +248,8 @@ struct ProcessLoopbackAudioCapture::Impl {
             CoUninitialize();
         };
 
-        auto activation_event = make_event();
         auto sample_event = make_event();
-        if (!activation_event || !sample_event) {
+        if (!sample_event) {
             const auto failure =
                 StreamAudioError{
                     StreamAudioErrorCode::os_failure,
@@ -312,7 +267,8 @@ struct ProcessLoopbackAudioCapture::Impl {
         auto result = activate_process_loopback(
             process_id,
             exclude_target,
-            activation_event.get(),
+            stop_event_.get(),
+            cancelled,
             client);
         if (FAILED(result)) {
             const auto code =
@@ -435,7 +391,7 @@ struct ProcessLoopbackAudioCapture::Impl {
                                 GetLastError()))});
                 break;
             }
-            if (signaled != WAIT_OBJECT_0 + 1) {
+            if (signaled != WAIT_OBJECT_0 + 1 && signaled != WAIT_TIMEOUT) {
                 continue;
             }
 
@@ -473,21 +429,17 @@ struct ProcessLoopbackAudioCapture::Impl {
                     static_cast<std::size_t>(
                         frames) *
                     kStreamAudioChannels;
-                if ((flags &
-                     AUDCLNT_BUFFERFLAGS_SILENT) !=
-                    0) {
-                    sink_(
-                        std::span<const float>(
-                            silence.data(),
-                            std::min(
-                                samples,
-                                silence.size())));
-                } else if (data != nullptr) {
-                    sink_(
-                        std::span<const float>(
-                            reinterpret_cast<
-                                const float*>(data),
-                            samples));
+                try {
+                    if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0) {
+                        sink_(std::span<const float>(silence.data(), std::min(samples, silence.size())));
+                    } else if (data != nullptr) {
+                        sink_(std::span<const float>(reinterpret_cast<const float*>(data), samples));
+                    }
+                } catch (...) {
+                    (void)capture->ReleaseBuffer(frames);
+                    result = E_FAIL;
+                    failed = true;
+                    break;
                 }
 
                 frames_.fetch_add(
@@ -500,6 +452,8 @@ struct ProcessLoopbackAudioCapture::Impl {
                     break;
                 }
             }
+            // GetNextPacketSize itself can fail when Bluetooth switches profiles or disappears.
+            failed = failed || FAILED(result);
         }
 
         client->Stop();
@@ -545,9 +499,10 @@ std::optional<StreamAudioError>
 ProcessLoopbackAudioCapture::start(
     std::uint32_t process_id,
     Sink sink,
-    bool exclude_target) {
+    bool exclude_target,
+    const std::atomic_bool* cancelled) {
     return impl_->start(
-        process_id, std::move(sink), exclude_target);
+        process_id, std::move(sink), exclude_target, cancelled);
 }
 
 void ProcessLoopbackAudioCapture::stop() noexcept {
@@ -685,6 +640,12 @@ struct WasapiStreamAudioRenderer::Impl {
                 &format,
                 nullptr);
         }
+        if (SUCCEEDED(result)) {
+            ComPtr<IAudioSessionControl2> session;
+            if (SUCCEEDED(client->GetService(IID_PPV_ARGS(&session)))) {
+                (void)session->SetDuckingPreference(TRUE);
+            }
+        }
 
         UINT32 buffer_frames = 0;
         if (SUCCEEDED(result)) {
@@ -774,7 +735,7 @@ struct WasapiStreamAudioRenderer::Impl {
                 failed = true;
                 break;
             }
-            if (signaled != WAIT_OBJECT_0 + 1) {
+            if (signaled != WAIT_OBJECT_0 + 1 && signaled != WAIT_TIMEOUT) {
                 continue;
             }
 
@@ -807,7 +768,14 @@ struct WasapiStreamAudioRenderer::Impl {
                     static_cast<std::size_t>(
                         available) *
                         kStreamAudioChannels);
-            source_(samples);
+            try {
+                source_(samples);
+            } catch (...) {
+                (void)render->ReleaseBuffer(available, AUDCLNT_BUFFERFLAGS_SILENT);
+                result = E_FAIL;
+                failed = true;
+                break;
+            }
             frames_.fetch_add(
                 available,
                 std::memory_order_relaxed);

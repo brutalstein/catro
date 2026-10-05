@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -73,10 +74,12 @@ public:
 
     // Captures the process tree of process_id, or with exclude_target everything the system renders
     // except that tree (computer audio without Catro's own voice playback).
+    // The optional cancellation flag must remain alive until start() returns.
     [[nodiscard]] std::optional<StreamAudioError> start(
         std::uint32_t process_id,
         Sink sink,
-        bool exclude_target = false);
+        bool exclude_target = false,
+        const std::atomic_bool* cancelled = nullptr);
     void stop() noexcept;
 
     [[nodiscard]] StreamAudioStatistics statistics()

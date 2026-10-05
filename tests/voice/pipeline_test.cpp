@@ -75,6 +75,22 @@ TEST_CASE("pipeline rejects an invalid local stream identity") {
     CHECK(std::get<CodecError>(result).code == CodecErrorCode::invalid_argument);
 }
 
+TEST_CASE("automatic sensitivity preserves quiet microphone speech below the speaking indicator threshold") {
+    auto sender = make_pipeline(51);
+    auto receiver = make_pipeline(52);
+    sender->set_input_threshold(std::nullopt);
+    double phase = 0;
+    for (int index = 0; index < 10; ++index) {
+        const auto packet = encode(*sender, tone_frame(phase, 0.003F));
+        (void)receiver->receive(packet.view());
+        (void)receiver->decode_next();
+        PcmFrame rendered{};
+        receiver->render().on_render(rendered);
+        if (index > 2) { CHECK(finite_nonzero(rendered)); }
+    }
+    CHECK(sender->statistics().gated_frames == 0);
+}
+
 TEST_CASE("capture to Opus packet path increments sequence and timestamp across wrap") {
     constexpr auto kTimestampBeforeWrap =
         std::numeric_limits<std::uint32_t>::max() - kFrameSamples + 1U;

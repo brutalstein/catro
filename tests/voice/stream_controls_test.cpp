@@ -137,12 +137,12 @@ TEST_CASE("voice activity gate sends quiet input as silence and reports the inpu
     (void)encode(*pipeline, tone(phase, 0.001F));
     CHECK(pipeline->statistics().gated_frames == 0);
 
-    // Automatic: a -63 dBFS hum stays closed, speech opens the gate.
+    // Automatic mode preserves quiet input; the speaking indicator still ignores a -63 dBFS hum.
     pipeline->set_input_threshold(std::nullopt);
     for (int frame = 0; frame < 20; ++frame) {
         (void)encode(*pipeline, tone(phase, 0.001F));
     }
-    CHECK(pipeline->statistics().gated_frames >= 5);
+    CHECK(pipeline->statistics().gated_frames == 0);
     CHECK_FALSE(controls.local_speaking());
     CHECK(controls.local_level() < -55.0F);
     const auto gated = pipeline->statistics().gated_frames;
@@ -157,6 +157,7 @@ TEST_CASE("voice activity gate sends quiet input as silence and reports the inpu
         (void)encode(*pipeline, tone(phase, 0.2F));
     }
     CHECK_FALSE(controls.local_speaking());
+    CHECK(pipeline->statistics().gated_frames > gated);
 }
 
 TEST_CASE("stream audio joins the echo reference as mono without growing latency") {

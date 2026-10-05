@@ -26,6 +26,19 @@ def luminance(color):
 
 
 class WindowsResources(unittest.TestCase):
+    def test_stream_labels_cannot_expand_controls(self):
+        names = {node.get(X + "Name"): node for node in ET.parse(ROOT / "Server/ServerView.xaml").iter()}
+        controls = names["LocalShareControls"]
+        self.assertTrue(controls.tag.endswith("Grid"))
+        for name in ("ShareSourceText", "ShareMetaText", "RemoteShareMetaText", "ChannelTitle",
+                     "ProfileName", "ProfileRoleText", "VoiceLocalName", "VoiceStateText"):
+            with self.subTest(name=name):
+                self.assertEqual(names[name].get("TextTrimming"), "CharacterEllipsis")
+        self.assertEqual(names["FullScreenStreamButton"].get("Width"), "150")
+        toolbar = names["RemoteStreamToolbar"]
+        self.assertTrue(any(node.tag.endswith("ScrollViewer") and
+                            node.get("HorizontalScrollMode") == "Enabled" for node in toolbar.iter()))
+
     def test_text_and_primary_button_contrast(self):
         palette = dictionaries(ROOT / "Themes/Palette.xaml")
         controls = dictionaries(ROOT / "MainWindow.xaml")

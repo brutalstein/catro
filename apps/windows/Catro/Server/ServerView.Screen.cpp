@@ -651,23 +651,22 @@ void ServerView::UpdateScreenShareUi() {
     // stream grow until one real panel edge becomes limiting. fit_viewport() preserves the decoded
     // source aspect ratio while presentation scales independently from the encoder's no-upscale
     // policy.
-    const auto remote_max_stream_width =
-        stage_active_ && panel_width > 2.0 ? panel_width
-        : panel_width > 80.0
-            ? std::max(160.0, panel_width - 44.0)
-            : 720.0;
-    const auto remote_max_stream_height =
-        stage_active_ && panel_height > 2.0 ? panel_height
-        : panel_height > 140.0
-            ? std::max(120.0, panel_height - 120.0)
-            : 405.0;
+    const auto available_width = std::max(0.0, panel_width - (stage_active_ ? 0.0 : 44.0));
+    const auto call_controls_height = stage_active_ ? 0.0 : VoiceControlsBar().ActualHeight() + 32.0;
+    const auto available_height = std::max(0.0, panel_height - call_controls_height);
+    const auto remote_max_stream_width = available_width;
+    const auto remote_max_stream_height = stage_active_ ? available_height :
+        std::max(0.0, available_height - 44.0 - RemoteShareMetaText().ActualHeight() - 10.0);
+    RemoteShareHost().MaxWidth(available_width);
+    SharePreviewHost().MaxWidth(available_width);
 
     // Self-preview is not the primary content. Keep its surface bounded so maximizing Catro while
     // sharing cannot turn the optional local preview into a large extra GPU presentation workload.
     const auto local_max_stream_width =
         std::min(960.0, remote_max_stream_width);
     const auto local_max_stream_height =
-        std::min(720.0, remote_max_stream_height);
+        std::min(720.0, std::max(0.0, available_height - 44.0 -
+            std::max(100.0, LocalShareControls().ActualHeight()) - 10.0));
 
     ShareScreenButton().Content(
         box_value(
@@ -824,6 +823,7 @@ void ServerView::UpdateScreenShareUi() {
             snapshot.source_title.empty()
                 ? hstring{L"Starting…"}
                 : to_hstring(snapshot.source_title));
+        controls::ToolTipService::SetToolTip(ShareSourceText(), box_value(ShareSourceText().Text()));
 
         if (snapshot.quality_reduced && snapshot.encoded_height != 0 &&
             (encoder_max_height_ == 0 || snapshot.encoded_height < encoder_max_height_)) {
@@ -854,6 +854,7 @@ void ServerView::UpdateScreenShareUi() {
         } else {
             ShareMetaText().Text(L"Starting…");
         }
+        controls::ToolTipService::SetToolTip(ShareMetaText(), box_value(ShareMetaText().Text()));
 
         const auto local_source_width =
             snapshot.encoded_width != 0
@@ -871,10 +872,8 @@ void ServerView::UpdateScreenShareUi() {
         if (local_stage) {
             const auto local_size = fit_viewport(
                 local_source_width, local_source_height, panel_width, panel_height);
-            if (local_size.width > 0.0 && local_size.height > 0.0) {
-                LocalShareViewport().Width(local_size.width);
-                LocalShareViewport().Height(local_size.height);
-            }
+            LocalShareViewport().Width(local_size.width);
+            LocalShareViewport().Height(local_size.height);
             SharePreviewHost().HorizontalAlignment(xaml::HorizontalAlignment::Center);
             SharePreviewHost().VerticalAlignment(xaml::VerticalAlignment::Center);
             SharePreviewHost().Margin(xaml::Thickness{0.0});
@@ -884,13 +883,10 @@ void ServerView::UpdateScreenShareUi() {
                 fit_viewport(
                     local_source_width,
                     local_source_height,
-                    300.0,
-                    210.0);
-            if (local_size.width > 0.0 &&
-                local_size.height > 0.0) {
-                LocalShareViewport().Width(local_size.width);
-                LocalShareViewport().Height(local_size.height);
-            }
+                    std::min(300.0, available_width),
+                    std::min(210.0, local_max_stream_height));
+            LocalShareViewport().Width(local_size.width);
+            LocalShareViewport().Height(local_size.height);
             SharePreviewHost().HorizontalAlignment(
                 xaml::HorizontalAlignment::Right);
             SharePreviewHost().VerticalAlignment(
@@ -906,11 +902,8 @@ void ServerView::UpdateScreenShareUi() {
                     local_source_height,
                     local_max_stream_width,
                     local_max_stream_height);
-            if (local_size.width > 0.0 &&
-                local_size.height > 0.0) {
-                LocalShareViewport().Width(local_size.width);
-                LocalShareViewport().Height(local_size.height);
-            }
+            LocalShareViewport().Width(local_size.width);
+            LocalShareViewport().Height(local_size.height);
             SharePreviewHost().HorizontalAlignment(
                 xaml::HorizontalAlignment::Center);
             SharePreviewHost().VerticalAlignment(
@@ -944,7 +937,7 @@ void ServerView::UpdateScreenShareUi() {
                     snapshot.stream_audio_error)));
     } else {
         controls::ToolTipService::SetToolTip(
-            ShareMetaText(), nullptr);
+            ShareMetaText(), box_value(ShareMetaText().Text()));
     }
 
     if (snapshot.state ==

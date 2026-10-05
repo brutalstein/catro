@@ -133,7 +133,7 @@ VoicePipeline::CreateResult VoicePipeline::create(
 
 void VoicePipeline::set_input_threshold(std::optional<float> dbfs) noexcept {
     gate_mean_square_ = dbfs ? std::pow(10.0F, std::clamp(*dbfs, kSilenceDbfs, 0.0F) / 10.0F)
-                             : kSpeakingMeanSquare;
+                             : 0.0F;
 }
 
 void VoicePipeline::set_processing(

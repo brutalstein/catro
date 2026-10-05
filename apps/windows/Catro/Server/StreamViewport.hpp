@@ -24,15 +24,15 @@ struct ViewportSize {
         max_width <= 0.0 || max_height <= 0.0) {
         return {};
     }
-    const auto scale = std::min(
+    const auto scale = (std::min)(
         max_width / static_cast<double>(source_width),
         max_height / static_cast<double>(source_height));
     if (!std::isfinite(scale) || scale <= 0.0) {
         return {};
     }
     return {
-        std::max(2.0, static_cast<double>(source_width) * scale),
-        std::max(2.0, static_cast<double>(source_height) * scale),
+        static_cast<double>(source_width) * scale,
+        static_cast<double>(source_height) * scale,
     };
 }
 
@@ -49,7 +49,7 @@ inline void fit_swap_chain(IDXGISwapChain1* swap_chain, double width, double hei
     if (FAILED(swap_chain->QueryInterface(IID_PPV_ARGS(&scalable)))) {
         return;
     }
-    const auto scale = static_cast<float>(std::min(
+    const auto scale = static_cast<float>((std::min)(
         width / static_cast<double>(desc.Width),
         height / static_cast<double>(desc.Height)));
     const DXGI_MATRIX_3X2_F matrix{scale, 0.0f, 0.0f, scale, 0.0f, 0.0f};

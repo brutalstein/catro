@@ -96,6 +96,11 @@ public:
     [[nodiscard]] virtual std::optional<capabilities::AudioEndpointId> default_device(DeviceDirection) {
         return std::nullopt;
     }
+    // Platforms that can check endpoint presence let a saved choice fall back temporarily and
+    // return when plugged in again. Unknown availability preserves the explicit choice.
+    [[nodiscard]] virtual bool device_available(const capabilities::AudioEndpointId&, DeviceDirection) {
+        return true;
+    }
 
     [[nodiscard]] virtual OpenResult open_capture(const std::optional<capabilities::AudioEndpointId>& device,
                                                   CaptureSink& sink, StreamFailure failure) = 0;

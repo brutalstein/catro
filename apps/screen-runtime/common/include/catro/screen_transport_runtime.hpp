@@ -356,6 +356,7 @@ class StreamAudioOutput {
 public:
     virtual ~StreamAudioOutput() = default;
     [[nodiscard]] virtual bool start(StreamAudioRenderBridge& bridge) = 0;
+    [[nodiscard]] virtual bool healthy() { return true; }
     virtual void stop() noexcept = 0;
 };
 

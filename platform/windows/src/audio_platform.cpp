@@ -5,6 +5,7 @@
 
 #include <Windows.h>
 #include <audioclient.h>
+#include <audiopolicy.h>
 #include <avrt.h>
 #include <ks.h>
 #include <ksmedia.h>
@@ -40,8 +41,8 @@ constexpr DWORD kWaitMilliseconds = 2000;
 
 using Handle = std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)>;
 
-Handle make_event() {
-    return {CreateEventW(nullptr, FALSE, FALSE, nullptr), &CloseHandle};
+Handle make_event(bool manual_reset = false) {
+    return {CreateEventW(nullptr, manual_reset ? TRUE : FALSE, FALSE, nullptr), &CloseHandle};
 }
 
 std::uint32_t engine_frames(REFERENCE_TIME duration) {
@@ -50,7 +51,7 @@ std::uint32_t engine_frames(REFERENCE_TIME duration) {
 
 audio::AudioError error_for(HRESULT result) {
     auto code = audio::AudioErrorCode::os_failure;
-    if (result == AUDCLNT_E_DEVICE_INVALIDATED) {
+    if (result == AUDCLNT_E_DEVICE_INVALIDATED || result == AUDCLNT_E_RESOURCES_INVALIDATED) {
         code = audio::AudioErrorCode::device_lost;
     } else if (result == AUDCLNT_E_DEVICE_IN_USE || result == AUDCLNT_E_EXCLUSIVE_MODE_NOT_ALLOWED) {
         code = audio::AudioErrorCode::device_in_use;
@@ -137,11 +138,25 @@ private:
             opened.set_value(error_for(apartment));
             return;
         }
-        auto error = initialize();
-        const bool ready = !error;
-        opened.set_value(error);
-        if (ready) {
-            error = serve();
+        std::optional<audio::AudioError> error;
+        bool reported_open = false;
+        bool ready = false;
+        try {
+            error = initialize();
+            ready = !error;
+            opened.set_value(error);
+            reported_open = true;
+            if (ready) {
+                error = serve();
+            }
+        } catch (...) {
+            error = error_for(E_FAIL);
+            if (!reported_open) {
+                opened.set_value(error);
+            }
+        }
+        if (ready && !start_reported_) {
+            report_start(error.value_or(audio::AudioError{audio::AudioErrorCode::device_lost}));
         }
         client_.Reset();
         capture_.Reset();
@@ -210,6 +225,11 @@ private:
         if (FAILED(result)) {
             return error_for(result);
         }
+        // Keep this Catro session audible during Windows communications ducking.
+        ComPtr<IAudioSessionControl2> session;
+        if (SUCCEEDED(client_->GetService(IID_PPV_ARGS(&session)))) {
+            (void)session->SetDuckingPreference(TRUE);
+        }
         buffer_event_ = make_event();
         REFERENCE_TIME latency = 0;
         if (!buffer_event_ || FAILED(result = client_->SetEventHandle(buffer_event_.get())) ||
@@ -234,6 +254,7 @@ private:
     std::optional<audio::AudioError> serve() {
         const HANDLE before[] = {stop_event_.get(), start_event_.get()};
         if (WaitForMultipleObjects(2, before, FALSE, INFINITE) != WAIT_OBJECT_0 + 1) {
+            report_start(audio::AudioError{audio::AudioErrorCode::device_lost});
             return std::nullopt;
         }
         auto result = S_OK;
@@ -249,10 +270,10 @@ private:
             result = client_->Start();
         }
         if (FAILED(result)) {
-            started_.set_value(error_for(result));
+            report_start(error_for(result));
             return std::nullopt;
         }
-        started_.set_value(std::nullopt);
+        report_start(std::nullopt);
 
         DWORD task = 0;
         const auto mmcss = AvSetMmThreadCharacteristicsW(L"Pro Audio", &task);
@@ -267,7 +288,14 @@ private:
                 failure = error_for(HRESULT_FROM_WIN32(GetLastError()));
                 break;
             }
-            if (signalled == WAIT_OBJECT_0 + 1) {
+            if (signalled == WAIT_TIMEOUT) {
+                UINT32 padding = 0;
+                result = client_->GetCurrentPadding(&padding);
+                if (FAILED(result)) {
+                    failure = error_for(result);
+                    break;
+                }
+            } else if (signalled == WAIT_OBJECT_0 + 1) {
                 result = capture_ ? drain_capture() : fill_render();
                 if (FAILED(result)) {
                     failure = error_for(result);
@@ -325,16 +353,24 @@ private:
         return render_->ReleaseBuffer(available, 0);
     }
 
+    void report_start(std::optional<audio::AudioError> error) {
+        if (!start_reported_) {
+            started_.set_value(error);
+            start_reported_ = true;
+        }
+    }
+
     Direction direction_;
     std::optional<caps::AudioEndpointId> device_;
     audio::CaptureSink* sink_;
     audio::RenderSource* source_;
     audio::StreamFailure failure_;
     audio::StreamInfo info_;
-    Handle stop_event_ = make_event();
+    Handle stop_event_ = make_event(true);
     Handle start_event_ = make_event();
     Handle buffer_event_{nullptr, &CloseHandle};
     std::promise<std::optional<audio::AudioError>> started_;
+    bool start_reported_ = false;
     std::atomic<std::uint64_t> glitches_{0};
     // Stream thread only.
     ComPtr<IAudioClient> client_;
@@ -428,6 +464,31 @@ std::optional<caps::AudioEndpointId> WasapiAudioPlatform::default_device(audio::
         CoUninitialize();
     }
     return result;
+}
+
+bool WasapiAudioPlatform::device_available(const caps::AudioEndpointId& endpoint_id,
+                                          audio::DeviceDirection direction) {
+    const auto apartment = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    bool available = false;
+    {
+        ComPtr<IMMDeviceEnumerator> devices;
+        ComPtr<IMMDevice> device;
+        ComPtr<IMMEndpoint> endpoint;
+        const std::string_view value = endpoint_id.value;
+        const auto id = value.starts_with(kEndpointPrefix) ? wide(value.substr(kEndpointPrefix.size())) : L"";
+        DWORD state = 0;
+        EDataFlow flow = eAll;
+        available = !id.empty() &&
+            SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&devices))) &&
+            SUCCEEDED(devices->GetDevice(id.c_str(), &device)) &&
+            SUCCEEDED(device->GetState(&state)) && state == DEVICE_STATE_ACTIVE &&
+            SUCCEEDED(device.As(&endpoint)) && SUCCEEDED(endpoint->GetDataFlow(&flow)) &&
+            flow == (direction == audio::DeviceDirection::capture ? eCapture : eRender);
+    }
+    if (SUCCEEDED(apartment)) {
+        CoUninitialize();
+    }
+    return available;
 }
 
 } // namespace catro::platform::windows

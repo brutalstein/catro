@@ -354,7 +354,11 @@ void ServerView::UpdateVoiceUi() {
         return;
     }
 
-    if (deafened_) {
+    controls::ToolTipService::SetToolTip(VoiceStateText(),
+        snapshot.error[0] != '\0' ? box_value(to_hstring(std::string(snapshot.error))) : nullptr);
+    if (snapshot.error[0] != '\0') {
+        VoiceStateText().Text(L"Reconnecting audio…");
+    } else if (deafened_) {
         VoiceStateText().Text(L"Deafened");
     } else if (muted_) {
         VoiceStateText().Text(L"Muted");

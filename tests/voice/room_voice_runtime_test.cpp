@@ -15,6 +15,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -276,6 +277,88 @@ TEST_CASE("room voice runtime follows a new default microphone and survives a lo
     REQUIRE(wait_until([&] { return audio.capture_opens == 4; }));
     CHECK(audio.requested_capture() == "usb-mic");
     CHECK(host.snapshot().state == CATRO_VOICE_JOINED);
+}
+
+TEST_CASE("missing microphone leaves incoming voice audible and recovers without leaving the room") {
+    FakeRoomBus bus;
+    auto& room = bus.join();
+    auto& peer_room = bus.join();
+    FakeAudioPlatform audio(0.1F);
+    FakeAudioPlatform peer_audio(0.2F);
+    audio.capture_unavailable = true;
+    VoiceRuntimeHost host(audio, kFakeRoomApi);
+    VoiceRuntimeHost peer(peer_audio, kFakeRoomApi);
+    REQUIRE(peer.start(room_config(peer_room, 52)) == 0);
+    REQUIRE(host.start(room_config(room, 51)) == 0);
+    REQUIRE(wait_until([&] { return audible(audio) > 4800; }));
+    CHECK(host.snapshot().state == CATRO_VOICE_JOINED);
+    audio.capture_unavailable = false;
+    REQUIRE(wait_until([&] { return host.snapshot().sent_packets > 5; }));
+    CHECK(audio.render_opens == 1);
+    CHECK(room.state == CATRO_ROOM_JOINED);
+}
+
+TEST_CASE("selected unplugged microphone falls back and returns without restarting playback") {
+    FakeRoomBus bus;
+    auto& room = bus.join();
+    FakeAudioPlatform audio(0.1F);
+    VoiceRuntimeHost host(audio, kFakeRoomApi);
+    auto config = room_config(room, 61);
+    config.input_endpoint = "headset";
+    REQUIRE(host.start(config) == 0);
+    REQUIRE(wait_until([&] { return audio.capture_opens == 1; }));
+    audio.set_unavailable_device("headset");
+    audio.lose_capture();
+    REQUIRE(wait_until([&] { return audio.capture_opens >= 2 && audio.requested_capture().empty(); }));
+    CHECK(audio.render_opens == 1);
+    CHECK(host.snapshot().state == CATRO_VOICE_JOINED);
+    audio.set_unavailable_device("");
+    REQUIRE(wait_until([&] { return audio.requested_capture() == "headset"; }));
+    CHECK(audio.render_opens == 1);
+}
+
+TEST_CASE("room voice worker reports exceptions instead of terminating the application") {
+    FakeAudioPlatform audio(0.1F);
+    VoiceRuntimeHost host(audio, kFakeRoomApi, [](const auto&, auto&, auto&) -> int {
+        throw std::runtime_error("device worker failed");
+    });
+    CatroVoiceRuntimeConfig config{};
+    config.bind_address = config.peer_address = "127.0.0.1";
+    config.bind_port = 50000;
+    config.peer_port = 50001;
+    config.stream_id = 1;
+    config.jitter_packets = 2;
+    config.bitrate = 48000;
+    REQUIRE(host.start(config) == 0);
+    REQUIRE(wait_until([&] { return host.snapshot().state == CATRO_VOICE_FAILED; }));
+    CHECK(std::string_view{host.snapshot().error} == "device worker failed");
+}
+
+TEST_CASE("headphone output loss keeps microphone transmitting and does not end after ten seconds") {
+    FakeRoomBus bus;
+    auto& room = bus.join();
+    auto& peer_room = bus.join();
+    FakeAudioPlatform audio(0.2F);
+    FakeAudioPlatform peer_audio(0.1F);
+    VoiceRuntimeHost host(audio, kFakeRoomApi);
+    VoiceRuntimeHost peer(peer_audio, kFakeRoomApi);
+    REQUIRE(peer.start(room_config(peer_room, 72)) == 0);
+    REQUIRE(host.start(room_config(room, 71)) == 0);
+    REQUIRE(wait_until([&] { return host.snapshot().sent_packets > 5; }));
+    audio.render_unavailable = true;
+    audio.lose_render();
+    const auto before = host.snapshot().sent_packets;
+    REQUIRE(wait_until([&] { return host.snapshot().sent_packets > before + 25; }));
+    CHECK(audio.capture_opens == 1);
+    std::this_thread::sleep_for(10500ms);
+    CHECK(host.snapshot().state == CATRO_VOICE_JOINED);
+    const auto recovery_from = audible(audio);
+    audio.render_unavailable = false;
+    REQUIRE(wait_until([&] { return audible(audio) > recovery_from + 4800; }));
+    CHECK(host.snapshot().error[0] == '\0');
+    audio.set_default_render("headset-output");
+    REQUIRE(wait_until([&] { return audio.render_opens >= 3; }));
+    CHECK(audio.capture_opens == 1);
 }
 
 TEST_CASE("room voice runtime fails with the room error when the RTC room fails") {

@@ -76,9 +76,10 @@ private:
 
 class FakeRenderStream final : public audio::AudioStream {
 public:
-    FakeRenderStream(audio::RenderSource& source, std::atomic<std::uint64_t>& nonzero_samples)
+    FakeRenderStream(audio::RenderSource& source, std::atomic<std::uint64_t>& nonzero_samples,
+                     std::string device = "fake-out")
         : source_(source), nonzero_samples_(nonzero_samples),
-          info_{{"fake-out", capabilities::IdentityScope::persistent}, 48000, 2, 480, 0} {}
+          info_{{std::move(device), capabilities::IdentityScope::persistent}, 48000, 2, 480, 0} {}
 
     ~FakeRenderStream() override {
         request_stop();
@@ -135,29 +136,50 @@ public:
     audio::OpenResult open_capture(const std::optional<capabilities::AudioEndpointId>& device,
                                    audio::CaptureSink& sink,
                                    audio::StreamFailure failure) override {
+        if (capture_unavailable.load()) {
+            return audio::AudioError{audio::AudioErrorCode::device_not_found};
+        }
         if (capture_error) {
             return *capture_error;
         }
         std::scoped_lock lock(mutex_);
+        if (device && device->value == unavailable_device_) {
+            return audio::AudioError{audio::AudioErrorCode::device_not_found};
+        }
         requested_capture_ = device ? device->value : std::string{};
         capture_failure_ = std::move(failure);
         capture_opens.fetch_add(1, std::memory_order_relaxed);
         return std::unique_ptr<audio::AudioStream>(
-            std::make_unique<FakeCaptureStream>(sink, capture_sample_, default_capture_.value_or("fake-in")));
+            std::make_unique<FakeCaptureStream>(sink, capture_sample_, device ? device->value : default_capture_.value_or("fake-in")));
     }
 
     std::optional<capabilities::AudioEndpointId> default_device(audio::DeviceDirection direction) override {
         std::scoped_lock lock(mutex_);
-        if (direction != audio::DeviceDirection::capture || !default_capture_) {
+        const auto& chosen = direction == audio::DeviceDirection::capture ? default_capture_ : default_render_;
+        if (!chosen) {
             return std::nullopt;
         }
-        return capabilities::AudioEndpointId{*default_capture_, capabilities::IdentityScope::persistent};
+        return capabilities::AudioEndpointId{*chosen, capabilities::IdentityScope::persistent};
     }
 
     // Makes the next default-device poll report a new microphone, like plugging in a headset.
     void set_default_capture(std::string device) {
         std::scoped_lock lock(mutex_);
         default_capture_ = std::move(device);
+    }
+
+    void set_unavailable_device(std::string device) {
+        std::scoped_lock lock(mutex_);
+        unavailable_device_ = std::move(device);
+    }
+    void set_default_render(std::string device) {
+        std::scoped_lock lock(mutex_);
+        default_render_ = std::move(device);
+    }
+
+    bool device_available(const capabilities::AudioEndpointId& device, audio::DeviceDirection) override {
+        std::scoped_lock lock(mutex_);
+        return device.value != unavailable_device_;
     }
 
     // The device the last capture open asked for; empty for the system default.
@@ -178,24 +200,48 @@ public:
         }
     }
 
-    audio::OpenResult open_render(const std::optional<capabilities::AudioEndpointId>&,
+    void lose_render() {
+        audio::StreamFailure failure;
+        {
+            std::scoped_lock lock(mutex_);
+            failure = render_failure_;
+        }
+        if (failure) {
+            failure(audio::AudioError{audio::AudioErrorCode::device_lost});
+        }
+    }
+
+    audio::OpenResult open_render(const std::optional<capabilities::AudioEndpointId>& device,
                                   audio::RenderSource& source,
-                                  audio::StreamFailure) override {
+                                  audio::StreamFailure failure) override {
+        if (render_unavailable.load()) {
+            return audio::AudioError{audio::AudioErrorCode::device_not_found};
+        }
+        std::scoped_lock lock(mutex_);
+        render_failure_ = std::move(failure);
+        render_opens.fetch_add(1);
         return std::unique_ptr<audio::AudioStream>(
-            std::make_unique<FakeRenderStream>(source, rendered_nonzero_samples));
+            std::make_unique<FakeRenderStream>(source, rendered_nonzero_samples,
+                device ? device->value : default_render_.value_or("fake-out")));
     }
 
     // Set before start to make capture open fail like a missing or denied device.
     std::optional<audio::AudioError> capture_error;
     std::atomic<std::uint64_t> rendered_nonzero_samples{0};
     std::atomic<int> capture_opens{0};
+    std::atomic<int> render_opens{0};
+    std::atomic_bool capture_unavailable{false};
+    std::atomic_bool render_unavailable{false};
 
 private:
     float capture_sample_;
     std::mutex mutex_;
     std::optional<std::string> default_capture_;
+    std::optional<std::string> default_render_;
     std::string requested_capture_;
+    std::string unavailable_device_;
     audio::StreamFailure capture_failure_;
+    audio::StreamFailure render_failure_;
 };
 
 } // namespace catro::test

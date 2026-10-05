@@ -109,7 +109,7 @@ void ServerView::OnMessageContainerChanging(
     const auto divider = root.Children().GetAt(0).as<controls::Border>();
     divider.Child().as<controls::TextBlock>().Text(hstring{day_label});
     divider.Visibility(first_of_day ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
-    const auto header = root.Children().GetAt(1).as<controls::StackPanel>();
+    const auto header = root.Children().GetAt(1).as<controls::Grid>();
     text_at(header, 0).Text(hstring{author});
     constexpr wchar_t const* colors[] = {L"CatroChatCopperStyle", L"CatroChatSageStyle", L"CatroChatRoseStyle"};
     const auto color = author_id.empty() ? 0U : static_cast<unsigned>(author_id.back()) % 3U;
@@ -131,7 +131,7 @@ void ServerView::OnMessageContainerChanging(
 void ServerView::OnMemberContainerChanging(
     controls::ListViewBase const&,
     controls::ContainerContentChangingEventArgs const& args) {
-    const auto root = args.ItemContainer().ContentTemplateRoot().try_as<controls::StackPanel>();
+    const auto root = args.ItemContainer().ContentTemplateRoot().try_as<controls::Grid>();
     if (args.InRecycleQueue() || !root) {
         return;
     }
@@ -153,6 +153,7 @@ void ServerView::OnMemberContainerChanging(
     }
     const auto labels = root.Children().GetAt(1).as<controls::StackPanel>();
     text_at(labels, 0).Text(hstring{name});
+    controls::ToolTipService::SetToolTip(text_at(labels, 0), box_value(hstring{name}));
     std::wstring detail{role};
     if (speaking) {
         detail += L" · Speaking";

@@ -275,7 +275,14 @@ void ServerView::OpenStreamWindow() {
             CloseStreamWindow();
             UpdateScreenShareUi();
         });
-        stream_window_root_.Children().Append(toolbar);
+        controls::ScrollViewer toolbar_scroll;
+        toolbar_scroll.Content(toolbar);
+        toolbar_scroll.VerticalAlignment(xaml::VerticalAlignment::Top);
+        toolbar_scroll.HorizontalScrollMode(controls::ScrollMode::Enabled);
+        toolbar_scroll.HorizontalScrollBarVisibility(controls::ScrollBarVisibility::Auto);
+        toolbar_scroll.VerticalScrollMode(controls::ScrollMode::Disabled);
+        toolbar_scroll.VerticalScrollBarVisibility(controls::ScrollBarVisibility::Disabled);
+        stream_window_root_.Children().Append(toolbar_scroll);
         stream_window_root_.SizeChanged([this](auto const&, auto const&) {
             UpdateStreamWindowLayout();
         });

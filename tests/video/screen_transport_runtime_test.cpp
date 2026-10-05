@@ -416,11 +416,19 @@ namespace {
 struct FakeOutput final : StreamAudioOutput {
     std::atomic<int> starts{0};
     std::atomic<int> stops{0};
+    std::atomic_bool failed{false};
+    std::atomic_bool available{true};
 
     bool start(StreamAudioRenderBridge&) override {
         starts.fetch_add(1);
+        if (!available.load()) {
+            return false;
+        }
+        failed = false;
         return true;
     }
+
+    bool healthy() override { return !failed.load(); }
 
     void stop() noexcept override { stops.fetch_add(1); }
 };
@@ -486,6 +494,42 @@ TEST_CASE("stream audio flows through Opus framing only while the stream is watc
     receiver.join();
     CHECK(Clock::now() - started < 250ms);
     CHECK_FALSE(counters.remote_stream_audio_active.load());
+}
+
+TEST_CASE("stream audio reopens a lost output with bounded retries while video stays connected") {
+    FakeRoom sender_room;
+    FakeRoom listener;
+    sender_room.peer = &listener;
+    ScreenTransportCounters counters;
+    counters.remote_viewing_enabled = true;
+    StreamAudioSender sender(fake_api(), &sender_room, counters);
+    REQUIRE_FALSE(sender.start(128000, 77));
+    FakeOutput output;
+    std::atomic_bool stop{false};
+    std::jthread receiver([&](std::stop_token token) {
+        std::stop_callback on_stop(token, [&] { stop = true; });
+        run_stream_audio_receive_loop(fake_api(), &listener, counters, stop, output);
+    });
+    const auto feed_until = [&](const auto& condition, auto duration) {
+        const auto deadline = Clock::now() + duration;
+        while (Clock::now() < deadline) {
+            sender.send(tone(0));
+            std::this_thread::sleep_for(kStreamAudioFramePeriod);
+            if (condition()) { return true; }
+        }
+        return condition();
+    };
+    REQUIRE(feed_until([&] { return output.starts.load() == 1; }, 2s));
+    output.available = false;
+    output.failed = true;
+    REQUIRE(feed_until([&] { return output.stops.load() > 0; }, 2s));
+    const auto attempts = output.starts.load();
+    (void)feed_until([] { return false; }, 1s);
+    CHECK(output.starts.load() - attempts <= 3);
+    CHECK_FALSE(counters.remote_stream_audio_active.load());
+    output.available = true;
+    REQUIRE(feed_until([&] { return counters.remote_stream_audio_active.load(); }, 2s));
+    CHECK(output.starts.load() >= 2);
 }
 
 TEST_CASE("stream volume scales decoded stream audio and clips at full scale") {

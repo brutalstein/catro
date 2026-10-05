@@ -730,6 +730,7 @@ void run_stream_audio_receive_loop(const RoomScreenApi& api, CatroRoomRuntimeHan
     bool output_started = false;
     bool viewing_last = false;
     auto next_playout = Clock::now();
+    auto next_output_retry = Clock::time_point{};
 
     const auto reset_playout = [&] {
         jitter.resynchronize();
@@ -815,6 +816,15 @@ void run_stream_audio_receive_loop(const RoomScreenApi& api, CatroRoomRuntimeHan
         if (!viewing) {
             continue;
         }
+        if (output_started && !output.healthy()) {
+            stop_output();
+            next_output_retry = Clock::now() + std::chrono::milliseconds{500};
+            counters.remote_stream_audio_render_drops.fetch_add(1, std::memory_order_relaxed);
+            continue;
+        }
+        if (!output_started && Clock::now() < next_output_retry) {
+            continue;
+        }
         if (!playout_started) {
             if (jitter.peek() == voice::PlayoutKind::waiting) {
                 continue;
@@ -825,6 +835,8 @@ void run_stream_audio_receive_loop(const RoomScreenApi& api, CatroRoomRuntimeHan
             }
             if (!output_started) {
                 if (!output.start(bridge)) {
+                    output.stop();
+                    next_output_retry = Clock::now() + std::chrono::milliseconds{500};
                     counters.remote_stream_audio_render_drops.fetch_add(1, std::memory_order_relaxed);
                     reset_playout();
                     continue;
