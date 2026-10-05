@@ -5,6 +5,11 @@ endif()
 add_library(catro_rtc STATIC
     src/room_mesh_transport.cpp
 )
+if(APPLE)
+    target_sources(catro_rtc PRIVATE src/macos_trust.mm)
+    target_link_libraries(catro_rtc PRIVATE "-framework Foundation" "-framework Security")
+    target_compile_options(catro_rtc PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+endif()
 add_library(Catro::Rtc ALIAS catro_rtc)
 
 target_include_directories(catro_rtc

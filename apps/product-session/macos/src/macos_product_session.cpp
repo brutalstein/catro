@@ -552,6 +552,48 @@ struct ProductSession::Impl {
                                              : std::string{"Room connection error: "} + room.error);
             return;
         }
+
+        // room_start() only begins the asynchronous WSS join. On macOS, wait for the server's
+        // joined acknowledgement before opening CoreAudio or telling the user voice is connected.
+        media.status = "RTC connecting…";
+        publish();
+        const auto room_deadline =
+            std::chrono::steady_clock::now() +
+            std::chrono::seconds{12};
+        while (!stopping_.load(
+            std::memory_order_acquire)) {
+            const auto room =
+                deps_.media.screen.snapshot(room_);
+            if (room.state == CATRO_ROOM_JOINED) {
+                break;
+            }
+            if (room.state == CATRO_ROOM_FAILED) {
+                deps_.media.room_stop(room_);
+                fail_voice(
+                    room.error[0] == '\0'
+                        ? std::string{
+                              "Room connection lost"}
+                        : std::string{
+                              "Room connection lost: "} +
+                              room.error);
+                return;
+            }
+            if (std::chrono::steady_clock::now() >=
+                room_deadline) {
+                deps_.media.room_stop(room_);
+                fail_voice(
+                    "Room connection timed out.");
+                return;
+            }
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds{20});
+        }
+        if (stopping_.load(
+            std::memory_order_acquire)) {
+            deps_.media.room_stop(room_);
+            return;
+        }
+
         std::string input_device;
         std::string output_device;
         {

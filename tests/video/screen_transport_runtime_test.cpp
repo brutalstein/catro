@@ -506,10 +506,20 @@ TEST_CASE("stream audio reopens a lost output with bounded retries while video s
     REQUIRE_FALSE(sender.start(128000, 77));
     FakeOutput output;
     std::atomic_bool stop{false};
-    std::jthread receiver([&](std::stop_token token) {
-        std::stop_callback on_stop(token, [&] { stop = true; });
+    std::thread receiver([&] {
         run_stream_audio_receive_loop(fake_api(), &listener, counters, stop, output);
     });
+    struct StopReceiver final {
+        std::atomic_bool& stop;
+        std::thread& thread;
+
+        ~StopReceiver() {
+            stop.store(true, std::memory_order_release);
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+    } stop_receiver{stop, receiver};
     const auto feed_until = [&](const auto& condition, auto duration) {
         const auto deadline = Clock::now() + duration;
         while (Clock::now() < deadline) {
