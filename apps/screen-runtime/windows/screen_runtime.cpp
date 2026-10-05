@@ -69,6 +69,17 @@ constexpr std::array kEncoderFallbackBoxes{
     EncoderBox{1920, 540},
 };
 
+// A mid-stream encoder failure (a driver hiccup, the encoder briefly taken by another app, the
+// capture moving to another GPU) restarts the encoder instead of ending the share. Viewers keep
+// the last frame meanwhile; the share ends only after this many failed restarts in a row.
+constexpr auto kEncoderRetryInterval = 500ms;
+constexpr std::uint32_t kEncoderRetryLimit = 20;
+
+struct EncoderFailure {
+    const char* message;
+    std::int64_t native_code = 0;
+};
+
 [[nodiscard]] RoomScreenApi room_api() noexcept {
     return RoomScreenApi{
         .snapshot = &catro_room_runtime_snapshot,
@@ -932,18 +943,19 @@ struct WindowsScreenShareRuntime::Impl {
         std::uint32_t preview_accumulator = 0;
         bool preview_resources_live = false;
 
+        bool encoder_broken = false;
+        std::uint32_t encoder_retries = 0;
+        auto next_encoder_retry = Clock::time_point{};
+
         const auto configure_encoder =
-            [&](const GpuCaptureFrame& frame) -> bool {
+            [&](const GpuCaptureFrame& frame) -> std::optional<EncoderFailure> {
             auto extent = video::fit_encodable_video_extent(
                 frame.width,
                 frame.height,
                 config.max_width,
                 config.max_height);
             if (!extent) {
-                fail_share(
-                    ScreenShareErrorCode::encoder_failed,
-                    "source cannot be fitted to an even H.264 size");
-                return false;
+                return EncoderFailure{"source cannot be fitted to an even H.264 size"};
             }
 
             encoder.stop();
@@ -987,11 +999,7 @@ struct WindowsScreenShareRuntime::Impl {
                 reduced = true;
             }
             if (error) {
-                fail_share(
-                    ScreenShareErrorCode::encoder_failed,
-                    platform::windows::name(error->code),
-                    error->native_code);
-                return false;
+                return EncoderFailure{platform::windows::name(error->code), error->native_code};
             }
             if (reduced) {
                 trace_event("sender-encoder-reduced");
@@ -1011,6 +1019,20 @@ struct WindowsScreenShareRuntime::Impl {
                 extent->width, std::memory_order_relaxed);
             encoded_height_.store(
                 extent->height, std::memory_order_relaxed);
+            return std::nullopt;
+        };
+
+        // Returns false only when the share has to end.
+        const auto encoder_failed = [&](const EncoderFailure& failure) -> bool {
+            encoder.stop();
+            if (++encoder_retries > kEncoderRetryLimit) {
+                fail_share(ScreenShareErrorCode::encoder_failed, failure.message,
+                           failure.native_code);
+                return false;
+            }
+            trace_event("sender-encoder-retry");
+            encoder_broken = true;
+            next_encoder_retry = Clock::now() + kEncoderRetryInterval;
             return true;
         };
 
@@ -1032,11 +1054,16 @@ struct WindowsScreenShareRuntime::Impl {
                 return true;
             }
 
-            if (frame.width != current_source_width ||
+            if (encoder_broken && Clock::now() < next_encoder_retry) {
+                return true;
+            }
+            if (encoder_broken ||
+                frame.width != current_source_width ||
                 frame.height != current_source_height) {
-                if (!configure_encoder(frame)) {
-                    return false;
+                if (const auto failure = configure_encoder(frame)) {
+                    return encoder_failed(*failure);
                 }
+                encoder_broken = false;
             }
 
             if (!local_preview_enabled_.load(
@@ -1116,12 +1143,10 @@ struct WindowsScreenShareRuntime::Impl {
             }
             if (const auto error =
                     encoder.encode(frame, access_unit, video_sender.keyframe_requested())) {
-                fail_share(
-                    ScreenShareErrorCode::encoder_failed,
-                    platform::windows::name(error->code),
-                    error->native_code);
-                return false;
+                return encoder_failed(
+                    EncoderFailure{platform::windows::name(error->code), error->native_code});
             }
+            encoder_retries = 0;
             const auto encoded_before =
                 frames_encoded_.fetch_add(
                     1, std::memory_order_relaxed);
@@ -1163,7 +1188,10 @@ struct WindowsScreenShareRuntime::Impl {
             return true;
         };
 
-        if (!configure_encoder(first)) {
+        // The first start fails at once: a share that never started has nothing to keep live.
+        if (const auto failure = configure_encoder(first)) {
+            fail_share(ScreenShareErrorCode::encoder_failed, failure->message,
+                       failure->native_code);
             capture.stop();
             return;
         }

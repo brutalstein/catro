@@ -38,6 +38,11 @@ using platform::macos::VideoEncoderError;
 
 constexpr auto kFirstFrameTimeout = 3s;
 constexpr std::uint32_t kPreviewMaxFps = 10;
+// A mid-stream encoder failure (a VideoToolbox session invalidated by sleep or a GPU switch)
+// restarts the encoder instead of ending the share. Viewers keep the last frame meanwhile; the
+// share ends only after this many failed restarts in a row.
+constexpr auto kEncoderRetryInterval = 500ms;
+constexpr std::uint32_t kEncoderRetryLimit = 20;
 
 // Joins the stream-audio pump on every exit path of the sender worker.
 struct AudioPump {
@@ -517,17 +522,27 @@ struct MacScreenShareRuntime::Impl {
                 return;
             }
         };
-        const auto encoder_failed = [this](const VideoEncoderError& error) {
-            fail_share(platform::macos::name(error.code), error.native_code);
+        // VideoToolbox reports output failures on its own thread; the sender loop picks them up.
+        std::atomic<const char*> async_failure{nullptr};
+        std::atomic<std::int64_t> async_failure_code{0};
+        const auto encoder_failed = [&async_failure, &async_failure_code](
+                                        const VideoEncoderError& error) {
+            async_failure_code.store(error.native_code, std::memory_order_relaxed);
+            async_failure.store(platform::macos::name(error.code), std::memory_order_release);
         };
         MacH264HardwareEncoder encoder;
         std::uint32_t current_width = 0;
         std::uint32_t current_height = 0;
+        bool encoder_broken = false;
+        std::uint32_t encoder_retries = 0;
+        auto next_encoder_retry = Clock::time_point{};
         std::uint32_t preview_accumulator = 0;
         const auto preview_fps = std::min(config.fps, kPreviewMaxFps);
 
-        const auto configure_encoder = [&](const NativeVideoFrame& frame) -> bool {
+        const auto configure_encoder =
+            [&](const NativeVideoFrame& frame) -> std::optional<VideoEncoderError> {
             encoder.stop();
+            async_failure.store(nullptr, std::memory_order_relaxed);
             VideoEncoderConfig encoder_config;
             encoder_config.width = frame.width;
             encoder_config.height = frame.height;
@@ -537,8 +552,7 @@ struct MacScreenShareRuntime::Impl {
             encoder_config.max_access_unit_bytes = config.max_access_unit_bytes;
             encoder_config.require_hardware = true;
             if (const auto error = encoder.start(encoder_config, send_access_unit, encoder_failed)) {
-                fail_share(platform::macos::name(error->code), error->native_code);
-                return false;
+                return error;
             }
             current_width = frame.width;
             current_height = frame.height;
@@ -548,6 +562,17 @@ struct MacScreenShareRuntime::Impl {
                                  std::memory_order_relaxed);
             encoded_width_.store(current_width, std::memory_order_relaxed);
             encoded_height_.store(current_height, std::memory_order_relaxed);
+            return std::nullopt;
+        };
+        // Returns false only when the share has to end.
+        const auto restart_encoder_later = [&](const char* message, std::int64_t native_code) {
+            encoder.stop();
+            if (++encoder_retries > kEncoderRetryLimit) {
+                fail_share(message, native_code);
+                return false;
+            }
+            encoder_broken = true;
+            next_encoder_retry = Clock::now() + kEncoderRetryInterval;
             return true;
         };
         const auto update_preview = [&](const NativeVideoFrame& frame) {
@@ -571,8 +596,17 @@ struct MacScreenShareRuntime::Impl {
             if (!frame) {
                 return true;
             }
-            if ((frame.width != current_width || frame.height != current_height) && !configure_encoder(frame)) {
-                return false;
+            if (const auto* message = async_failure.exchange(nullptr, std::memory_order_acquire)) {
+                return restart_encoder_later(message, async_failure_code.load(std::memory_order_relaxed));
+            }
+            if (encoder_broken && Clock::now() < next_encoder_retry) {
+                return true;
+            }
+            if (encoder_broken || frame.width != current_width || frame.height != current_height) {
+                if (const auto error = configure_encoder(frame)) {
+                    return restart_encoder_later(platform::macos::name(error->code), error->native_code);
+                }
+                encoder_broken = false;
             }
             update_preview(frame);
             frame.pts_100ns = elapsed_100ns(started);
@@ -580,13 +614,15 @@ struct MacScreenShareRuntime::Impl {
                 encoder.set_bitrate(bitrate);
             }
             if (const auto error = encoder.encode(frame, video_sender.keyframe_requested())) {
-                fail_share(platform::macos::name(error->code), error->native_code);
-                return false;
+                return restart_encoder_later(platform::macos::name(error->code), error->native_code);
             }
+            encoder_retries = 0;
             return !should_stop_sender();
         };
 
-        if (!configure_encoder(first)) {
+        // The first start fails at once: a share that never started has nothing to keep live.
+        if (const auto error = configure_encoder(first)) {
+            fail_share(platform::macos::name(error->code), error->native_code);
             capture.stop();
             return;
         }
