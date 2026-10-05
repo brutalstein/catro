@@ -670,6 +670,54 @@ product::ShareRequest display_share() {
 
 } // namespace
 
+TEST_CASE("macOS product session waits for the signaling join before starting voice") {
+    MediaScope scope;
+    auto& media = scope.media;
+    {
+        std::scoped_lock lock(media.mutex);
+        media.room_reconnecting = true;
+    }
+    product::ProductSession session(online(seeded_directory()), {});
+    session.start();
+    REQUIRE(wait_until(session, synchronized_with_messages));
+
+    session.join_voice();
+    REQUIRE(wait_until(session, [&media](const auto& snapshot) {
+        return media.called("room_start") &&
+               snapshot.media.status == "RTC connecting…";
+    }));
+    {
+        std::scoped_lock lock(media.mutex);
+        CHECK(std::find(media.calls.begin(), media.calls.end(), "voice_start") ==
+              media.calls.end());
+        media.room_reconnecting = false;
+    }
+    REQUIRE(wait_until(session, joined));
+    CHECK(media.called("voice_start"));
+    session.stop();
+}
+
+TEST_CASE("macOS product session reports an asynchronous room failure before voice starts") {
+    MediaScope scope;
+    auto& media = scope.media;
+    {
+        std::scoped_lock lock(media.mutex);
+        media.room_error = "TLS connection failed";
+    }
+    product::ProductSession session(online(seeded_directory()), {});
+    session.start();
+    REQUIRE(wait_until(session, synchronized_with_messages));
+
+    session.join_voice();
+    REQUIRE(wait_until(session, [](const auto& snapshot) {
+        return snapshot.media.phase == product::VoicePhase::failed;
+    }));
+    CHECK(session.snapshot().media.status ==
+          "Room connection lost: TLS connection failed");
+    CHECK_FALSE(media.called("voice_start"));
+    session.stop();
+}
+
 TEST_CASE("macOS product session joins voice through provisioning, room, voice and listening") {
     MediaScope scope;
     auto& media = scope.media;
