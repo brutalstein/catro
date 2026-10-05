@@ -69,6 +69,11 @@ struct CaptureSource {
     std::string application_name;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+    // CGDirectDisplayID of the display containing this source. For display sources this equals
+    // native_id; for windows it is the display with the largest intersection. Zero for cameras.
+    // This lets product policy use the exact display/GPU/refresh-rate path instead of assuming
+    // the primary screen.
+    std::uint32_t display_id = 0;
     bool primary = false;
     // A window of a game: its app declares a games category (LSApplicationCategoryType) or runs
     // from a Steam library. Game windows list even while in another Space, e.g. full screen.

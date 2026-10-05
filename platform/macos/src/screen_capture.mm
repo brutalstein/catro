@@ -55,25 +55,31 @@ static_assert(oriented_pixels({3840, 2160}, 270) == video::VideoExtent{2160, 384
     return oriented_pixels(pixels, static_cast<int>(std::lround(CGDisplayRotation(display.displayID))));
 }
 
-[[nodiscard]] video::VideoExtent window_pixels(CGRect frame, NSArray<SCDisplay*>* displays) {
+[[nodiscard]] SCDisplay* window_display(CGRect frame, NSArray<SCDisplay*>* displays) {
     SCDisplay* selected = displays.firstObject;
     CGFloat largest_area = 0;
     for (SCDisplay* display in displays) {
         const CGRect intersection = CGRectIntersection(frame, display.frame);
-        if (CGRectIsNull(intersection)) continue;
+        if (CGRectIsNull(intersection)) {
+            continue;
+        }
         const CGFloat area = intersection.size.width * intersection.size.height;
         if (area > largest_area) {
             largest_area = area;
             selected = display;
         }
     }
+    return selected;
+}
+
+[[nodiscard]] video::VideoExtent window_pixels(CGRect frame, SCDisplay* display) {
     // ScreenCaptureKit descriptors use points, but its output configuration uses pixels. Use
     // the owning display's backing resolution so Retina windows aren't capped at half size.
-    const auto pixels = selected != nil ? display_pixels(selected) : video::VideoExtent{};
-    const double scale_x = selected != nil && selected.width > 0
-        ? static_cast<double>(pixels.width) / selected.width : 1.0;
-    const double scale_y = selected != nil && selected.height > 0
-        ? static_cast<double>(pixels.height) / selected.height : 1.0;
+    const auto pixels = display != nil ? display_pixels(display) : video::VideoExtent{};
+    const double scale_x = display != nil && display.width > 0
+        ? static_cast<double>(pixels.width) / display.width : 1.0;
+    const double scale_y = display != nil && display.height > 0
+        ? static_cast<double>(pixels.height) / display.height : 1.0;
     return {static_cast<std::uint32_t>(std::lround(frame.size.width * scale_x)),
             static_cast<std::uint32_t>(std::lround(frame.size.height * scale_y))};
 }
@@ -426,6 +432,7 @@ public:
                 .title = "Display " + std::to_string(display.displayID),
                 .width = pixels.width,
                 .height = pixels.height,
+                .display_id = display.displayID,
                 .primary = display.displayID == main_id,
             });
         }
@@ -447,7 +454,8 @@ public:
             if ((!window.onScreen || window.windowLayer != 0) && !found->second) {
                 continue;
             }
-            const auto pixels = window_pixels(window.frame, content.displays);
+            SCDisplay* display = window_display(window.frame, content.displays);
+            const auto pixels = window_pixels(window.frame, display);
             result.sources.push_back(CaptureSource{
                 .kind = CaptureSourceKind::window,
                 .native_id = window.windowID,
@@ -455,6 +463,7 @@ public:
                 .application_name = utf8(app.applicationName),
                 .width = pixels.width,
                 .height = pixels.height,
+                .display_id = display != nil ? display.displayID : 0,
                 .game = found->second,
             });
         }
