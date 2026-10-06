@@ -569,3 +569,20 @@ TEST_CASE("stream full screen fills Catro and narrow shares never show Catro") {
     CHECK(source.find("WDA_EXCLUDEFROMCAPTURE") != std::string::npos);
     CHECK(source.find("CaptureSourceKind::display") != std::string::npos);
 }
+
+
+TEST_CASE("Windows owner moderation is visible, authoritative, and bounded") {
+    const auto root = std::filesystem::path(CATRO_WINDOWS_XAML_DIR);
+    const auto xaml = read(root / "Server/ServerView.xaml");
+    const auto source = read_server_sources(root);
+
+    CHECK(xaml.find("x:Name=\"OwnerControlsBadge\"") != std::string::npos);
+    CHECK(xaml.find("Text=\"ADMIN\"") != std::string::npos);
+    CHECK(source.find("remove_directory_member") != std::string::npos);
+    CHECK(source.find("delete_directory_message") != std::string::npos);
+    CHECK(source.find("directory_server_->role == \"owner\"") != std::string::npos);
+    CHECK(source.find("CatroDangerButtonStyle") != std::string::npos);
+    CHECK(source.find("message_revision_") != std::string::npos);
+    CHECK(source.find("ResetMessages();") != std::string::npos);
+    CHECK(source.find("They will lose text and voice access immediately") != std::string::npos);
+}

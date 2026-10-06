@@ -89,7 +89,8 @@ void ServerView::OnMessageContainerChanging(
         return;
     }
     const auto row = unbox_value<hstring>(args.Item());
-    const auto [author_id, content] = split_line(row);
+    const auto [message_id, message_content] = split_line(row);
+    const auto [author_id, content] = split_line(message_content);
     const auto [author, rest] = split_line(content);
     const auto [timestamp, body] = split_line(rest);
     const auto milliseconds = std::stoll(std::wstring{timestamp});
@@ -100,7 +101,8 @@ void ServerView::OnMessageContainerChanging(
     bool first_of_day = args.ItemIndex() == 0;
     if (!first_of_day && args.ItemIndex() < list.Items().Size()) {
         const auto previous = unbox_value<hstring>(list.Items().GetAt(args.ItemIndex() - 1));
-        const auto previous_content = split_line(previous).second;
+        const auto previous_author_id = split_line(previous).second;
+        const auto previous_content = split_line(previous_author_id).second;
         const auto previous_rest = split_line(previous_content).second;
         const auto previous_timestamp = split_line(previous_rest).first;
         first_of_day = catro::shell::message_day(local) != catro::shell::message_day(
@@ -125,6 +127,13 @@ void ServerView::OnMessageContainerChanging(
     announcement += L" ";
     announcement += body;
     xaml::Automation::AutomationProperties::SetName(args.ItemContainer(), hstring{announcement});
+    const auto container = args.ItemContainer();
+    container.Tag(box_value(hstring{message_id}));
+    if (directory_server_ && directory_server_->role == "owner" && !message_id.empty()) {
+        container.ContextFlyout(MessageAdminFlyout());
+    } else {
+        container.ClearValue(xaml::UIElement::ContextFlyoutProperty());
+    }
     args.Handled(true);
 }
 
@@ -184,41 +193,278 @@ controls::Flyout ServerView::MemberVolumeFlyout() {
     if (member_volume_flyout_) {
         return member_volume_flyout_;
     }
+
+    controls::StackPanel panel;
+    panel.Width(260);
+    panel.Spacing(10);
+
+    controls::TextBlock title;
+    title.Text(L"Member controls");
+    title.FontSize(14);
+    title.FontWeight(Windows::UI::Text::FontWeight{600});
+    panel.Children().Append(title);
+
+    controls::TextBlock hint;
+    hint.Text(L"Personal voice volume");
+    hint.FontSize(11);
+    hint.Foreground(xaml::Application::Current().Resources().Lookup(
+        box_value(L"CatroTextTertiaryBrush")).as<Microsoft::UI::Xaml::Media::Brush>());
+    panel.Children().Append(hint);
+
     controls::Slider slider;
     slider.Header(box_value(L"Voice volume — 100%"));
     slider.Minimum(0);
     slider.Maximum(200);
     slider.StepFrequency(1);
-    slider.Width(220);
-    slider.ValueChanged([this](IInspectable const& sender, controls::Primitives::RangeBaseValueChangedEventArgs const& args) {
+    slider.ValueChanged([this](IInspectable const& sender,
+                               controls::Primitives::RangeBaseValueChangedEventArgs const& args) {
         sender.as<controls::Slider>().Header(box_value(
-            hstring{L"Voice volume — " + std::to_wstring(static_cast<int>(args.NewValue())) + L"%"}));
+            hstring{L"Voice volume — " +
+                    std::to_wstring(static_cast<int>(args.NewValue())) + L"%"}));
         if (member_volume_user_.empty()) {
             return;
         }
         auto preferences = catro::shell::voice_preferences();
-        preferences.user_volumes[member_volume_user_] = static_cast<float>(args.NewValue() / 100.0);
+        preferences.user_volumes[member_volume_user_] =
+            static_cast<float>(args.NewValue() / 100.0);
         catro::shell::save_voice_preferences(preferences);
         if (voice_runtime_ != nullptr) {
             catro_voice_runtime_set_user_volume(
-                voice_runtime_, member_volume_user_.c_str(), static_cast<float>(args.NewValue() / 100.0));
+                voice_runtime_, member_volume_user_.c_str(),
+                static_cast<float>(args.NewValue() / 100.0));
         }
     });
+    panel.Children().Append(slider);
+
+    controls::Border divider;
+    divider.Height(1);
+    divider.Background(xaml::Application::Current().Resources().Lookup(
+        box_value(L"CatroStrokeBrush")).as<Microsoft::UI::Xaml::Media::Brush>());
+    panel.Children().Append(divider);
+
+    controls::Button remove;
+    remove.Content(box_value(L"Remove from server"));
+    remove.HorizontalAlignment(xaml::HorizontalAlignment::Stretch);
+    remove.HorizontalContentAlignment(xaml::HorizontalAlignment::Center);
+    remove.Style(xaml::Application::Current().Resources().Lookup(
+        box_value(L"CatroDangerButtonStyle")).as<xaml::Style>());
+    remove.Visibility(xaml::Visibility::Collapsed);
+    remove.Click([this](auto&&, auto&&) {
+        const auto target = member_volume_user_;
+        if (!target.empty()) {
+            ConfirmRemoveMember(target);
+        }
+    });
+    panel.Children().Append(remove);
+    member_remove_button_ = remove;
+
     controls::Flyout flyout;
-    flyout.Content(slider);
+    flyout.Content(panel);
     flyout.Opening([this](IInspectable const& sender, auto&&) {
         const auto opened = sender.as<controls::Flyout>();
         const auto target = opened.Target();
-        // Clear first so moving the slider to the stored value does not write it back.
         member_volume_user_.clear();
-        const auto id = target ? to_string(unbox_value_or<hstring>(target.Tag(), hstring{})) : std::string{};
-        opened.Content().as<controls::Slider>().Value(
-            catro::shell::user_volume(catro::shell::voice_preferences().user_volumes, id) * 100.0);
+        const auto id = target
+            ? to_string(unbox_value_or<hstring>(target.Tag(), hstring{}))
+            : std::string{};
+        auto content = opened.Content().as<controls::StackPanel>();
+        content.Children().GetAt(2).as<controls::Slider>().Value(
+            catro::shell::user_volume(
+                catro::shell::voice_preferences().user_volumes, id) * 100.0);
         member_volume_user_ = id;
+
+        bool removable = false;
+        if (directory_server_ && directory_server_->role == "owner" &&
+            !moderation_pending_ && !id.empty()) {
+            const auto found = std::find_if(
+                roster_.begin(), roster_.end(),
+                [&](const auto& member) { return member.user_id == id; });
+            removable = found != roster_.end() && found->role != "owner";
+        }
+        member_remove_button_.Visibility(
+            removable ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
+        member_remove_button_.IsEnabled(removable);
     });
     flyout.Closed([this](auto&&, auto&&) { member_volume_user_.clear(); });
     member_volume_flyout_ = flyout;
     return flyout;
+}
+
+controls::Flyout ServerView::MessageAdminFlyout() {
+    if (message_admin_flyout_) {
+        return message_admin_flyout_;
+    }
+
+    controls::StackPanel panel;
+    panel.Width(220);
+    panel.Spacing(8);
+
+    controls::TextBlock label;
+    label.Text(L"OWNER ACTIONS");
+    label.FontSize(11);
+    label.FontWeight(Windows::UI::Text::FontWeight{600});
+    label.CharacterSpacing(70);
+    label.Foreground(xaml::Application::Current().Resources().Lookup(
+        box_value(L"CatroTextTertiaryBrush")).as<Microsoft::UI::Xaml::Media::Brush>());
+    panel.Children().Append(label);
+
+    controls::Button remove;
+    remove.Content(box_value(L"Delete message"));
+    remove.HorizontalAlignment(xaml::HorizontalAlignment::Stretch);
+    remove.HorizontalContentAlignment(xaml::HorizontalAlignment::Center);
+    remove.Style(xaml::Application::Current().Resources().Lookup(
+        box_value(L"CatroDangerButtonStyle")).as<xaml::Style>());
+    remove.Click([this](auto&&, auto&&) {
+        const auto message_id = message_admin_id_;
+        if (!message_id.empty()) {
+            ConfirmDeleteMessage(message_id);
+        }
+    });
+    panel.Children().Append(remove);
+
+    controls::Flyout flyout;
+    flyout.Content(panel);
+    flyout.Opening([this](IInspectable const& sender, auto&&) {
+        const auto opened = sender.as<controls::Flyout>();
+        const auto target = opened.Target();
+        message_admin_id_ = target
+            ? to_string(unbox_value_or<hstring>(target.Tag(), hstring{}))
+            : std::string{};
+        const bool owner = directory_server_ && directory_server_->role == "owner";
+        opened.Content().as<controls::StackPanel>().Children().GetAt(1)
+            .as<controls::Button>().IsEnabled(
+                owner && !moderation_pending_ && !message_admin_id_.empty());
+    });
+    flyout.Closed([this](auto&&, auto&&) { message_admin_id_.clear(); });
+    message_admin_flyout_ = flyout;
+    return flyout;
+}
+
+winrt::fire_and_forget ServerView::ConfirmRemoveMember(std::string user_id) {
+    auto lifetime = get_strong();
+    if (moderation_pending_ || !directory_service_ || directory_access_token_.empty() ||
+        !directory_server_ || directory_server_->role != "owner" || user_id.empty()) {
+        co_return;
+    }
+
+    const auto found = std::find_if(
+        roster_.begin(), roster_.end(),
+        [&](const auto& member) { return member.user_id == user_id; });
+    if (found == roster_.end() || found->role == "owner") {
+        co_return;
+    }
+    const auto display_name = found->display_name;
+
+    controls::ContentDialog dialog;
+    dialog.XamlRoot(ServerLayout().XamlRoot());
+    dialog.RequestedTheme(ActualTheme());
+    dialog.Title(box_value(hstring{L"Remove " + to_hstring(display_name) + L"?"}));
+    dialog.PrimaryButtonText(L"Remove member");
+    dialog.CloseButtonText(L"Cancel");
+
+    controls::TextBlock body;
+    body.Text(L"They will lose text and voice access immediately. They can request access again later.");
+    body.TextWrapping(xaml::TextWrapping::Wrap);
+    dialog.Content(body);
+
+    if (co_await dialog.ShowAsync() != controls::ContentDialogResult::Primary) {
+        co_return;
+    }
+    if (!directory_server_ || directory_server_->role != "owner" ||
+        directory_server_->id.empty()) {
+        co_return;
+    }
+
+    const auto generation = ++moderation_generation_;
+    moderation_pending_ = true;
+    const auto service = *directory_service_;
+    const auto access_token = directory_access_token_;
+    const auto server_id = directory_server_->id;
+    UiThread ui_thread;
+
+    co_await winrt::resume_background();
+    auto result = catro::platform::windows::remove_directory_member(
+        service, access_token, server_id, user_id);
+
+    co_await ui_thread;
+    if (generation != lifetime->moderation_generation_ ||
+        !lifetime->directory_server_ ||
+        lifetime->directory_server_->id != server_id) {
+        co_return;
+    }
+    lifetime->moderation_pending_ = false;
+
+    if (const auto* failure =
+            std::get_if<catro::platform::windows::DirectoryError>(&result)) {
+        lifetime->OnlineStatusText().Text(to_hstring(failure->message));
+        co_return;
+    }
+
+    lifetime->directory_server_ =
+        std::get<catro::platform::windows::DirectoryServer>(std::move(result));
+    std::wstring count = L"MEMBERS — ";
+    count += std::to_wstring(lifetime->directory_server_->member_count);
+    lifetime->MemberCountLabel().Text(hstring{count});
+    lifetime->OnlineStatusText().Text(L"Member removed.");
+    lifetime->ResetMembers();
+    lifetime->BeginMemberRefresh();
+}
+
+winrt::fire_and_forget ServerView::ConfirmDeleteMessage(std::string message_id) {
+    auto lifetime = get_strong();
+    if (moderation_pending_ || !directory_service_ || directory_access_token_.empty() ||
+        !directory_server_ || directory_server_->role != "owner" ||
+        directory_server_->text_channel_id.empty() || message_id.empty()) {
+        co_return;
+    }
+
+    controls::ContentDialog dialog;
+    dialog.XamlRoot(ServerLayout().XamlRoot());
+    dialog.RequestedTheme(ActualTheme());
+    dialog.Title(box_value(hstring{L"Delete this message?"}));
+    dialog.PrimaryButtonText(L"Delete");
+    dialog.CloseButtonText(L"Cancel");
+
+    controls::TextBlock body;
+    body.Text(L"This removes the message for everyone in this server.");
+    body.TextWrapping(xaml::TextWrapping::Wrap);
+    dialog.Content(body);
+
+    if (co_await dialog.ShowAsync() != controls::ContentDialogResult::Primary) {
+        co_return;
+    }
+
+    const auto generation = ++moderation_generation_;
+    moderation_pending_ = true;
+    const auto service = *directory_service_;
+    const auto access_token = directory_access_token_;
+    const auto server_id = directory_server_->id;
+    const auto channel_id = directory_server_->text_channel_id;
+    UiThread ui_thread;
+
+    co_await winrt::resume_background();
+    auto result = catro::platform::windows::delete_directory_message(
+        service, access_token, server_id, channel_id, message_id);
+
+    co_await ui_thread;
+    if (generation != lifetime->moderation_generation_ ||
+        !lifetime->directory_server_ ||
+        lifetime->directory_server_->id != server_id ||
+        lifetime->directory_server_->text_channel_id != channel_id) {
+        co_return;
+    }
+    lifetime->moderation_pending_ = false;
+
+    if (const auto* failure =
+            std::get_if<catro::platform::windows::DirectoryError>(&result)) {
+        lifetime->TextStatusText().Text(to_hstring(failure->message));
+        lifetime->TextStatusText().Visibility(xaml::Visibility::Visible);
+        co_return;
+    }
+
+    lifetime->OnlineStatusText().Text(L"Message deleted.");
+    lifetime->ResetMessages();
+    lifetime->BeginMessageRefresh();
 }
 
 void ServerView::ResetMembers() {
@@ -687,6 +933,7 @@ void ServerView::ResetMessages() {
         message_generation_ = 1;
     }
     message_cursor_ = 0;
+    message_revision_ = 0;
     message_display_day_.reset();
     MessageList().Items().Clear();
     TextEmptyState().Visibility(
@@ -702,7 +949,9 @@ void ServerView::AppendMessage(
         return;
     }
 
-    std::wstring display = to_hstring(message.author_id).c_str();
+    std::wstring display = to_hstring(message.id).c_str();
+    display += L"\n";
+    display += to_hstring(message.author_id).c_str();
     display += L"\n";
     display += to_hstring(message.author_display_name).c_str();
     display += L"\n";
@@ -809,6 +1058,16 @@ ServerView::BeginMessageRefresh() {
         std::get<
             catro::platform::windows::DirectoryMessagePage>(
                 std::move(result));
+
+    // A channel deletion epoch changes only when retained history was moderated. Cursor polling
+    // cannot represent a removed older row, so rebuild the bounded timeline from the server once.
+    if (after != 0 && page.revision != lifetime->message_revision_) {
+        lifetime->ResetMessages();
+        lifetime->message_revision_ = page.revision;
+        lifetime->BeginMessageRefresh();
+        co_return;
+    }
+    lifetime->message_revision_ = page.revision;
     lifetime->AppendMessages(page.messages);
     lifetime->TextStatusText().Text(L"");
     lifetime->TextStatusText().Visibility(
@@ -1115,6 +1374,10 @@ void ServerView::SetDirectorySession(
     const bool owner =
         server.role == "owner";
     ServerOwnerIcon().Visibility(
+        owner
+            ? xaml::Visibility::Visible
+            : xaml::Visibility::Collapsed);
+    OwnerControlsBadge().Visibility(
         owner
             ? xaml::Visibility::Visible
             : xaml::Visibility::Collapsed);

@@ -85,6 +85,9 @@ private:
     // Watched stream audio follows the saved volume, and deafen silences it.
     void ApplyStreamVolume();
     Microsoft::UI::Xaml::Controls::Flyout MemberVolumeFlyout();
+    Microsoft::UI::Xaml::Controls::Flyout MessageAdminFlyout();
+    winrt::fire_and_forget ConfirmRemoveMember(std::string user_id);
+    winrt::fire_and_forget ConfirmDeleteMessage(std::string message_id);
     winrt::fire_and_forget BeginMemberRefresh();
     void ResetAccessRequests();
     void UpdateAccessUi();
@@ -180,6 +183,11 @@ private:
     std::vector<catro::platform::windows::DirectoryMember> roster_;
     std::string member_volume_user_;
     Microsoft::UI::Xaml::Controls::Flyout member_volume_flyout_{nullptr};
+    Microsoft::UI::Xaml::Controls::Button member_remove_button_{nullptr};
+    std::string message_admin_id_;
+    Microsoft::UI::Xaml::Controls::Flyout message_admin_flyout_{nullptr};
+    std::uint64_t moderation_generation_ = 0;
+    bool moderation_pending_ = false;
     std::uint64_t member_generation_ = 1;
     std::uint64_t member_refresh_generation_ = 0;
     std::uint64_t access_generation_ = 1;
@@ -187,6 +195,7 @@ private:
     std::vector<catro::platform::windows::DirectoryJoinRequest>
         pending_join_requests_;
     std::uint64_t message_cursor_ = 0;
+    std::uint64_t message_revision_ = 0;
     std::optional<std::chrono::sys_days> message_display_day_;
     std::uint64_t message_generation_ = 1;
     std::uint64_t message_refresh_generation_ = 0;
