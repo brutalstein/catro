@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstring>
 #include <deque>
+#include <exception>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -560,6 +561,15 @@ TEST_CASE("stream audio reopens a lost output with bounded retries while video s
 }
 
 TEST_CASE("stream audio stops its device before unwinding the render bridge after a callback exception") {
+    auto api = fake_api();
+    SECTION("normal scheduling") {}
+    SECTION("playout resynchronizes after a delayed receive") {
+        api.receive_stream_audio = [](CatroRoomRuntimeHandle handle, std::byte* destination,
+                                      std::size_t capacity, std::uint32_t timeout_ms) noexcept {
+            if (timeout_ms != 0) { std::this_thread::sleep_for(100ms); }
+            return room(handle).audio.pop(destination, capacity, timeout_ms);
+        };
+    }
     FakeRoom sender_room;
     FakeRoom listener;
     sender_room.peer = &listener;
@@ -574,7 +584,28 @@ TEST_CASE("stream audio stops its device before unwinding the render bridge afte
     for (int index = 0; index < 5; ++index) { sender.send(tone(0)); }
     FakeOutput output;
     std::atomic_bool stop{false};
-    REQUIRE_THROWS_AS(run_stream_audio_receive_loop(fake_api(), &listener, counters, stop, output), std::runtime_error);
+    std::atomic_bool finished{false};
+    std::exception_ptr error;
+    std::thread receiver([&] {
+        try {
+            run_stream_audio_receive_loop(api, &listener, counters, stop, output);
+        } catch (...) {
+            error = std::current_exception();
+        }
+        finished.store(true);
+    });
+    // Resynchronization can discard the initial packets on a slow runner. Keep feeding until
+    // the callback throws, and stop the receiver even if the expected exception never arrives.
+    const auto deadline = Clock::now() + 4s;
+    while (!finished.load() && Clock::now() < deadline) {
+        sender.send(tone(0));
+        std::this_thread::sleep_for(kStreamAudioFramePeriod);
+    }
+    stop.store(true);
+    receiver.join();
+    REQUIRE(error != nullptr);
+    const auto rethrow_error = [&] { std::rethrow_exception(error); };
+    REQUIRE_THROWS_AS(rethrow_error(), std::runtime_error);
     CHECK(output.starts.load() == 1);
     CHECK(output.stops.load() == 1);
     CHECK_FALSE(counters.remote_stream_audio_active.load());
