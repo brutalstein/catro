@@ -1,7 +1,9 @@
-name: release-macos
+name: release-stable
 
-# Builds the production macOS packages on both architectures and uploads them as one workflow
-# artifact. It never creates a tag or a GitHub Release; a maintainer attaches the verified assets.
+# Catro's in-app updaters on Windows and macOS intentionally share /releases/latest.
+# A stable release therefore publishes all platform assets together, even when the product
+# feature in the release is Windows-only, so no installed client is ever pointed at a tag
+# missing its architecture-specific package.
 on:
   workflow_dispatch:
     inputs:
@@ -9,11 +11,48 @@ on:
         description: Production Catro service (HTTPS origin)
         required: true
         default: https://51-170-186-61.sslip.io
+  push:
+    branches: [main]
+    paths:
+      - CMakeLists.txt
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: release-stable
+  cancel-in-progress: false
+
+env:
+  DEFAULT_CATRO_SERVICE_URL: https://51-170-186-61.sslip.io
 
 jobs:
+  windows:
+    runs-on: windows-2025
+    env:
+      CATRO_SERVICE_URL: ${{ inputs.service_url || 'https://51-170-186-61.sslip.io' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prerequisites
+        run: ./scripts/bootstrap.ps1
+      - name: Build release
+        run: ./scripts/build.ps1 -Configuration Release
+      - name: Test release
+        run: ./scripts/test.ps1 -Configuration Release
+      - name: Package Windows
+        shell: pwsh
+        run: ./scripts/package-windows.ps1 -Configuration Release -SkipBuild -ServiceUrl "$env:CATRO_SERVICE_URL"
+      - name: Test Windows installer
+        shell: pwsh
+        run: ./tests/installers/windows-installer-test.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: |
+            out/dist/Catro-windows-x64.zip
+            out/dist/Catro-windows-x64.zip.sha256
+          if-no-files-found: error
+
   macos:
     strategy:
       fail-fast: false
@@ -21,22 +60,22 @@ jobs:
         runner: [macos-15, macos-15-intel]
     runs-on: ${{ matrix.runner }}
     env:
-      CATRO_SERVICE_URL: ${{ inputs.service_url }}
+      CATRO_SERVICE_URL: ${{ inputs.service_url || 'https://51-170-186-61.sslip.io' }}
     steps:
       - uses: actions/checkout@v4
       - name: Prerequisites
         run: scripts/bootstrap.sh
-      - name: Build and test
+      - name: Build and test release
         run: |
           scripts/build.sh Release
           scripts/test.sh Release
-      - name: Package
+      - name: Package macOS
         run: scripts/package-macos.sh Release
       - name: Test installer and package
         env:
           CATRO_TEST_BUILT_APP: out/build/macos-clang/Release/Catro.app
         run: tests/installers/macos-installer-test.sh
-      - name: Launch and quit the packaged app
+      - name: Launch and quit packaged app
         run: |
           set -eu
           app_root=$(mktemp -d)
@@ -62,8 +101,61 @@ jobs:
           echo 'macOS lifecycle smoke passed.'
       - uses: actions/upload-artifact@v4
         with:
-          name: catro-${{ matrix.runner }}
+          name: release-${{ matrix.runner }}
           path: |
             out/dist/Catro-macos-*.zip
             out/dist/Catro-macos-*.zip.sha256
           if-no-files-found: error
+
+  publish:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -nE 's/^project\(Catro VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      - name: Validate release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for asset in             Catro-windows-x64.zip             Catro-windows-x64.zip.sha256             Catro-macos-arm64.zip             Catro-macos-arm64.zip.sha256             Catro-macos-x64.zip             Catro-macos-x64.zip.sha256; do
+            test -s "release-assets/$asset" || { echo "Missing release asset: $asset" >&2; exit 1; }
+          done
+          tag="${{ steps.version.outputs.tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Release tag already exists: $tag" >&2
+            exit 1
+          fi
+      - name: Publish GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          tag="${{ steps.version.outputs.tag }}"
+          cat > release-notes.md <<'EOF'
+          Windows owner administration update.
+
+          - Server owners can delete any message in their own server.
+          - Server owners can remove non-owner members with immediate text and voice revocation.
+          - Active voice connections are disconnected when a member is removed.
+          - Owner-only moderation is enforced by the signaling backend, not only hidden in the UI.
+          - Windows adds modern owner actions for member and message moderation with confirmation dialogs.
+          - Message deletion synchronization is channel-scoped and bounded.
+
+          macOS receives the matching versioned package because Catro currently uses one shared stable update channel across platforms; the new administration UI remains Windows-only.
+          EOF
+          gh release create "$tag"             release-assets/Catro-windows-x64.zip             release-assets/Catro-windows-x64.zip.sha256             release-assets/Catro-macos-arm64.zip             release-assets/Catro-macos-arm64.zip.sha256             release-assets/Catro-macos-x64.zip             release-assets/Catro-macos-x64.zip.sha256             scripts/install-windows.ps1             scripts/uninstall-windows.ps1             scripts/install-macos.sh             --target "$GITHUB_SHA"             --title "Catro $version"             --notes-file release-notes.md
