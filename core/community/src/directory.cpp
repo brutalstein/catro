@@ -516,7 +516,7 @@ DirectoryMessagesResult parse_directory_messages(
         }
         DirectoryMessagePage page;
         page.next_after = value.at("next_after").get<std::uint64_t>();
-        page.revision = value.value("revision", page.next_after);
+        page.revision = value.value("revision", std::uint64_t{0});
         page.messages.reserve(items.size());
         std::unordered_set<std::string> ids;
         ids.reserve(items.size());
@@ -533,8 +533,7 @@ DirectoryMessagesResult parse_directory_messages(
             page.messages.push_back(*parsed);
         }
         if ((!page.messages.empty() && page.next_after != page.messages.back().sequence) ||
-            (page.messages.empty() && page.next_after != after) ||
-            page.revision < page.next_after) {
+            (page.messages.empty() && page.next_after != after)) {
             return malformed<DirectoryMessagesResult>("message cursor is inconsistent");
         }
         return page;

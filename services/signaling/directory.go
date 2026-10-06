@@ -465,10 +465,6 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 				maximumSequence = message.Sequence
 			}
 		}
-		if d.state.MessageRevisions[key] < previous {
-			d.state.MessageRevisions[key] = previous
-			migrationDirty = true
-		}
 	}
 	if d.state.NextMessageSequence <= maximumSequence {
 		if maximumSequence == ^uint64(0) {
@@ -1868,9 +1864,6 @@ func (d *directory) handleMessageList(
 		}
 	}
 	revision := d.state.MessageRevisions[messageKey(serverID, channelID)]
-	if revision < nextAfter {
-		revision = nextAfter
-	}
 	writeAPIJSON(w, http.StatusOK, map[string]any{
 		"messages":   result,
 		"next_after": nextAfter,
@@ -1957,9 +1950,7 @@ func (d *directory) handleMessageSend(
 
 	sequence := d.state.NextMessageSequence
 	previousSequence := sequence
-	previousRevision := d.state.MessageRevisions[key]
 	d.state.NextMessageSequence++
-	d.state.MessageRevisions[key] = sequence
 	message := directoryMessage{
 		ID:        messageID,
 		Sequence:  sequence,
@@ -1974,7 +1965,6 @@ func (d *directory) handleMessageSend(
 
 	if err := d.persistLocked(); err != nil {
 		d.state.NextMessageSequence = previousSequence
-		d.state.MessageRevisions[key] = previousRevision
 		if currentExisted {
 			d.state.Messages[key] = previousCurrent
 		} else {
