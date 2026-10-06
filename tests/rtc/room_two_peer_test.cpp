@@ -1,6 +1,7 @@
 #include <catro/rtc/room_mesh_transport.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/internal/catch_test_failure_exception.hpp>
 #include <nlohmann/json.hpp>
 #include <rtc/rtc.hpp>
 
@@ -31,7 +32,11 @@ namespace {
 // Destroy the peers and relay before waiting for the library's background work to finish.
 struct RtcScope {
     ~RtcScope() {
-        CHECK(::rtc::Cleanup().wait_for(10s) == std::future_status::ready);
+        try {
+            CHECK(::rtc::Cleanup().wait_for(10s) == std::future_status::ready);
+        } catch (const Catch::TestFailureException&) {
+            // Catch2 already recorded the failure; its abort must not escape a destructor.
+        }
     }
 };
 
