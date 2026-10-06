@@ -252,6 +252,7 @@ controls::Flyout ServerView::MemberVolumeFlyout() {
     remove.Click([this](auto&&, auto&&) {
         const auto target = member_volume_user_;
         if (!target.empty()) {
+            member_volume_flyout_.Hide();
             ConfirmRemoveMember(target);
         }
     });
@@ -317,6 +318,7 @@ controls::Flyout ServerView::MessageAdminFlyout() {
     remove.Click([this](auto&&, auto&&) {
         const auto message_id = message_admin_id_;
         if (!message_id.empty()) {
+            message_admin_flyout_.Hide();
             ConfirmDeleteMessage(message_id);
         }
     });
@@ -1317,8 +1319,10 @@ void ServerView::SetDirectorySession(
     if (server_changed) {
         ++voice_join_generation_;
         ++invite_generation_;
+        ++moderation_generation_;
         voice_join_pending_ = false;
         invite_pending_ = false;
+        moderation_pending_ = false;
         // Keep an in-flight access decision marked pending across server switches. Its generation
         // check will discard stale presentation state after completion, while this flag prevents a
         // second owner decision from overlapping the first request.
