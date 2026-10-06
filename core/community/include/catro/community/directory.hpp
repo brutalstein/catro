@@ -126,6 +126,8 @@ struct DirectoryMessage {
 struct DirectoryMessagePage {
     std::vector<DirectoryMessage> messages;
     std::uint64_t next_after = 0;
+    // Monotonic service-side message mutation revision. It also advances on owner deletion.
+    std::uint64_t revision = 0;
 
     friend bool operator==(const DirectoryMessagePage&, const DirectoryMessagePage&) = default;
 };
