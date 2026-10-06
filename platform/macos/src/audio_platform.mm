@@ -459,4 +459,9 @@ std::optional<caps::AudioEndpointId> CoreAudioPlatform::default_device(audio::De
     return caps::AudioEndpointId{"coreaudio:" + *uid + std::string(suffix_of(native)), caps::IdentityScope::persistent};
 }
 
+bool CoreAudioPlatform::device_available(const caps::AudioEndpointId& device, audio::DeviceDirection direction) {
+    const auto native = direction == audio::DeviceDirection::capture ? Direction::capture : Direction::render;
+    return resolve(device, native).has_value();
+}
+
 } // namespace catro::platform::macos

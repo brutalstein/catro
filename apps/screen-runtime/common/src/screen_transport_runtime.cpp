@@ -419,6 +419,7 @@ std::optional<ScreenShareError> run_video_receive_loop(const VideoReceiveContext
     bool viewing_last = false;
     bool first_frame_traced = false;
     std::int64_t last_keyframe_request_ns = 0;
+    auto next_decoder_retry = Clock::time_point{};
 
     // Asks the sharer for an IDR instead of waiting out its GOP; repeated while still waiting.
     const auto request_keyframe = [&] {
@@ -447,6 +448,16 @@ std::optional<ScreenShareError> run_video_receive_loop(const VideoReceiveContext
                                     ? room_error_text(context.api, config.room_runtime, "RTC room video receive failed")
                                     : udp_error_text(failure),
                                 0};
+    };
+    const auto recover_viewer = [&](ScreenShareError failure) -> std::optional<ScreenShareError> {
+        if (failure.code != ScreenShareErrorCode::decoder_failed &&
+            failure.code != ScreenShareErrorCode::remote_present_failed) {
+            return failure;
+        }
+        release_viewer();
+        next_decoder_retry = Clock::now() + std::chrono::milliseconds{500};
+        request_keyframe();
+        return std::nullopt;
     };
     const auto synchronize_viewing_state = [&] {
         auto requested = counters.remote_viewing_enabled.load(std::memory_order_acquire);
@@ -479,14 +490,14 @@ std::optional<ScreenShareError> run_video_receive_loop(const VideoReceiveContext
             return std::nullopt;
         }
         if (gate.awaiting_keyframe()) {
-            if (!frame.keyframe) {
+            if (!frame.keyframe || Clock::now() < next_decoder_retry) {
                 request_keyframe();
                 return std::nullopt;
             }
             if (!gate.decoder_open()) {
                 if (auto failure = viewer.start_decoder()) {
                     counters.remote_decode_failures.fetch_add(1, std::memory_order_relaxed);
-                    return failure;
+                    return recover_viewer(std::move(*failure));
                 }
                 trace("receiver-decoder-started");
             }
@@ -496,7 +507,7 @@ std::optional<ScreenShareError> run_video_receive_loop(const VideoReceiveContext
         if (failure && failure->code == ScreenShareErrorCode::decoder_failed) {
             counters.remote_decode_failures.fetch_add(1, std::memory_order_relaxed);
         }
-        return failure;
+        return failure ? recover_viewer(std::move(*failure)) : std::nullopt;
     };
 
     std::optional<ScreenShareError> fatal;
@@ -728,6 +739,18 @@ void run_stream_audio_receive_loop(const RoomScreenApi& api, CatroRoomRuntimeHan
     voice::PlayoutFrame playout;
     bool playout_started = false;
     bool output_started = false;
+    // The device callback borrows bridge; stop it before bridge is destroyed, including exceptions.
+    struct OutputCleanup {
+        StreamAudioOutput& output;
+        bool& started;
+        ScreenTransportCounters& counters;
+        ~OutputCleanup() {
+            if (started) {
+                output.stop();
+            }
+            counters.remote_stream_audio_active.store(false, std::memory_order_release);
+        }
+    } cleanup{output, output_started, counters};
     bool viewing_last = false;
     auto next_playout = Clock::now();
     auto next_output_retry = Clock::time_point{};
@@ -865,10 +888,6 @@ void run_stream_audio_receive_loop(const RoomScreenApi& api, CatroRoomRuntimeHan
             stop_output();
         }
     }
-    if (output_started) {
-        output.stop();
-    }
-    counters.remote_stream_audio_active.store(false, std::memory_order_release);
 }
 
 } // namespace catro::screen

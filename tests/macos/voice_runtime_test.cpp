@@ -1,6 +1,24 @@
 #include <catro/voice_runtime.h>
+#include <catro/platform/macos/audio_platform.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+
+TEST_CASE("macOS audio availability rejects missing endpoints and mismatched directions") {
+    catro::platform::macos::CoreAudioPlatform platform;
+    using catro::audio::DeviceDirection;
+    const catro::capabilities::AudioEndpointId missing{
+        "coreaudio:catro-test-nonexistent-device:input", catro::capabilities::IdentityScope::persistent};
+    CHECK_FALSE(platform.device_available(missing, DeviceDirection::capture));
+    CHECK_FALSE(platform.device_available(missing, DeviceDirection::render));
+    if (const auto input = platform.default_device(DeviceDirection::capture)) {
+        CHECK(platform.device_available(*input, DeviceDirection::capture));
+        CHECK_FALSE(platform.device_available(*input, DeviceDirection::render));
+    }
+    if (const auto output = platform.default_device(DeviceDirection::render)) {
+        CHECK(platform.device_available(*output, DeviceDirection::render));
+        CHECK_FALSE(platform.device_available(*output, DeviceDirection::capture));
+    }
+}
 
 TEST_CASE("macOS voice runtime C ABI has deterministic idle control semantics") {
     const auto handle = catro_voice_runtime_create();

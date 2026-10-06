@@ -235,11 +235,11 @@ TEST_CASE("room voice runtime mixes four remote talkers for a five-participant r
     CHECK(listener.snapshot().state == CATRO_VOICE_JOINED);
 }
 
-TEST_CASE("room voice runtime reports an audio device failure without touching the room") {
+TEST_CASE("room voice runtime reports an unsupported audio format without touching the room") {
     FakeRoomBus bus;
     auto& room = bus.join();
     FakeAudioPlatform audio(0.1F);
-    audio.capture_error = audio::AudioError{audio::AudioErrorCode::permission_denied};
+    audio.capture_error = audio::AudioError{audio::AudioErrorCode::format_unsupported};
     VoiceRuntimeHost host(audio, kFakeRoomApi);
 
     REQUIRE(host.start(room_config(room, 7)) == 0);
@@ -248,6 +248,24 @@ TEST_CASE("room voice runtime reports an audio device failure without touching t
     CHECK(snapshot.exit_code == 5);
     CHECK(std::string_view{snapshot.error}.find("audio") != std::string_view::npos);
     CHECK(snapshot.sent_packets == 0);
+}
+
+TEST_CASE("denied microphone permission leaves incoming room voice audible") {
+    FakeRoomBus bus;
+    auto& room = bus.join();
+    auto& peer_room = bus.join();
+    FakeAudioPlatform audio(0.1F);
+    FakeAudioPlatform peer_audio(0.2F);
+    audio.capture_error = audio::AudioError{audio::AudioErrorCode::permission_denied};
+    VoiceRuntimeHost host(audio, kFakeRoomApi);
+    VoiceRuntimeHost peer(peer_audio, kFakeRoomApi);
+    REQUIRE(peer.start(room_config(peer_room, 52)) == 0);
+    REQUIRE(host.start(room_config(room, 51)) == 0);
+    REQUIRE(wait_until([&] { return audible(audio) > 4800; }));
+    CHECK(host.snapshot().state == CATRO_VOICE_JOINED);
+    CHECK(host.snapshot().sent_packets == 0);
+    CHECK(audio.render_opens == 1);
+    CHECK(room.state == CATRO_ROOM_JOINED);
 }
 
 TEST_CASE("room voice runtime follows a new default microphone and survives a lost device") {

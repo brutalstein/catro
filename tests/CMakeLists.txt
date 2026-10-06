@@ -167,7 +167,7 @@ if(APPLE)
     target_link_libraries(catro_macos_directory_client_test PRIVATE Catro::Macos "-framework Security")
 
     catro_add_test(macos_voice_runtime macos/voice_runtime_test.cpp)
-    target_link_libraries(catro_macos_voice_runtime_test PRIVATE catro_voice_runtime)
+    target_link_libraries(catro_macos_voice_runtime_test PRIVATE catro_voice_runtime Catro::Macos)
 
     catro_add_test(macos_screen_capture macos/screen_capture_test.mm)
     target_link_libraries(catro_macos_screen_capture_test PRIVATE Catro::Macos)

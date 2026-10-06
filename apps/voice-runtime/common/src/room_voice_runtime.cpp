@@ -119,8 +119,8 @@ int run_room_voice(const tools::VoicePeerOptions& options,
         audio_sessions[index] = std::make_unique<audio::ExternalAudioSession>(
             platform, [&, index](audio::AudioError) { audio_failed[index].store(true, std::memory_order_release); });
         if (const auto failure = reopen_audio(index);
-            failure && (failure->code == audio::AudioErrorCode::permission_denied ||
-                        failure->code == audio::AudioErrorCode::format_unsupported)) {
+            failure && (failure->code == audio::AudioErrorCode::format_unsupported ||
+                        (index != 0 && failure->code == audio::AudioErrorCode::permission_denied))) {
             error_text = std::string{"audio: "} + std::string{audio::name(failure->code)};
             return tools::voice_peer_audio_failed;
         }

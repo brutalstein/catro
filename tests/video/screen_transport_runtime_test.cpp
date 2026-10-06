@@ -16,6 +16,7 @@
 #include <deque>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -53,12 +54,17 @@ struct FakeViewer final : RemoteVideoViewer {
     std::atomic<int> keyframes{0};
     std::atomic<std::int64_t> last_pts{-1};
     std::atomic_bool fail_decode{false};
+    std::atomic_bool fail_start{false};
+    std::atomic_bool fail_present{false};
     ScreenTransportCounters* counters = nullptr;
 
     void release() noexcept override { releases.fetch_add(1); }
 
     std::optional<ScreenShareError> start_decoder() override {
         decoder_starts.fetch_add(1);
+        if (fail_start.load()) {
+            return ScreenShareError{ScreenShareErrorCode::decoder_failed, "fake startup failure", 8};
+        }
         return std::nullopt;
     }
 
@@ -66,6 +72,9 @@ struct FakeViewer final : RemoteVideoViewer {
                                                        std::int64_t pts_100ns) override {
         if (fail_decode.load()) {
             return ScreenShareError{ScreenShareErrorCode::decoder_failed, "fake decode failure", 7};
+        }
+        if (fail_present.load()) {
+            return ScreenShareError{ScreenShareErrorCode::remote_present_failed, "fake GPU loss", 9};
         }
         if (annex_b.size() > 4 && (std::to_integer<int>(annex_b[4]) & 0x1F) == 7) {
             keyframes.fetch_add(1);
@@ -374,7 +383,7 @@ TEST_CASE("screen receive stays responsive to stop under an endless datagram flo
     CHECK(counters.remote_packet_rejects.load() == counters.remote_packets.load());
 }
 
-TEST_CASE("screen receive reports decoder and missing-transport failures as fatal") {
+TEST_CASE("screen receive recovers decode, startup and presentation failures on a fresh keyframe") {
     FakeRoom sender_room;
     FakeRoom listener;
     sender_room.peer = &listener;
@@ -382,24 +391,32 @@ TEST_CASE("screen receive reports decoder and missing-transport failures as fata
     counters.remote_viewing_enabled = true;
     FakeViewer viewer;
     viewer.counters = &counters;
-    viewer.fail_decode = true;
-    {
-        ReceiveWorker worker(listener, counters, viewer);
-        VideoSender sender(fake_api(), &sender_room, nullptr, rtp(51), counters);
-        REQUIRE(sender.send(access_unit(true), 0).status == VideoSendStatus::sent);
-        REQUIRE(eventually([&] { return counters.remote_decode_failures.load() == 1; }));
-        const auto failure = worker.stop();
-        REQUIRE(failure.has_value());
-        CHECK(failure->code == ScreenShareErrorCode::decoder_failed);
-        CHECK(failure->native_code == 7);
+    SECTION("corrupt decoded picture") { viewer.fail_decode = true; }
+    SECTION("decoder temporarily unavailable") { viewer.fail_start = true; }
+    SECTION("GPU presentation device lost") { viewer.fail_present = true; }
+    ReceiveWorker worker(listener, counters, viewer);
+    VideoSender sender(fake_api(), &sender_room, nullptr, rtp(51), counters);
+    REQUIRE(sender.send(access_unit(true), 0).status == VideoSendStatus::sent);
+    REQUIRE(eventually([&] { return viewer.releases.load() > 0 && listener.keyframe_requests.load() > 0; }));
+    // Repeated failures cannot recreate the GPU decoder for every incoming frame.
+    for (int index = 1; index < 10; ++index) {
+        REQUIRE(sender.send(access_unit(true), static_cast<std::uint32_t>(index * 3000)).status == VideoSendStatus::sent);
     }
-    // A restart on reset counters behaves like a fresh session and stops cleanly.
-    counters.reset_remote();
-    viewer.fail_decode = false;
-    {
-        ReceiveWorker worker(listener, counters, viewer);
-        CHECK_FALSE(worker.stop().has_value());
+    std::this_thread::sleep_for(100ms);
+    CHECK(viewer.decoder_starts.load() == 1);
+    viewer.fail_decode = viewer.fail_start = viewer.fail_present = false;
+    const auto deadline = Clock::now() + 2s;
+    for (std::uint32_t index = 10; viewer.frames.load() == 0 && Clock::now() < deadline; ++index) {
+        REQUIRE(sender.send(access_unit(true), index * 3000).status == VideoSendStatus::sent);
+        std::this_thread::sleep_for(20ms);
     }
+    CHECK(viewer.frames.load() > 0);
+    CHECK(viewer.decoder_starts.load() == 2);
+    CHECK_FALSE(worker.stop().has_value());
+}
+
+TEST_CASE("screen receive reports a missing transport as fatal") {
+    FakeViewer viewer;
     ScreenTransportCounters missing_room_counters;
     VideoReceiveContext context;
     context.api = fake_api();
@@ -433,6 +450,22 @@ struct FakeOutput final : StreamAudioOutput {
     void stop() noexcept override { stops.fetch_add(1); }
 };
 
+class StreamAudioWorker {
+public:
+    StreamAudioWorker(FakeRoom& listener, ScreenTransportCounters& counters, StreamAudioOutput& output)
+        : thread_([this, &listener, &counters, &output] {
+              run_stream_audio_receive_loop(fake_api(), &listener, counters, stop_, output);
+          }) {}
+    ~StreamAudioWorker() { stop(); }
+    void stop() {
+        stop_.store(true);
+        if (thread_.joinable()) { thread_.join(); }
+    }
+private:
+    std::atomic_bool stop_{false};
+    std::thread thread_;
+};
+
 StreamAudioPcmFrame tone(float phase) {
     StreamAudioPcmFrame frame{};
     for (std::size_t index = 0; index < frame.size(); index += 2) {
@@ -455,8 +488,7 @@ TEST_CASE("stream audio flows through Opus framing only while the stream is watc
     StreamAudioSender sender(fake_api(), &sender_room, counters);
     REQUIRE_FALSE(sender.start(128'000, 99).has_value());
     FakeOutput output;
-    std::atomic_bool stop{false};
-    std::thread receiver([&] { run_stream_audio_receive_loop(fake_api(), &listener, counters, stop, output); });
+    StreamAudioWorker receiver(listener, counters, output);
 
     for (int index = 0; index < 5; ++index) {
         sender.send(tone(static_cast<float>(index)));
@@ -490,8 +522,7 @@ TEST_CASE("stream audio flows through Opus framing only while the stream is watc
     counters.remote_viewing_enabled = false;
     REQUIRE(eventually([&] { return output.stops.load() == 1; }));
     const auto started = Clock::now();
-    stop = true;
-    receiver.join();
+    receiver.stop();
     CHECK(Clock::now() - started < 250ms);
     CHECK_FALSE(counters.remote_stream_audio_active.load());
 }
@@ -505,11 +536,7 @@ TEST_CASE("stream audio reopens a lost output with bounded retries while video s
     StreamAudioSender sender(fake_api(), &sender_room, counters);
     REQUIRE_FALSE(sender.start(128000, 77));
     FakeOutput output;
-    std::atomic_bool stop{false};
-    std::jthread receiver([&](std::stop_token token) {
-        std::stop_callback on_stop(token, [&] { stop = true; });
-        run_stream_audio_receive_loop(fake_api(), &listener, counters, stop, output);
-    });
+    StreamAudioWorker receiver(listener, counters, output);
     const auto feed_until = [&](const auto& condition, auto duration) {
         const auto deadline = Clock::now() + duration;
         while (Clock::now() < deadline) {
@@ -530,6 +557,27 @@ TEST_CASE("stream audio reopens a lost output with bounded retries while video s
     output.available = true;
     REQUIRE(feed_until([&] { return counters.remote_stream_audio_active.load(); }, 2s));
     CHECK(output.starts.load() >= 2);
+}
+
+TEST_CASE("stream audio stops its device before unwinding the render bridge after a callback exception") {
+    FakeRoom sender_room;
+    FakeRoom listener;
+    sender_room.peer = &listener;
+    ScreenTransportCounters counters;
+    counters.remote_viewing_enabled = true;
+    int echo_calls = 0;
+    counters.echo_sink = [&](std::span<const float>) {
+        if (++echo_calls == 2) { throw std::runtime_error("echo sink failed"); }
+    };
+    StreamAudioSender sender(fake_api(), &sender_room, counters);
+    REQUIRE_FALSE(sender.start(128000, 78));
+    for (int index = 0; index < 5; ++index) { sender.send(tone(0)); }
+    FakeOutput output;
+    std::atomic_bool stop{false};
+    REQUIRE_THROWS_AS(run_stream_audio_receive_loop(fake_api(), &listener, counters, stop, output), std::runtime_error);
+    CHECK(output.starts.load() == 1);
+    CHECK(output.stops.load() == 1);
+    CHECK_FALSE(counters.remote_stream_audio_active.load());
 }
 
 TEST_CASE("stream volume scales decoded stream audio and clips at full scale") {
