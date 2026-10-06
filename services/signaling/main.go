@@ -647,7 +647,8 @@ func (s *service) disconnectMember(serverID, peerID string) {
 		if !removed {
 			continue
 		}
-		rm.broadcast(message{Type: "peer_left", PeerID: peerID})
+		// Closing the socket runs the normal websocket deferred peer_left broadcast. Broadcasting
+		// here too would make every remaining peer observe the same departure twice.
 		if releasedScreen {
 			s.screenReleases.Add(1)
 			rm.broadcast(message{Type: "screen_state"})

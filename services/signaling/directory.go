@@ -104,6 +104,7 @@ type directoryState struct {
 	Invites             map[string]directoryInvite      `json:"invites"`
 	JoinRequests        map[string]directoryJoinRequest `json:"join_requests,omitempty"`
 	Messages            map[string][]directoryMessage   `json:"messages,omitempty"`
+	MessageRevisions    map[string]uint64               `json:"message_revisions,omitempty"`
 	NextMessageSequence uint64                          `json:"next_message_sequence,omitempty"`
 }
 
@@ -251,6 +252,7 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 			Invites:             make(map[string]directoryInvite),
 			JoinRequests:        make(map[string]directoryJoinRequest),
 			Messages:            make(map[string][]directoryMessage),
+			MessageRevisions:    make(map[string]uint64),
 			NextMessageSequence: 1,
 		},
 	}
@@ -284,6 +286,9 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 	}
 	if d.state.Messages == nil {
 		d.state.Messages = make(map[string][]directoryMessage)
+	}
+	if d.state.MessageRevisions == nil {
+		d.state.MessageRevisions = make(map[string]uint64)
 	}
 	if d.state.NextMessageSequence == 0 {
 		d.state.NextMessageSequence = 1
@@ -459,6 +464,10 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 			if message.Sequence > maximumSequence {
 				maximumSequence = message.Sequence
 			}
+		}
+		if d.state.MessageRevisions[key] < previous {
+			d.state.MessageRevisions[key] = previous
+			migrationDirty = true
 		}
 	}
 	if d.state.NextMessageSequence <= maximumSequence {
@@ -1767,17 +1776,20 @@ func (d *directory) handleMessageDelete(w http.ResponseWriter, r *http.Request) 
 
 	previous := append([]directoryMessage(nil), current...)
 	previousSequence := d.state.NextMessageSequence
+	previousRevision := d.state.MessageRevisions[key]
 	current = append(current[:index:index], current[index+1:]...)
 	if len(current) == 0 {
 		delete(d.state.Messages, key)
 	} else {
 		d.state.Messages[key] = current
 	}
-	// Deletions advance the global message revision even though no visible message is appended.
-	// Windows clients use the revision gap to perform a bounded full-channel resync.
+	// Deletion consumes one global sequence number, but only this channel's mutation revision
+	// advances. Other channels do not pay a full-resync cost for unrelated moderation.
+	d.state.MessageRevisions[key] = d.state.NextMessageSequence
 	d.state.NextMessageSequence++
 	if err := d.persistLocked(); err != nil {
 		d.state.Messages[key] = previous
+		d.state.MessageRevisions[key] = previousRevision
 		d.state.NextMessageSequence = previousSequence
 		writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
 		return
@@ -1855,10 +1867,7 @@ func (d *directory) handleMessageList(
 			break
 		}
 	}
-	revision := uint64(0)
-	if d.state.NextMessageSequence > 0 {
-		revision = d.state.NextMessageSequence - 1
-	}
+	revision := d.state.MessageRevisions[messageKey(serverID, channelID)]
 	if revision < nextAfter {
 		revision = nextAfter
 	}
@@ -1948,7 +1957,9 @@ func (d *directory) handleMessageSend(
 
 	sequence := d.state.NextMessageSequence
 	previousSequence := sequence
+	previousRevision := d.state.MessageRevisions[key]
 	d.state.NextMessageSequence++
+	d.state.MessageRevisions[key] = sequence
 	message := directoryMessage{
 		ID:        messageID,
 		Sequence:  sequence,
@@ -1963,6 +1974,7 @@ func (d *directory) handleMessageSend(
 
 	if err := d.persistLocked(); err != nil {
 		d.state.NextMessageSequence = previousSequence
+		d.state.MessageRevisions[key] = previousRevision
 		if currentExisted {
 			d.state.Messages[key] = previousCurrent
 		} else {
