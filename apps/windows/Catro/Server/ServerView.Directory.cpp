@@ -358,7 +358,10 @@ winrt::fire_and_forget ServerView::ConfirmRemoveMember(std::string user_id) {
     controls::ContentDialog dialog;
     dialog.XamlRoot(ServerLayout().XamlRoot());
     dialog.RequestedTheme(ActualTheme());
-    dialog.Title(box_value(hstring{L"Remove " + to_hstring(display_name) + L"?"}));
+    std::wstring title_text = L"Remove ";
+    title_text += to_hstring(display_name).c_str();
+    title_text += L"?";
+    dialog.Title(box_value(hstring{title_text}));
     dialog.PrimaryButtonText(L"Remove member");
     dialog.CloseButtonText(L"Cancel");
 
