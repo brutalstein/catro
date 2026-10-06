@@ -516,6 +516,7 @@ DirectoryMessagesResult parse_directory_messages(
         }
         DirectoryMessagePage page;
         page.next_after = value.at("next_after").get<std::uint64_t>();
+        page.revision = value.value("revision", std::uint64_t{0});
         page.messages.reserve(items.size());
         std::unordered_set<std::string> ids;
         ids.reserve(items.size());

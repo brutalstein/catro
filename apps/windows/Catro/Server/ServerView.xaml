@@ -774,12 +774,32 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <TextBlock x:Name="MemberCountLabel"
-                           Text="MEMBERS — 1"
-                           FontSize="11"
-                           FontWeight="SemiBold"
-                           CharacterSpacing="80"
-                           Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="MemberCountLabel"
+                               Text="MEMBERS — 1"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               CharacterSpacing="80"
+                               VerticalAlignment="Center"
+                               Foreground="{ThemeResource CatroTextTertiaryBrush}" />
+                    <Border x:Name="OwnerControlsBadge"
+                            Grid.Column="1"
+                            Visibility="Collapsed"
+                            Padding="7,3"
+                            CornerRadius="7"
+                            Background="{ThemeResource CatroAccentSoftBrush}"
+                            ToolTipService.ToolTip="You can moderate members and messages in this server.">
+                        <TextBlock Text="ADMIN"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   CharacterSpacing="70"
+                                   Foreground="{ThemeResource CatroAccentBrush}" />
+                    </Border>
+                </Grid>
 
                 <ListView x:Name="MemberList"
                           ItemContainerStyle="{StaticResource CatroStretchListItemStyle}"

@@ -1952,3 +1952,155 @@ func TestOpenDirectoryRestoresDemotedOwner(t *testing.T) {
 		t.Fatalf("restored role was not persisted: %v", err)
 	}
 }
+
+
+func TestDirectoryOwnerCanRemoveMemberAndRevokeAccess(t *testing.T) {
+	secret := []byte(strings.Repeat("m", 32))
+	d, err := openDirectory(filepath.Join(t.TempDir(), "directory.json"), secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerToken := registerTestUserNamed(t, d, "owner-1", "Owner", testCredential(0x71))
+	memberToken := registerTestUserNamed(t, d, "member-1", "Member", testCredential(0x72))
+	d.mu.Lock()
+	d.state.Servers["server-1"] = directoryServer{
+		ID: "server-1", OwnerID: "owner-1", Name: "Admin Test",
+		TextChannelID: "text-1", VoiceChannelID: "voice-1",
+		Members: map[string]directoryMember{
+			"owner-1": {UserID: "owner-1", Role: "owner"},
+			"member-1": {UserID: "member-1", Role: "member"},
+		},
+	}
+	if err := d.persistLocked(); err != nil {
+		d.mu.Unlock()
+		t.Fatal(err)
+	}
+	d.mu.Unlock()
+
+	denied := httptest.NewRecorder()
+	d.handleMemberRemove(denied, authenticatedRequest(
+		http.MethodPost, "/v1/members/remove", memberToken,
+		map[string]any{"server_id": "server-1", "user_id": "owner-1"}))
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("member removal by non-owner = %d, want 403: %s", denied.Code, denied.Body.String())
+	}
+
+	self := httptest.NewRecorder()
+	d.handleMemberRemove(self, authenticatedRequest(
+		http.MethodPost, "/v1/members/remove", ownerToken,
+		map[string]any{"server_id": "server-1", "user_id": "owner-1"}))
+	if self.Code != http.StatusConflict {
+		t.Fatalf("owner self-removal = %d, want 409: %s", self.Code, self.Body.String())
+	}
+
+	removed := httptest.NewRecorder()
+	d.handleMemberRemove(removed, authenticatedRequest(
+		http.MethodPost, "/v1/members/remove", ownerToken,
+		map[string]any{"server_id": "server-1", "user_id": "member-1"}))
+	if removed.Code != http.StatusOK {
+		t.Fatalf("owner member removal = %d: %s", removed.Code, removed.Body.String())
+	}
+
+	roster := httptest.NewRecorder()
+	d.handleMembers(roster, authenticatedRequest(
+		http.MethodGet, "/v1/members?server_id=server-1", memberToken, nil))
+	if roster.Code != http.StatusForbidden {
+		t.Fatalf("removed member roster access = %d, want 403", roster.Code)
+	}
+	rtc := httptest.NewRecorder()
+	d.handleRTCToken(rtc, authenticatedRequest(
+		http.MethodPost, "/v1/rtc-token", memberToken,
+		map[string]any{"server_id": "server-1", "channel_id": "voice-1"}))
+	if rtc.Code != http.StatusForbidden {
+		t.Fatalf("removed member rtc access = %d, want 403", rtc.Code)
+	}
+}
+
+func TestDirectoryOwnerCanDeleteAnyMessageAndRevisionAdvances(t *testing.T) {
+	secret := []byte(strings.Repeat("q", 32))
+	d, err := openDirectory(filepath.Join(t.TempDir(), "directory.json"), secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerToken := registerTestUserNamed(t, d, "owner-1", "Owner", testCredential(0x73))
+	memberToken := registerTestUserNamed(t, d, "member-1", "Member", testCredential(0x74))
+	d.mu.Lock()
+	d.state.Servers["server-1"] = directoryServer{
+		ID: "server-1", OwnerID: "owner-1", Name: "Admin Test",
+		TextChannelID: "text-1", VoiceChannelID: "voice-1",
+		Members: map[string]directoryMember{
+			"owner-1": {UserID: "owner-1", Role: "owner"},
+			"member-1": {UserID: "member-1", Role: "member"},
+		},
+	}
+	if err := d.persistLocked(); err != nil {
+		d.mu.Unlock()
+		t.Fatal(err)
+	}
+	d.mu.Unlock()
+
+	sent := httptest.NewRecorder()
+	d.handleMessages(sent, authenticatedRequest(
+		http.MethodPost, "/v1/messages", memberToken,
+		map[string]any{"server_id": "server-1", "channel_id": "text-1", "content": "remove me"}))
+	if sent.Code != http.StatusCreated {
+		t.Fatalf("send = %d: %s", sent.Code, sent.Body.String())
+	}
+	var message messageDescriptor
+	if err := json.Unmarshal(sent.Body.Bytes(), &message); err != nil {
+		t.Fatal(err)
+	}
+
+	before := httptest.NewRecorder()
+	d.handleMessages(before, authenticatedRequest(
+		http.MethodGet, "/v1/messages?server_id=server-1&channel_id=text-1&after=0&limit=100",
+		ownerToken, nil))
+	var beforePage struct {
+		Revision uint64 `json:"revision"`
+	}
+	if err := json.Unmarshal(before.Body.Bytes(), &beforePage); err != nil {
+		t.Fatal(err)
+	}
+
+	denied := httptest.NewRecorder()
+	d.handleMessageDelete(denied, authenticatedRequest(
+		http.MethodPost, "/v1/messages/delete", memberToken,
+		map[string]any{"server_id": "server-1", "channel_id": "text-1", "message_id": message.ID}))
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("member deleting message = %d, want 403: %s", denied.Code, denied.Body.String())
+	}
+
+	deleted := httptest.NewRecorder()
+	d.handleMessageDelete(deleted, authenticatedRequest(
+		http.MethodPost, "/v1/messages/delete", ownerToken,
+		map[string]any{"server_id": "server-1", "channel_id": "text-1", "message_id": message.ID}))
+	if deleted.Code != http.StatusOK {
+		t.Fatalf("owner delete = %d: %s", deleted.Code, deleted.Body.String())
+	}
+
+	after := httptest.NewRecorder()
+	d.handleMessages(after, authenticatedRequest(
+		http.MethodGet, "/v1/messages?server_id=server-1&channel_id=text-1&after=0&limit=100",
+		ownerToken, nil))
+	var afterPage struct {
+		Messages []messageDescriptor `json:"messages"`
+		Revision uint64              `json:"revision"`
+	}
+	if err := json.Unmarshal(after.Body.Bytes(), &afterPage); err != nil {
+		t.Fatal(err)
+	}
+	if len(afterPage.Messages) != 0 {
+		t.Fatalf("messages after deletion = %d, want 0", len(afterPage.Messages))
+	}
+	if afterPage.Revision <= beforePage.Revision {
+		t.Fatalf("revision did not advance: before=%d after=%d", beforePage.Revision, afterPage.Revision)
+	}
+
+	reloaded, err := openDirectory(d.path, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reloaded.state.Messages[messageKey("server-1", "text-1")]) != 0 {
+		t.Fatal("deleted message returned after persistence reload")
+	}
+}

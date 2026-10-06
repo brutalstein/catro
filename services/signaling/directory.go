@@ -104,6 +104,7 @@ type directoryState struct {
 	Invites             map[string]directoryInvite      `json:"invites"`
 	JoinRequests        map[string]directoryJoinRequest `json:"join_requests,omitempty"`
 	Messages            map[string][]directoryMessage   `json:"messages,omitempty"`
+	MessageRevisions    map[string]uint64               `json:"message_revisions,omitempty"`
 	NextMessageSequence uint64                          `json:"next_message_sequence,omitempty"`
 }
 
@@ -251,6 +252,7 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 			Invites:             make(map[string]directoryInvite),
 			JoinRequests:        make(map[string]directoryJoinRequest),
 			Messages:            make(map[string][]directoryMessage),
+			MessageRevisions:    make(map[string]uint64),
 			NextMessageSequence: 1,
 		},
 	}
@@ -284,6 +286,9 @@ func openDirectory(path string, secret []byte) (*directory, error) {
 	}
 	if d.state.Messages == nil {
 		d.state.Messages = make(map[string][]directoryMessage)
+	}
+	if d.state.MessageRevisions == nil {
+		d.state.MessageRevisions = make(map[string]uint64)
 	}
 	if d.state.NextMessageSequence == 0 {
 		d.state.NextMessageSequence = 1
@@ -952,6 +957,17 @@ func (d *directory) handleServers(w http.ResponseWriter, r *http.Request) {
 	writeAPIJSON(w, http.StatusOK, map[string]any{"servers": servers})
 }
 
+func (d *directory) isServerMember(serverID, userID string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	server, exists := d.state.Servers[serverID]
+	if !exists {
+		return false
+	}
+	_, member := server.Members[userID]
+	return member
+}
+
 func (d *directory) handleMembers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
@@ -1029,6 +1045,82 @@ func (d *directory) handleMembers(w http.ResponseWriter, r *http.Request) {
 	writeAPIJSON(w, http.StatusOK, map[string]any{
 		"members": members,
 	})
+}
+
+func (d *directory) handleMemberRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeAPIError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	user, ok := d.authenticate(r)
+	if !ok {
+		writeAPIError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var request struct {
+		ServerID string `json:"server_id"`
+		UserID   string `json:"user_id"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if !validID(request.ServerID) || !validID(request.UserID) {
+		writeAPIError(w, http.StatusBadRequest, "invalid member removal")
+		return
+	}
+
+	d.mu.Lock()
+	server, exists := d.state.Servers[request.ServerID]
+	if !exists || server.OwnerID != user.ID {
+		d.mu.Unlock()
+		writeAPIError(w, http.StatusForbidden, "server owner required")
+		return
+	}
+	member, exists := server.Members[request.UserID]
+	if !exists {
+		d.mu.Unlock()
+		writeAPIError(w, http.StatusNotFound, "member not found")
+		return
+	}
+	if request.UserID == server.OwnerID || member.Role == "owner" {
+		d.mu.Unlock()
+		writeAPIError(w, http.StatusConflict, "server owner cannot be removed")
+		return
+	}
+
+	previousRequests := make(map[string]directoryJoinRequest)
+	now := time.Now().Unix()
+	delete(server.Members, request.UserID)
+	for id, join := range d.state.JoinRequests {
+		if join.ServerID == server.ID && join.RequesterID == request.UserID &&
+			join.Status == "approved" {
+			previousRequests[id] = join
+			join.Status = "cancelled"
+			join.UpdatedAt = now
+			join.ExpiresAt = now + int64(resolvedJoinRequestTTL/time.Second)
+			d.state.JoinRequests[id] = join
+		}
+	}
+	d.state.Servers[server.ID] = server
+	if err := d.persistLocked(); err != nil {
+		server.Members[request.UserID] = member
+		d.state.Servers[server.ID] = server
+		for id, join := range previousRequests {
+			d.state.JoinRequests[id] = join
+		}
+		d.mu.Unlock()
+		writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
+		return
+	}
+	response := descriptorFor(server, user.ID)
+	signaling := d.signaling
+	d.mu.Unlock()
+
+	if signaling != nil {
+		signaling.disconnectMember(server.ID, request.UserID)
+	}
+	writeAPIJSON(w, http.StatusOK, response)
 }
 
 func randomInviteCode() (string, error) {
@@ -1623,6 +1715,84 @@ func (d *directory) authorizeTextChannelLocked(
 	return server, true
 }
 
+func (d *directory) handleMessageDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeAPIError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	user, ok := d.authenticate(r)
+	if !ok {
+		writeAPIError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var request struct {
+		ServerID  string `json:"server_id"`
+		ChannelID string `json:"channel_id"`
+		MessageID string `json:"message_id"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if !validID(request.ServerID) || !validID(request.ChannelID) ||
+		!validID(request.MessageID) {
+		writeAPIError(w, http.StatusBadRequest, "invalid message deletion")
+		return
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	server, allowed := d.authorizeTextChannelLocked(
+		user.ID, request.ServerID, request.ChannelID)
+	if !allowed || server.OwnerID != user.ID {
+		writeAPIError(w, http.StatusForbidden, "server owner required")
+		return
+	}
+	if d.state.NextMessageSequence == 0 ||
+		d.state.NextMessageSequence == ^uint64(0) {
+		writeAPIError(w, http.StatusServiceUnavailable, "message sequence unavailable")
+		return
+	}
+
+	key := messageKey(request.ServerID, request.ChannelID)
+	current := d.state.Messages[key]
+	index := -1
+	var removed directoryMessage
+	for i, message := range current {
+		if message.ID == request.MessageID {
+			index = i
+			removed = message
+			break
+		}
+	}
+	if index < 0 {
+		writeAPIError(w, http.StatusNotFound, "message not found")
+		return
+	}
+
+	previous := append([]directoryMessage(nil), current...)
+	previousSequence := d.state.NextMessageSequence
+	previousRevision := d.state.MessageRevisions[key]
+	current = append(current[:index:index], current[index+1:]...)
+	if len(current) == 0 {
+		delete(d.state.Messages, key)
+	} else {
+		d.state.Messages[key] = current
+	}
+	// Deletion consumes one global sequence number, but only this channel's mutation revision
+	// advances. Other channels do not pay a full-resync cost for unrelated moderation.
+	d.state.MessageRevisions[key] = d.state.NextMessageSequence
+	d.state.NextMessageSequence++
+	if err := d.persistLocked(); err != nil {
+		d.state.Messages[key] = previous
+		d.state.MessageRevisions[key] = previousRevision
+		d.state.NextMessageSequence = previousSequence
+		writeAPIError(w, http.StatusInternalServerError, "state persistence failed")
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, d.messageDescriptorLocked(removed))
+}
+
 func (d *directory) handleMessages(w http.ResponseWriter, r *http.Request) {
 	user, ok := d.authenticate(r)
 	if !ok {
@@ -1693,9 +1863,11 @@ func (d *directory) handleMessageList(
 			break
 		}
 	}
+	revision := d.state.MessageRevisions[messageKey(serverID, channelID)]
 	writeAPIJSON(w, http.StatusOK, map[string]any{
 		"messages":   result,
 		"next_after": nextAfter,
+		"revision":   revision,
 	})
 }
 

@@ -1025,6 +1025,30 @@ DirectoryMembersResult list_directory_members(
         community::parse_directory_members);
 }
 
+DirectoryServerResult remove_directory_member(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_id,
+    std::string_view user_id) noexcept {
+    try {
+        if (!valid_remote_id(server_id) || !valid_remote_id(user_id)) {
+            return error(DirectoryErrorCode::invalid_config, "member removal is invalid");
+        }
+        const Json body{
+            {"server_id", std::string{server_id}},
+            {"user_id", std::string{user_id}},
+        };
+        return parse_response(
+            successful_json(request_json(
+                service, L"POST", L"/v1/members/remove", access_token, &body)),
+            community::parse_directory_server);
+    } catch (...) {
+        return error(
+            DirectoryErrorCode::malformed_response,
+            "member removal response is invalid");
+    }
+}
+
 DirectoryServerLookupResult lookup_directory_server(
     const DirectoryServiceConfig& service,
     std::string_view access_token,
@@ -1252,6 +1276,41 @@ DirectoryMessageResult send_directory_message(
         return error(
             DirectoryErrorCode::malformed_response,
             "sent message response is invalid");
+    }
+}
+
+DirectoryMessageResult delete_directory_message(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_id,
+    std::string_view channel_id,
+    std::string_view message_id) noexcept {
+    try {
+        if (!valid_remote_id(server_id) || !valid_remote_id(channel_id) ||
+            !valid_remote_id(message_id)) {
+            return error(DirectoryErrorCode::invalid_config, "message deletion is invalid");
+        }
+        const Json body{
+            {"server_id", std::string{server_id}},
+            {"channel_id", std::string{channel_id}},
+            {"message_id", std::string{message_id}},
+        };
+        auto parsed = parse_response(
+            successful_json(request_json(
+                service, L"POST", L"/v1/messages/delete", access_token, &body)),
+            community::parse_directory_message);
+        const auto* message = std::get_if<DirectoryMessage>(&parsed);
+        if (!message || message->server_id != server_id ||
+            message->channel_id != channel_id || message->id != message_id) {
+            return error(
+                DirectoryErrorCode::malformed_response,
+                "deleted message response is invalid");
+        }
+        return *message;
+    } catch (...) {
+        return error(
+            DirectoryErrorCode::malformed_response,
+            "message deletion response is invalid");
     }
 }
 

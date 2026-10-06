@@ -90,6 +90,7 @@ type service struct {
 	apiLimiter        *sourceLimiter
 	discoveryLimiter  *sourceLimiter
 	trustProxyHeaders bool
+	membership        *directory
 
 	roomsMu sync.Mutex
 	rooms   map[string]*room
@@ -280,6 +281,7 @@ func main() {
 		apiLimiter:        newSourceLimiter(*apiWritesPerMinute),
 		discoveryLimiter:  newSourceLimiter(*discoveryReadsPerMinute),
 		trustProxyHeaders: *trustProxyHeaders,
+		membership:        directory,
 		rooms:             make(map[string]*room),
 	}
 	directory.signaling = s
@@ -295,6 +297,9 @@ func main() {
 		s.limitDirectoryMutation(directory.handleServerSync))
 	mux.HandleFunc("/v1/servers", directory.handleServers)
 	mux.HandleFunc("/v1/members", directory.handleMembers)
+	mux.HandleFunc(
+		"/v1/members/remove",
+		s.limitDirectoryMutation(directory.handleMemberRemove))
 	mux.HandleFunc(
 		"/v1/server-lookup",
 		s.limitDirectoryLookup(directory.handleServerLookup))
@@ -316,6 +321,9 @@ func main() {
 	mux.HandleFunc(
 		"/v1/messages",
 		s.limitDirectoryMutation(directory.handleMessages))
+	mux.HandleFunc(
+		"/v1/messages/delete",
+		s.limitDirectoryMutation(directory.handleMessageDelete))
 	mux.HandleFunc(
 		"/v1/rtc-token",
 		s.limitDirectoryMutation(directory.handleRTCToken))
@@ -470,6 +478,12 @@ func (s *service) websocket(w http.ResponseWriter, r *http.Request) {
 		_ = writeJSON(conn, message{Type: "error", Message: "unauthorized"})
 		return
 	}
+	if s.membership != nil &&
+		!s.membership.isServerMember(join.ServerID, join.PeerID) {
+		s.rejectedMessages.Add(1)
+		_ = writeJSON(conn, message{Type: "error", Message: "server membership required"})
+		return
+	}
 
 	rm := s.roomFor(join.ServerID, join.ChannelID)
 	c := &client{id: join.PeerID, room: rm, conn: conn, rateStarted: time.Now()}
@@ -609,6 +623,39 @@ func (s *service) roomFor(serverID, channelID string) *room {
 	rm := &room{key: key, peers: make(map[string]*client), maxPeers: s.maxRoomPeers}
 	s.rooms[key] = rm
 	return rm
+}
+
+func (s *service) disconnectMember(serverID, peerID string) {
+	s.roomsMu.Lock()
+	rooms := make([]*room, 0)
+	prefix := serverID + "/"
+	for key, rm := range s.rooms {
+		if strings.HasPrefix(key, prefix) {
+			rooms = append(rooms, rm)
+		}
+	}
+	s.roomsMu.Unlock()
+
+	for _, rm := range rooms {
+		rm.mu.RLock()
+		peer := rm.peers[peerID]
+		rm.mu.RUnlock()
+		if peer == nil {
+			continue
+		}
+		removed, releasedScreen := rm.remove(peerID)
+		if !removed {
+			continue
+		}
+		// Closing the socket runs the normal websocket deferred peer_left broadcast. Broadcasting
+		// here too would make every remaining peer observe the same departure twice.
+		if releasedScreen {
+			s.screenReleases.Add(1)
+			rm.broadcast(message{Type: "screen_state"})
+		}
+		_ = peer.conn.Close()
+		s.dropEmptyRoom(rm)
+	}
 }
 
 func (s *service) voicePeers(serverID, channelID string) map[string]bool {

@@ -71,6 +71,12 @@ load_or_create_directory_credential() noexcept;
     std::string_view access_token,
     std::string_view server_id) noexcept;
 
+[[nodiscard]] DirectoryServerResult remove_directory_member(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_id,
+    std::string_view user_id) noexcept;
+
 [[nodiscard]] DirectoryServerLookupResult lookup_directory_server(
     const DirectoryServiceConfig& service,
     std::string_view access_token,
@@ -116,6 +122,13 @@ load_or_create_directory_credential() noexcept;
     std::string_view server_id,
     std::string_view channel_id,
     std::string_view content) noexcept;
+
+[[nodiscard]] DirectoryMessageResult delete_directory_message(
+    const DirectoryServiceConfig& service,
+    std::string_view access_token,
+    std::string_view server_id,
+    std::string_view channel_id,
+    std::string_view message_id) noexcept;
 
 [[nodiscard]] RtcProvisioningResult request_rtc_provisioning(
     const DirectoryServiceConfig& service,
