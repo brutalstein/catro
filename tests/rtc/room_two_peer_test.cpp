@@ -28,6 +28,13 @@ using Json = nlohmann::json;
 
 namespace {
 
+// Destroy the peers and relay before waiting for the library's background work to finish.
+struct RtcScope {
+    ~RtcScope() {
+        CHECK(::rtc::Cleanup().wait_for(10s) == std::future_status::ready);
+    }
+};
+
 class Relay {
 public:
     Relay() : server_(configuration()) {
@@ -225,6 +232,7 @@ template <std::size_t Count>
 } // namespace
 
 TEST_CASE("two people talk and watch a stream with its audio over real WebRTC") {
+    RtcScope rtc_scope;
     Relay relay;
     Person alice;
     Person bob;
@@ -282,6 +290,7 @@ TEST_CASE("two people talk and watch a stream with its audio over real WebRTC") 
 }
 
 TEST_CASE("five people talk while four watch one screen and its audio over real WebRTC") {
+    RtcScope rtc_scope;
     Relay relay;
     std::array<Person, 5> people;
     std::array<std::byte, 128> voice{};
