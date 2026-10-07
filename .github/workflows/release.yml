@@ -43,7 +43,9 @@ jobs:
         shell: pwsh
         run: ./scripts/package-windows.ps1 -Configuration Release -SkipBuild -ServiceUrl "$env:CATRO_SERVICE_URL"
       - name: Test Windows installer
-        shell: pwsh
+        # The installer harness compiles a tiny launch probe with Windows PowerShell Add-Type.
+        # PowerShell 7 rejects Add-Type -OutputType ConsoleApplication on current hosted runners.
+        shell: powershell
         run: ./tests/installers/windows-installer-test.ps1
       - uses: actions/upload-artifact@v4
         with:
