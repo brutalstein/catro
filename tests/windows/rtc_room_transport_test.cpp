@@ -28,6 +28,7 @@ TEST_CASE("RTC room transport rejects insecure production configuration") {
     const auto failure = transport.start(config, {});
     REQUIRE(failure);
     CHECK(failure->code == RoomTransportErrorCode::invalid_config);
+    CHECK(failure->message == "invalid RTC room configuration: signaling URL is not wss://");
     CHECK(transport.state() == RoomTransportState::idle);
     CHECK(transport.peer_count() == 0);
 }
@@ -46,6 +47,7 @@ TEST_CASE("RTC room transport requires TURN unless explicitly in engineering mod
     const auto failure = transport.start(config, {});
     REQUIRE(failure);
     CHECK(failure->code == RoomTransportErrorCode::invalid_config);
+    CHECK(failure->message == "invalid RTC room configuration: no TURN server");
 
     config.allow_no_turn = true;
     // The relaxed configuration is syntactically valid; do not actually connect in a unit test.
@@ -73,6 +75,7 @@ TEST_CASE("RTC room transport bounds remote peers to four") {
     failure = transport.start(config, {});
     REQUIRE(failure);
     CHECK(failure->code == RoomTransportErrorCode::invalid_config);
+    CHECK(failure->message == "invalid RTC room configuration: peer limit 5 is outside 1-4");
 }
 
 TEST_CASE("RTC room screen media accepts only the current owner") {

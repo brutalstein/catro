@@ -64,8 +64,14 @@ constexpr auto kReconnectMaxDelay = std::chrono::milliseconds{4000};
     return !value.empty() && value.size() <= 128;
 }
 
+// Names the rule that failed, so a user's status line identifies the bad field.
 [[nodiscard]] std::optional<RoomTransportError>
 validate(const RoomMeshConfig& config) {
+    const auto invalid = [](std::string reason) {
+        return RoomTransportError{
+            RoomTransportErrorCode::invalid_config,
+            "invalid RTC room configuration: " + std::move(reason)};
+    };
     const bool secure =
         starts_with(config.signaling_url, "wss://");
     const bool explicitly_insecure =
@@ -73,20 +79,30 @@ validate(const RoomMeshConfig& config) {
         starts_with(config.signaling_url, "ws://");
 
     if ((!secure && !explicitly_insecure) ||
-        config.signaling_url.size() > 2048 ||
-        config.access_token.empty() ||
-        config.access_token.size() > 8192 ||
-        !valid_id(config.server_id) ||
+        config.signaling_url.size() > 2048) {
+        return invalid("signaling URL is not wss://");
+    }
+    if (config.access_token.empty() ||
+        config.access_token.size() > 8192) {
+        return invalid("access token size is invalid");
+    }
+    if (!valid_id(config.server_id) ||
         !valid_id(config.channel_id) ||
-        !valid_id(config.user_id) ||
-        config.max_peers == 0 ||
-        config.max_peers > kMaximumPeers ||
-        config.ice_server_urls.empty() ||
-        (!config.allow_no_turn &&
-         !has_turn(config.ice_server_urls))) {
-        return RoomTransportError{
-            RoomTransportErrorCode::invalid_config,
-            "invalid production RTC room configuration"};
+        !valid_id(config.user_id)) {
+        return invalid("room or peer id is invalid");
+    }
+    if (config.max_peers == 0 ||
+        config.max_peers > kMaximumPeers) {
+        return invalid(
+            "peer limit " + std::to_string(config.max_peers) +
+            " is outside 1-4");
+    }
+    if (config.ice_server_urls.empty()) {
+        return invalid("no ICE servers");
+    }
+    if (!config.allow_no_turn &&
+        !has_turn(config.ice_server_urls)) {
+        return invalid("no TURN server");
     }
 
     return std::nullopt;

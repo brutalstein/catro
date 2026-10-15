@@ -120,10 +120,17 @@ public:
             raw.channel_id == nullptr ||
             raw.user_id == nullptr ||
             raw.ice_server_urls == nullptr ||
-            raw.ice_server_count == 0 ||
-            raw.max_remote_peers < 1 ||
+            raw.ice_server_count == 0) {
+            set_error("invalid room runtime configuration: missing field");
+            state_.store(CATRO_ROOM_FAILED, std::memory_order_release);
+            return -1;
+        }
+        if (raw.max_remote_peers < 1 ||
             raw.max_remote_peers > 4) {
-            set_error("invalid room runtime configuration");
+            set_error(
+                "invalid room runtime configuration: remote peer limit " +
+                std::to_string(raw.max_remote_peers) +
+                " is outside 1-4");
             state_.store(CATRO_ROOM_FAILED, std::memory_order_release);
             return -1;
         }

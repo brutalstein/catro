@@ -64,6 +64,8 @@ struct VoiceControls: View {
                 Text(status)
                     .font(.caption)
                     .foregroundColor(snapshot?.voicePhase == .failed ? Color.red : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled) // users can copy the full error into a bug report
                     .accessibilityLabel("Voice status: \(status)")
             }
         }
