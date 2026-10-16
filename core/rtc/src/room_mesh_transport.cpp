@@ -18,7 +18,6 @@
 #include <exception>
 #include <memory>
 #include <mutex>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -111,6 +110,49 @@ validate(const RoomMeshConfig& config) {
     }
 
     return std::nullopt;
+}
+
+// libdatachannel reports a failed handshake only as "TLS connection failed"; the Mbed TLS reason
+// (for example "X509 - Certificate verification failed") is only in its error log.
+class TlsErrorLog {
+public:
+    [[nodiscard]] static TlsErrorLog& instance() {
+        static const auto log = [] {
+            auto created = std::make_shared<TlsErrorLog>();
+            // The logger holds its own reference, so lines logged during process exit stay safe.
+            ::rtc::InitLogger(
+                ::rtc::LogLevel::Error,
+                [created](::rtc::LogLevel, std::string message) {
+                    constexpr std::string_view kPrefix = "TLS recv: ";
+                    if (const auto at = message.find(kPrefix);
+                        at != std::string::npos) {
+                        std::scoped_lock lock(created->mutex_);
+                        created->last_ = message.substr(at + kPrefix.size());
+                    }
+                });
+            return created;
+        }();
+        return *log;
+    }
+
+    [[nodiscard]] std::string take() {
+        std::scoped_lock lock(mutex_);
+        return std::exchange(last_, {});
+    }
+
+private:
+    std::mutex mutex_;
+    std::string last_;
+};
+
+[[nodiscard]] std::string with_tls_reason(std::string error) {
+    if (error == "TLS connection failed") {
+        if (auto reason = TlsErrorLog::instance().take();
+            !reason.empty()) {
+            error += ": " + reason;
+        }
+    }
+    return error;
 }
 
 } // namespace
@@ -820,14 +862,10 @@ struct RoomMeshTransport::Impl {
         ws_config.maxMessageSize =
             kMaximumSignalMessage;
 #if defined(__APPLE__)
-        const auto trust =
-            macos_system_trust_bundle();
-        if (!trust.error.empty()) {
-            throw std::runtime_error(trust.error);
-        }
         ws_config.caCertificatePemFile =
-            trust.path;
+            macos_trust_pem();
 #endif
+        (void)TlsErrorLog::instance().take(); // installs the logger; drops a stale reason
 
         auto websocket =
             std::make_shared<::rtc::WebSocket>(
@@ -866,7 +904,9 @@ struct RoomMeshTransport::Impl {
             });
         websocket->onError(
             [this, generation](std::string error) {
-                connection_lost(generation, error);
+                connection_lost(
+                    generation,
+                    with_tls_reason(std::move(error)));
             });
         websocket->onClosed(
             [this, generation] {

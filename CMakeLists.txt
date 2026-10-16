@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(Catro VERSION 0.3.16 LANGUAGES C CXX)
+project(Catro VERSION 0.3.17 LANGUAGES C CXX)
 # Keep this release marker with the version bump/retry so the stable workflow's CMakeLists path
 # filter deliberately republishes a version after release-pipeline-only fixes.
-set(CATRO_STABLE_RELEASE_MARKER "0.3.16")
+set(CATRO_STABLE_RELEASE_MARKER "0.3.17")
 
 # Catro ships through scripts/package-windows.ps1 and the native app bundles; it does not use
 # CMake's install tree. Disable install-rule generation globally so embedded third-party projects

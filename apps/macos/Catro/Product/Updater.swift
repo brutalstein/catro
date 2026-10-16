@@ -60,10 +60,17 @@ final class Updater: ObservableObject {
     private var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     }
+    private let directory = FileManager.default.temporaryDirectory.appendingPathComponent("catro-update")
+    private var status: URL { directory.appendingPathComponent("status") }
+    private var installerLog: URL { directory.appendingPathComponent("installer.log") }
 
     func start() {
         // Development builds carry no installer and never offer updates.
         guard installer != nil, timer == nil else { return }
+        // A swap that failed after Catro quit reopened this build; say so instead of looking updated.
+        if (try? String(contentsOf: status, encoding: .utf8))?.hasPrefix("failed") == true {
+            fail(installerError())
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 6 * 60 * 60, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.check() }
         }
@@ -81,10 +88,13 @@ final class Updater: ObservableObject {
 
     func install() {
         guard let tag = available, let installer = installer, !installing else { return }
+        // A quarantined app opened from Downloads runs from a read-only copy that cannot be replaced.
+        guard !Bundle.main.bundlePath.contains("/AppTranslocation/") else {
+            fail("Move Catro to the Applications folder, open it from there, then update.")
+            return
+        }
         installing = true
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("catro-update")
         let script = directory.appendingPathComponent("install-macos.sh")
-        let status = directory.appendingPathComponent("status")
         let process = Process()
         do {
             // The installer replaces this bundle, so it runs from a copy in the temp directory.
@@ -92,6 +102,8 @@ final class Updater: ObservableObject {
             try? FileManager.default.removeItem(at: script)
             try? FileManager.default.removeItem(at: status)
             try FileManager.default.copyItem(at: installer, to: script)
+            FileManager.default.createFile(atPath: installerLog.path, contents: nil)
+            process.standardError = try FileHandle(forWritingTo: installerLog)
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = [script.path]
             process.currentDirectoryURL = directory
@@ -118,15 +130,25 @@ final class Updater: ObservableObject {
                     return
                 }
                 if state.hasPrefix("failed") || !process.isRunning {
-                    fail("The download did not finish.")
+                    fail(installerError())
                     return
                 }
             }
         }
     }
 
+    // The installer's last stderr lines name the failing step (download, checksum or app swap).
+    private func installerError() -> String {
+        let lines = ((try? String(contentsOf: installerLog, encoding: .utf8)) ?? "")
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return lines.isEmpty ? "The download did not finish." : "The update stopped: \(lines.suffix(2).joined(separator: " "))"
+    }
+
     private func fail(_ reason: String) {
         installing = false
+        try? FileManager.default.removeItem(at: status) // report each failed attempt once
         failure = "Catro is unchanged. \(reason) Try again from the update button."
     }
 }

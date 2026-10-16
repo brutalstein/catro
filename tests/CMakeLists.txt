@@ -234,7 +234,7 @@ if(WIN32 AND MSVC)
     target_link_libraries(catro_windows_screen_runtime_test PRIVATE Catro::ScreenRuntime)
 
     catro_add_test(windows_rtc_room windows/rtc_room_transport_test.cpp)
-    target_link_libraries(catro_windows_rtc_room_test PRIVATE Catro::Rtc)
+    target_link_libraries(catro_windows_rtc_room_test PRIVATE Catro::Rtc ws2_32)
 
     catro_add_test(windows_audio windows/audio_platform_test.cpp)
     target_link_libraries(catro_windows_audio_test PRIVATE Catro::Windows)

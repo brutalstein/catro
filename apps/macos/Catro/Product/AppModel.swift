@@ -322,13 +322,15 @@ final class AppModel: ObservableObject {
         }
     }
 
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+
     var voiceDiagnostics: String {
         #if arch(x86_64)
         let architecture = "Intel x86_64"
         #else
         let architecture = "Apple Silicon arm64"
         #endif
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        let version = Self.version
         let permission: String
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized: permission = "allowed"

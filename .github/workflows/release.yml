@@ -159,10 +159,12 @@ jobs:
           version="${{ steps.version.outputs.version }}"
           tag="${{ steps.version.outputs.tag }}"
           cat > release-notes.md <<'EOF'
-          macOS voice join reliability.
+          macOS voice connection hardening.
 
-          - macOS: voice starts only after the server admits you to the room, so "Voice connected" is no longer shown for a room that is still connecting.
-          - macOS: a room that fails before admission shows "Room connection failed: <reason>"; a room the server never admits stops after 12 seconds with "Room connection timed out" instead of hanging on "Reconnecting...".
-          - Includes the 0.3.15 fix: macOS verifies the secure signaling connection against the system root certificates, so Macs can join voice channels.
+          - macOS: the secure signaling connection now also trusts the Let's Encrypt roots built into Catro (ISRG Root X1, X2, YE and YR), so joining voice no longer depends on how current the Mac's own certificate store is. Release builds verify this against the live server on Intel and Apple Silicon before publishing.
+          - A failed secure connection now names the exact TLS reason (for example "TLS connection failed: Handshake failed: X509 - Certificate verification failed") instead of only "TLS connection failed".
+          - macOS: a voice failure shows the Catro version next to the error, so a screenshot tells which build is running.
+          - macOS: an update that could not replace the app now says why after Catro reopens, instead of silently reopening the old version; an app opened from Downloads asks to be moved to Applications first.
+          - Includes 0.3.15 and 0.3.16: Macs verify the signaling server against the system root certificates, and voice starts only after the server admits you to the room.
           EOF
           gh release create "$tag"             release-assets/Catro-windows-x64.zip             release-assets/Catro-windows-x64.zip.sha256             release-assets/Catro-macos-arm64.zip             release-assets/Catro-macos-arm64.zip.sha256             release-assets/Catro-macos-x64.zip             release-assets/Catro-macos-x64.zip.sha256             scripts/install-windows.ps1             scripts/uninstall-windows.ps1             scripts/install-macos.sh             --target "$GITHUB_SHA"             --title "Catro $version"             --notes-file release-notes.md

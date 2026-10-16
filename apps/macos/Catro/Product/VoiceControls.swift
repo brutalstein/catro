@@ -59,7 +59,10 @@ struct VoiceControls: View {
                 }
             }
             .labelStyle(.titleAndIcon)
-            let status = model.visibleVoiceStatus
+            // A failure names the build, so a screenshot shows whether the Mac runs the latest Catro.
+            let failed = snapshot?.voicePhase == .failed
+            let status = model.visibleVoiceStatus.isEmpty || !failed
+                ? model.visibleVoiceStatus : "\(model.visibleVoiceStatus) (Catro \(AppModel.version))"
             if !status.isEmpty {
                 Text(status)
                     .font(.caption)
