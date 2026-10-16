@@ -159,11 +159,9 @@ jobs:
           version="${{ steps.version.outputs.version }}"
           tag="${{ steps.version.outputs.tag }}"
           cat > release-notes.md <<'EOF'
-          Voice and owner administration diagnostics.
+          macOS voice connection fix.
 
-          - When a voice room cannot start, the status line now names the exact rule that failed (signaling URL, token, ids, peer limit, ICE or TURN) instead of a generic error.
-          - macOS Monterey: voice actions remain clickable, failed connections can be retried, and a copyable diagnostic panel shows connection stages and errors.
-          - Windows: owner action failures remain on screen with HTTP/native status and recovery details instead of disappearing during refresh.
-          - Owner moderation requires the matching signaling service; the production backend has been updated.
+          - macOS: voice channels now connect. The secure signaling connection verifies the server against the macOS system root certificates; before this, every Mac rejected the server certificate because no trusted roots were configured.
+          - Includes the 0.3.14 voice and owner-action diagnostics.
           EOF
           gh release create "$tag"             release-assets/Catro-windows-x64.zip             release-assets/Catro-windows-x64.zip.sha256             release-assets/Catro-macos-arm64.zip             release-assets/Catro-macos-arm64.zip.sha256             release-assets/Catro-macos-x64.zip             release-assets/Catro-macos-x64.zip.sha256             scripts/install-windows.ps1             scripts/uninstall-windows.ps1             scripts/install-macos.sh             --target "$GITHUB_SHA"             --title "Catro $version"             --notes-file release-notes.md

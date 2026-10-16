@@ -4,6 +4,10 @@
 #include <nlohmann/json.hpp>
 #include <rtc/rtc.hpp>
 
+#if defined(__APPLE__)
+#include "macos_trust.hpp"
+#endif
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -14,6 +18,7 @@
 #include <exception>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -814,6 +819,15 @@ struct RoomMeshTransport::Impl {
         ws_config.maxOutstandingPings = 3;
         ws_config.maxMessageSize =
             kMaximumSignalMessage;
+#if defined(__APPLE__)
+        const auto trust =
+            macos_system_trust_bundle();
+        if (!trust.error.empty()) {
+            throw std::runtime_error(trust.error);
+        }
+        ws_config.caCertificatePemFile =
+            trust.path;
+#endif
 
         auto websocket =
             std::make_shared<::rtc::WebSocket>(
