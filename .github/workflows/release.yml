@@ -11,6 +11,10 @@ on:
         description: Production Catro service (HTTPS origin)
         required: true
         default: https://51-170-186-61.sslip.io
+      quick_package:
+        description: Build macOS packages only, without tests or automatic publishing
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -28,6 +32,7 @@ env:
 
 jobs:
   windows:
+    if: ${{ !inputs.quick_package }}
     runs-on: windows-2025
     env:
       CATRO_SERVICE_URL: ${{ inputs.service_url || 'https://51-170-186-61.sslip.io' }}
@@ -63,21 +68,25 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       CATRO_SERVICE_URL: ${{ inputs.service_url || 'https://51-170-186-61.sslip.io' }}
+      CATRO_BUILD_TESTS: ${{ inputs.quick_package && 'OFF' || 'ON' }}
     steps:
       - uses: actions/checkout@v4
       - name: Prerequisites
         run: scripts/bootstrap.sh
       - name: Build and test release
+        if: ${{ !inputs.quick_package }}
         run: |
           scripts/build.sh Release
           scripts/test.sh Release
       - name: Package macOS
         run: scripts/package-macos.sh Release
       - name: Test installer and package
+        if: ${{ !inputs.quick_package }}
         env:
           CATRO_TEST_BUILT_APP: out/build/macos-clang/Release/Catro.app
         run: tests/installers/macos-installer-test.sh
       - name: Launch and quit packaged app
+        if: ${{ !inputs.quick_package }}
         run: |
           set -eu
           app_root=$(mktemp -d)
@@ -110,6 +119,7 @@ jobs:
           if-no-files-found: error
 
   publish:
+    if: ${{ !inputs.quick_package }}
     needs: [windows, macos]
     runs-on: ubuntu-latest
     env:
@@ -149,15 +159,11 @@ jobs:
           version="${{ steps.version.outputs.version }}"
           tag="${{ steps.version.outputs.tag }}"
           cat > release-notes.md <<'EOF'
-          Windows owner administration update.
+          Voice and owner administration diagnostics.
 
-          - Server owners can delete any message in their own server.
-          - Server owners can remove non-owner members with immediate text and voice revocation.
-          - Active voice connections are disconnected when a member is removed.
-          - Owner-only moderation is enforced by the signaling backend, not only hidden in the UI.
-          - Windows adds modern owner actions for member and message moderation with confirmation dialogs.
-          - Message deletion synchronization is channel-scoped and bounded.
-
-          macOS receives the matching versioned package because Catro currently uses one shared stable update channel across platforms; the new administration UI remains Windows-only.
+          - When a voice room cannot start, the status line now names the exact rule that failed (signaling URL, token, ids, peer limit, ICE or TURN) instead of a generic error.
+          - macOS Monterey: voice actions remain clickable, failed connections can be retried, and a copyable diagnostic panel shows connection stages and errors.
+          - Windows: owner action failures remain on screen with HTTP/native status and recovery details instead of disappearing during refresh.
+          - Owner moderation requires the matching signaling service; the production backend has been updated.
           EOF
           gh release create "$tag"             release-assets/Catro-windows-x64.zip             release-assets/Catro-windows-x64.zip.sha256             release-assets/Catro-macos-arm64.zip             release-assets/Catro-macos-arm64.zip.sha256             release-assets/Catro-macos-x64.zip             release-assets/Catro-macos-x64.zip.sha256             scripts/install-windows.ps1             scripts/uninstall-windows.ps1             scripts/install-macos.sh             --target "$GITHUB_SHA"             --title "Catro $version"             --notes-file release-notes.md

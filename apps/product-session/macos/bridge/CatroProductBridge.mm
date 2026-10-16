@@ -61,6 +61,8 @@ product::ProductSessionDependencies production_dependencies() {
     auto state = macos::load_or_create_default_local_state();
     if (auto* local = std::get_if<catro::community::LocalState>(&state)) {
         deps.local_state = std::move(*local);
+    } else if (const auto* error = std::get_if<macos::LocalStateError>(&state)) {
+        deps.local_state_error = error->detail + " (native code " + std::to_string(error->native_code) + ")";
     }
     deps.load_config = [] { return macos::load_directory_service_config(); };
     deps.load_credential = [] { return macos::load_or_create_directory_credential(); };

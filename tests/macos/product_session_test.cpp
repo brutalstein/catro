@@ -67,6 +67,7 @@ struct FakeDirectory {
     std::vector<std::string> endpoints;
     std::map<std::uint64_t, std::string> sent; // server-1 sequence -> content posted by the session
     bool offline = false;                      // every request fails like an unreachable network
+    std::optional<community::DirectoryError> rtc_error;
 
     std::string message_json(const std::string& server_id, std::uint64_t sequence) {
         const auto suffix = server_id.substr(server_id.find('-') + 1);
@@ -123,6 +124,9 @@ struct FakeDirectory {
             return ok(message_json("server-1", sequence));
         }
         if (endpoint == "/v1/rtc-token") {
+            if (rtc_error) {
+                return *rtc_error;
+            }
             return ok(
                 R"({"token":"rtc","expires":200,"server_id":"server-1","channel_id":"voice-1","peer_id":"peer-self","signaling_url":"wss://catro.example.com/v1/rtc","ice_servers":["stun:turn.example.com:3478"],"max_room_peers":4})");
         }
@@ -174,12 +178,16 @@ community::LocalState local_state() {
 struct Recorder {
     std::mutex mutex;
     std::vector<std::string> notices;
+    std::vector<std::string> voice_statuses;
     std::size_t calls = 0;
 
     product::ProductSession::Listener listener() {
         return [this](const product::ProductSnapshot& snapshot) {
             std::scoped_lock lock(mutex);
             ++calls;
+            if (!snapshot.media.status.empty()) {
+                voice_statuses.push_back(snapshot.media.status);
+            }
             if (!snapshot.notice.empty()) {
                 notices.push_back(snapshot.notice);
             }
@@ -449,7 +457,7 @@ TEST_CASE("macOS product session keeps the personal server when online services 
     }));
     const auto snapshot = session.snapshot();
     CHECK(snapshot.workspace.connection_message ==
-          "Online services are not configured. Local mode remains available.");
+          "Online services are not configured. Local mode remains available. missing");
     CHECK_FALSE(snapshot.workspace.send_message.available());
     REQUIRE(snapshot.servers.size() == 1);
     CHECK(snapshot.servers.front().name == "Catro");
@@ -458,6 +466,19 @@ TEST_CASE("macOS product session keeps the personal server when online services 
     CHECK(snapshot.identity_name == "Owner");
     session.stop();
     CHECK_FALSE(transport_made);
+}
+
+TEST_CASE("macOS product session preserves local profile failure details") {
+    product::ProductSessionDependencies deps;
+    deps.local_state_error = "profile.json could not be read (native code 13)";
+    product::ProductSession session(std::move(deps), {});
+    session.start();
+    REQUIRE(wait_until(session, [](const auto& snapshot) {
+        return snapshot.workspace.connection == app::ConnectionState::failed;
+    }));
+    CHECK(session.snapshot().workspace.connection_message ==
+          "Local profile is unavailable: profile.json could not be read (native code 13)");
+    session.stop();
 }
 
 TEST_CASE("macOS product session keeps retrying until the network is back") {
@@ -673,7 +694,8 @@ product::ShareRequest display_share() {
 TEST_CASE("macOS product session joins voice through provisioning, room, voice and listening") {
     MediaScope scope;
     auto& media = scope.media;
-    product::ProductSession session(online(seeded_directory()), {});
+    Recorder recorder;
+    product::ProductSession session(online(seeded_directory()), recorder.listener());
     session.start();
     REQUIRE(wait_until(session, synchronized_with_messages));
 
@@ -690,6 +712,15 @@ TEST_CASE("macOS product session joins voice through provisioning, room, voice a
         CHECK(media.voice_bitrate == 48'000);
     }
     CHECK(session.snapshot().media.voice_server_id == "server-1");
+    {
+        std::scoped_lock lock(recorder.mutex);
+        CHECK(std::find(recorder.voice_statuses.begin(), recorder.voice_statuses.end(), "Authorizing room…") !=
+              recorder.voice_statuses.end());
+        CHECK(std::any_of(recorder.voice_statuses.begin(), recorder.voice_statuses.end(),
+                          [](const auto& status) { return status.starts_with("Connecting room: 1 ICE server(s)"); }));
+        CHECK(std::find(recorder.voice_statuses.begin(), recorder.voice_statuses.end(),
+                        "Starting microphone and audio output…") != recorder.voice_statuses.end());
+    }
 
     // Speaking indicators and per-user volume go straight to the voice runtime.
     REQUIRE(wait_until(session, [](const auto& s) { return s.members.size() == 2; }));
@@ -846,7 +877,7 @@ TEST_CASE("macOS product session reports voice join failures and requires online
     REQUIRE(wait_until(session, [](const auto& snapshot) {
         return snapshot.media.phase == product::VoicePhase::failed;
     }));
-    CHECK(session.snapshot().media.status == "Room connection error: signaling refused");
+    CHECK(session.snapshot().media.status == "Room connection error (code -1): signaling refused");
     CHECK_FALSE(media.called("voice_start"));
 
     {
@@ -860,6 +891,13 @@ TEST_CASE("macOS product session reports voice join failures and requires online
         return snapshot.media.phase == product::VoicePhase::failed && media.called("voice_start");
     }));
     CHECK(session.snapshot().media.status.starts_with("Voice could not start"));
+    CHECK(session.snapshot().media.status.find("code 2") != std::string::npos);
+    {
+        std::scoped_lock lock(media.mutex);
+        media.voice_start_result = 0;
+    }
+    session.join_voice(); // one retry command recovers directly from failed
+    REQUIRE(wait_until(session, joined));
     session.stop();
 }
 
@@ -878,10 +916,28 @@ TEST_CASE("macOS product session keeps voice unavailable without online services
     }));
     session.join_voice();
     poll_once(session);
-    CHECK(session.snapshot().media.phase == product::VoicePhase::idle);
-    CHECK(recorder.count("Online services are not configured. Local mode remains available.") == 1);
+    CHECK(session.snapshot().media.phase == product::VoicePhase::failed);
+    CHECK(session.snapshot().media.status.starts_with("Voice unavailable: Online services are not configured."));
     session.stop();
     CHECK_FALSE(scope.media.called("room_start"));
+}
+
+TEST_CASE("macOS voice authorization retains HTTP and native diagnostic codes") {
+    MediaScope scope;
+    auto directory = seeded_directory();
+    directory->rtc_error = community::DirectoryError{
+        community::DirectoryErrorCode::unauthorized, "Room permission denied", -1009, 403};
+    product::ProductSession session(online(directory), {});
+    session.start();
+    REQUIRE(wait_until(session, synchronized_with_messages));
+    session.join_voice();
+    REQUIRE(wait_until(session, [](const auto& snapshot) {
+        return snapshot.media.phase == product::VoicePhase::failed;
+    }));
+    CHECK(session.snapshot().media.status ==
+          "Room authorization failed: Room permission denied (HTTP 403) (native code -1009)");
+    CHECK_FALSE(scope.media.called("room_create"));
+    session.stop();
 }
 
 TEST_CASE("macOS product session claims screen ownership before capture and fails closed") {

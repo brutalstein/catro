@@ -88,6 +88,10 @@ private:
     Microsoft::UI::Xaml::Controls::Flyout MessageAdminFlyout();
     winrt::fire_and_forget ConfirmRemoveMember(std::string user_id);
     winrt::fire_and_forget ConfirmDeleteMessage(std::string message_id);
+    void ShowServerActionFailure(
+        std::string_view operation,
+        std::string_view endpoint,
+        const catro::platform::windows::DirectoryError& failure);
     winrt::fire_and_forget BeginMemberRefresh();
     void ResetAccessRequests();
     void UpdateAccessUi();

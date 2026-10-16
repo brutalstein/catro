@@ -270,6 +270,7 @@
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition x:Name="ChannelHeaderRow" Height="76" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -334,7 +335,14 @@
                 </StackPanel>
             </Grid>
 
-            <Grid Grid.Row="1">
+            <InfoBar x:Name="ServerActionNotice" Grid.Row="1" Margin="16,8,16,0"
+                     IsOpen="False" IsClosable="True" Severity="Error">
+                <TextBlock x:Name="ServerActionDetail" TextWrapping="Wrap"
+                           IsTextSelectionEnabled="True"
+                           AutomationProperties.LiveSetting="Polite" />
+            </InfoBar>
+
+            <Grid Grid.Row="2">
                 <Grid x:Name="TextPanel">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />

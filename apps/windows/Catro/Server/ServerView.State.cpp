@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <string>
+#include <string_view>
 
 #pragma comment(lib, "winmm.lib")
 
@@ -16,6 +17,44 @@ namespace winrt::Catro::implementation {
 
 namespace xaml = Microsoft::UI::Xaml;
 namespace controls = Microsoft::UI::Xaml::Controls;
+
+void ServerView::ShowServerActionFailure(
+    std::string_view operation,
+    std::string_view endpoint,
+    const catro::platform::windows::DirectoryError& failure) {
+    std::string detail{endpoint};
+    if (failure.http_status != 0) {
+        detail += " — HTTP " + std::to_string(failure.http_status);
+    } else if (failure.native_code != 0) {
+        detail += " — Windows error " + std::to_string(failure.native_code);
+    }
+    auto message = std::string_view{failure.message};
+    if (message.size() > 1024) {
+        std::size_t end = 1024;
+        while (end > 0 && (static_cast<unsigned char>(message[end]) & 0xC0U) == 0x80U) {
+            --end;
+        }
+        message = message.substr(0, end);
+    }
+    detail += "\n";
+    detail.append(message);
+    if (failure.http_status == 404 || failure.http_status == 405) {
+        detail += "\nThe online service may not support this action yet, or the selected item no longer exists. "
+                  "Update the Catro online service, refresh the server, and try again.";
+    } else if (failure.http_status == 401) {
+        detail += "\nYour online session was rejected. Restart Catro to reconnect, then try again.";
+    } else if (failure.http_status == 403) {
+        detail += "\nThe online service did not authorize this account. Refresh the server and check that you are its owner.";
+    } else if (failure.code == catro::platform::windows::DirectoryErrorCode::network_failure) {
+        detail += "\nCheck your connection and the Catro online service, then retry. The action may have reached the service; refresh first.";
+    } else {
+        detail += "\nRefresh the server and retry. If it fails again, select and copy these details for support.";
+    }
+    ServerActionNotice().Title(to_hstring(std::string{operation} + " failed"));
+    ServerActionNotice().Severity(controls::InfoBarSeverity::Error);
+    ServerActionDetail().Text(to_hstring(detail));
+    ServerActionNotice().IsOpen(true);
+}
 
 void ServerView::UpdateOnlineStatus() {
     // The shell status bar carries the full connection message; the channel header stays short.

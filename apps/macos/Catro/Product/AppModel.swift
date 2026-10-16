@@ -45,6 +45,9 @@ final class AppModel: ObservableObject {
     @Published var starting = true
     // Microphone access is denied; the workspace offers the Microphone settings.
     @Published var microphoneBlocked = false
+    @Published private(set) var voiceActionStatus = ""
+    @Published private(set) var voiceEvents: [String] = []
+    private var requestingMicrophone = false
 
     private let bridge = CatroProductBridge()
     private var timer: Timer?
@@ -94,6 +97,13 @@ final class AppModel: ObservableObject {
     private func apply(_ snapshot: CatroProductSnapshot) {
         let previous = self.snapshot
         self.snapshot = snapshot
+        if previous?.connection != snapshot.connection || previous?.connectionMessage != snapshot.connectionMessage {
+            recordVoiceEvent("Online services: \(snapshot.connectionMessage.isEmpty ? "connected" : snapshot.connectionMessage)")
+        }
+        if previous?.voiceStatus != snapshot.voiceStatus || previous?.voicePhase != snapshot.voicePhase {
+            voiceActionStatus = ""
+            recordVoiceEvent("Voice phase \(snapshot.voicePhase.rawValue): \(snapshot.voiceStatus.isEmpty ? "idle" : snapshot.voiceStatus)")
+        }
         if starting && snapshot.connection != .connecting {
             starting = false
         }
@@ -229,26 +239,121 @@ final class AppModel: ObservableObject {
     func rename(_ name: String) { bridge.renameProfile(name) }
 
     func toggleVoice() {
-        if inVoice || snapshot?.voicePhase == .failed {
+        recordVoiceEvent("Voice button clicked")
+        if inVoice {
+            voiceActionStatus = "Leaving voice…"
+            recordVoiceEvent(voiceActionStatus)
             bridge.leaveVoice()
             return
         }
+        guard !requestingMicrophone else { return }
+        guard let snapshot else {
+            voiceActionStatus = "Voice unavailable: the session has not started. Wait for online services and retry."
+            recordVoiceEvent(voiceActionStatus)
+            return
+        }
+        guard snapshot.canJoinVoice else {
+            voiceActionStatus = "Voice unavailable: \(snapshot.connectionMessage.isEmpty ? "online services are not ready" : snapshot.connectionMessage)"
+            recordVoiceEvent(voiceActionStatus)
+            return
+        }
+        guard activeServer?.hasVoice == true else {
+            voiceActionStatus = "Voice unavailable: select a server with a Voice channel."
+            recordVoiceEvent(voiceActionStatus)
+            return
+        }
+        voiceActionStatus = "Join requested; checking microphone permission…"
+        recordVoiceEvent(voiceActionStatus)
         // Ask for the microphone up front so the system prompt appears; a denial still joins to
         // listen and points to the Microphone settings.
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .notDetermined:
+            requestingMicrophone = true
+            voiceActionStatus = "Waiting for macOS microphone permission. Respond to the system prompt to continue."
+            recordVoiceEvent(voiceActionStatus)
+            let serverID = snapshot.activeServerID
             AVCaptureDevice.requestAccess(for: .audio) { granted in
                 Task { @MainActor [weak self] in
-                    self?.microphoneBlocked = !granted
-                    self?.bridge.joinVoice()
+                    guard let self else { return }
+                    self.requestingMicrophone = false
+                    self.microphoneBlocked = !granted
+                    guard self.snapshot?.activeServerID == serverID else {
+                        self.voiceActionStatus = "Server changed during microphone permission. Click Join Voice to retry."
+                        self.recordVoiceEvent(self.voiceActionStatus)
+                        return
+                    }
+                    self.voiceActionStatus = "Microphone \(granted ? "allowed" : "denied; listening only"); join queued…"
+                    self.recordVoiceEvent(self.voiceActionStatus)
+                    self.bridge.joinVoice()
                 }
             }
         case .denied, .restricted:
             microphoneBlocked = true
+            voiceActionStatus = "Microphone denied; joining to listen. Enable Catro in \(Permissions.location(of: .microphone)) to speak."
+            recordVoiceEvent(voiceActionStatus)
             bridge.joinVoice()
         default:
+            voiceActionStatus = "Microphone allowed; join queued…"
+            recordVoiceEvent(voiceActionStatus)
             bridge.joinVoice()
         }
+    }
+
+    private func recordVoiceEvent(_ event: String) {
+        voiceEvents.append("\(Date().formatted(date: .omitted, time: .standard))  \(diagnosticText(event))")
+        if voiceEvents.count > 60 { voiceEvents.removeFirst(voiceEvents.count - 60) }
+    }
+
+    // Native networking errors may embed URLs with ICE credentials or authorization values.
+    private func diagnosticText(_ text: String) -> String {
+        text.replacingOccurrences(of: #"(?i)\b(?:https?|wss?|turns?|stuns?):[^\s\"<>]+"#,
+                                  with: "[service URL redacted]", options: .regularExpression)
+            .replacingOccurrences(of: #"(?i)\b(?:bearer\s+|(?:access_token|token|credential|password)[\"\s]*[:=][\"\s]*)[^\s\",;}]+"#,
+                                  with: "[credential redacted]", options: .regularExpression)
+    }
+
+    var visibleVoiceStatus: String {
+        diagnosticText(voiceActionStatus.isEmpty ? (snapshot?.voiceStatus ?? "") : voiceActionStatus)
+    }
+
+    func showVoiceDiagnostics() {
+        AppWindows.show("voice-diagnostics", title: "Catro Voice Diagnostics", size: CGSize(width: 760, height: 520)) {
+            VoiceDiagnosticsView(model: self)
+        }
+    }
+
+    var voiceDiagnostics: String {
+        #if arch(x86_64)
+        let architecture = "Intel x86_64"
+        #else
+        let architecture = "Apple Silicon arm64"
+        #endif
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        let permission: String
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: permission = "allowed"
+        case .denied: permission = "denied"
+        case .restricted: permission = "restricted"
+        default: permission = "not determined"
+        }
+        return diagnosticText("""
+        Catro \(version) — Voice diagnostics
+        \(ProcessInfo.processInfo.operatingSystemVersionString), \(architecture)
+        Connection state: \(snapshot?.connection.rawValue ?? -1)
+        Online services: \(snapshot?.connectionMessage ?? "No session snapshot")
+        Can join voice: \(snapshot?.canJoinVoice == true)
+        Selected server: \(snapshot?.activeServerID ?? "none")
+        Voice channel: \(activeServer?.voiceChannelID ?? "none")
+        Voice phase: \(snapshot?.voicePhase.rawValue ?? -1)
+        Voice status: \(snapshot?.voiceStatus ?? "none")
+        Last action: \(voiceActionStatus)
+        Microphone permission: \(permission)
+        Input: \((UserDefaults.standard.string(forKey: VoicePreferenceKey.inputDevice) ?? "").isEmpty ? "system default" : "selected device")
+        Output: \((UserDefaults.standard.string(forKey: VoicePreferenceKey.outputDevice) ?? "").isEmpty ? "system default" : "selected device")
+
+        Recent events (last 60):
+        \(voiceEvents.joined(separator: "\n"))
+        """)
     }
 
     func toggleMute() { bridge.setMuted(!(snapshot?.muted ?? false)) }

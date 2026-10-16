@@ -19,7 +19,6 @@ struct VoiceControls: View {
                     Label(model.inVoice ? "Leave Voice" : "Join Voice",
                           systemImage: model.inVoice ? "phone.down" : "phone")
                 }
-                .disabled(!model.inVoice && !canJoin)
                 .help(canJoin ? "Join this server's voice channel"
                               : (snapshot?.connectionMessage ?? "Voice needs online services"))
 
@@ -60,7 +59,8 @@ struct VoiceControls: View {
                 }
             }
             .labelStyle(.titleAndIcon)
-            if let status = snapshot?.voiceStatus, !status.isEmpty {
+            let status = model.visibleVoiceStatus
+            if !status.isEmpty {
                 Text(status)
                     .font(.caption)
                     .foregroundColor(snapshot?.voicePhase == .failed ? Color.red : Color.secondary)
@@ -68,8 +68,42 @@ struct VoiceControls: View {
                     .textSelection(.enabled) // users can copy the full error into a bug report
                     .accessibilityLabel("Voice status: \(status)")
             }
+            if !canJoin && !model.inVoice {
+                Text("Voice needs online services. \(snapshot?.connectionMessage ?? "The session is starting.")")
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            Button("Voice Diagnostics…") { model.showVoiceDiagnostics() }
+                .font(.caption)
+                .buttonStyle(.borderless)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+}
+
+struct VoiceDiagnosticsView: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Voice Diagnostics").font(.title2)
+            Text("Click Join Voice, then copy the report with the failing step and native error. If microphone access is denied, enable Catro in \(Permissions.location(of: .microphone)).")
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Copy Voice Report") { model.copy(model.voiceDiagnostics) }
+                Button(model.inVoice ? "Leave Voice" : "Join Voice") { model.toggleVoice() }
+                Button("Microphone Settings") { Permissions.openSettings(.microphone) }
+            }
+            ScrollView {
+                Text(model.voiceDiagnostics)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 620, minHeight: 420)
     }
 }

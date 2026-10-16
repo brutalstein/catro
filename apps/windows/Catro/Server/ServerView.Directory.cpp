@@ -356,6 +356,8 @@ winrt::fire_and_forget ServerView::ConfirmRemoveMember(std::string user_id) {
         co_return;
     }
     const auto display_name = found->display_name;
+    const auto server_id = directory_server_->id;
+    const auto confirmation_generation = moderation_generation_;
 
     controls::ContentDialog dialog;
     dialog.XamlRoot(ServerLayout().XamlRoot());
@@ -372,11 +374,34 @@ winrt::fire_and_forget ServerView::ConfirmRemoveMember(std::string user_id) {
     body.TextWrapping(xaml::TextWrapping::Wrap);
     dialog.Content(body);
 
-    if (co_await dialog.ShowAsync() != controls::ContentDialogResult::Primary) {
+    controls::ContentDialogResult decision;
+    try {
+        decision = co_await dialog.ShowAsync();
+    } catch (const winrt::hresult_error& failure) {
+        if (confirmation_generation != moderation_generation_ || !directory_server_ ||
+            directory_server_->id != server_id) {
+            co_return;
+        }
+        ShowServerActionFailure("Remove member confirmation", "Open confirmation dialog",
+            {catro::platform::windows::DirectoryErrorCode::rejected,
+             "The confirmation dialog could not open. Close any other dialog and retry.", failure.code().value});
         co_return;
     }
-    if (!directory_server_ || directory_server_->role != "owner" ||
-        directory_server_->id.empty()) {
+    if (decision != controls::ContentDialogResult::Primary) {
+        co_return;
+    }
+    if (confirmation_generation != moderation_generation_ || moderation_pending_ ||
+        !directory_service_ || directory_access_token_.empty() ||
+        !directory_server_ || directory_server_->role != "owner" ||
+        directory_server_->id != server_id) {
+        co_return;
+    }
+    const auto current_member = std::find_if(roster_.begin(), roster_.end(),
+        [&](const auto& member) { return member.user_id == user_id; });
+    if (current_member == roster_.end() || current_member->role == "owner") {
+        ShowServerActionFailure("Remove member", "POST /v1/members/remove",
+            {catro::platform::windows::DirectoryErrorCode::rejected,
+             "The selected member changed while confirmation was open. Refresh the member list and retry."});
         co_return;
     }
 
@@ -384,7 +409,8 @@ winrt::fire_and_forget ServerView::ConfirmRemoveMember(std::string user_id) {
     moderation_pending_ = true;
     const auto service = *directory_service_;
     const auto access_token = directory_access_token_;
-    const auto server_id = directory_server_->id;
+    ServerActionNotice().IsOpen(false);
+    OnlineStatusText().Text(L"Removing member…");
     UiThread ui_thread;
 
     co_await winrt::resume_background();
@@ -401,7 +427,7 @@ winrt::fire_and_forget ServerView::ConfirmRemoveMember(std::string user_id) {
 
     if (const auto* failure =
             std::get_if<catro::platform::windows::DirectoryError>(&result)) {
-        lifetime->OnlineStatusText().Text(to_hstring(failure->message));
+        lifetime->ShowServerActionFailure("Remove member", "POST /v1/members/remove", *failure);
         co_return;
     }
 
@@ -423,6 +449,10 @@ winrt::fire_and_forget ServerView::ConfirmDeleteMessage(std::string message_id) 
         co_return;
     }
 
+    const auto server_id = directory_server_->id;
+    const auto channel_id = directory_server_->text_channel_id;
+    const auto confirmation_generation = moderation_generation_;
+
     controls::ContentDialog dialog;
     dialog.XamlRoot(ServerLayout().XamlRoot());
     dialog.RequestedTheme(ActualTheme());
@@ -435,7 +465,26 @@ winrt::fire_and_forget ServerView::ConfirmDeleteMessage(std::string message_id) 
     body.TextWrapping(xaml::TextWrapping::Wrap);
     dialog.Content(body);
 
-    if (co_await dialog.ShowAsync() != controls::ContentDialogResult::Primary) {
+    controls::ContentDialogResult decision;
+    try {
+        decision = co_await dialog.ShowAsync();
+    } catch (const winrt::hresult_error& failure) {
+        if (confirmation_generation != moderation_generation_ || !directory_server_ ||
+            directory_server_->id != server_id) {
+            co_return;
+        }
+        ShowServerActionFailure("Delete message confirmation", "Open confirmation dialog",
+            {catro::platform::windows::DirectoryErrorCode::rejected,
+             "The confirmation dialog could not open. Close any other dialog and retry.", failure.code().value});
+        co_return;
+    }
+    if (decision != controls::ContentDialogResult::Primary) {
+        co_return;
+    }
+    if (confirmation_generation != moderation_generation_ || moderation_pending_ ||
+        !directory_service_ || directory_access_token_.empty() || !directory_server_ ||
+        directory_server_->role != "owner" || directory_server_->id != server_id ||
+        directory_server_->text_channel_id != channel_id) {
         co_return;
     }
 
@@ -443,8 +492,8 @@ winrt::fire_and_forget ServerView::ConfirmDeleteMessage(std::string message_id) 
     moderation_pending_ = true;
     const auto service = *directory_service_;
     const auto access_token = directory_access_token_;
-    const auto server_id = directory_server_->id;
-    const auto channel_id = directory_server_->text_channel_id;
+    ServerActionNotice().IsOpen(false);
+    OnlineStatusText().Text(L"Deleting message…");
     UiThread ui_thread;
 
     co_await winrt::resume_background();
@@ -462,8 +511,7 @@ winrt::fire_and_forget ServerView::ConfirmDeleteMessage(std::string message_id) 
 
     if (const auto* failure =
             std::get_if<catro::platform::windows::DirectoryError>(&result)) {
-        lifetime->TextStatusText().Text(to_hstring(failure->message));
-        lifetime->TextStatusText().Visibility(xaml::Visibility::Visible);
+        lifetime->ShowServerActionFailure("Delete message", "POST /v1/messages/delete", *failure);
         co_return;
     }
 
@@ -629,12 +677,14 @@ ServerView::BeginMemberRefresh() {
         co_return;
     }
 
-    if (std::holds_alternative<
-            catro::platform::windows::
-                DirectoryError>(result)) {
+    if (const auto* failure = std::get_if<
+            catro::platform::windows::DirectoryError>(&result)) {
         // Keep the last valid roster visible. A later bounded timer tick
         // retries without turning a transient network failure into fake
         // membership state.
+        if (!lifetime->ServerActionNotice().IsOpen() && !lifetime->moderation_pending_) {
+            lifetime->ShowServerActionFailure("Load members", "GET /v1/members", *failure);
+        }
         co_return;
     }
 
@@ -707,6 +757,10 @@ ServerView::BeginJoinRequestRefresh() {
             catro::platform::windows::
                 DirectoryJoinRequest>>(&result);
     if (requests == nullptr) {
+        if (!lifetime->ServerActionNotice().IsOpen() && !lifetime->access_decision_pending_) {
+            lifetime->ShowServerActionFailure("Load access requests", "GET /v1/join-requests?server_id=…",
+                std::get<catro::platform::windows::DirectoryError>(result));
+        }
         co_return;
     }
 
@@ -727,6 +781,8 @@ ServerView::ShowAccessDialog() {
 
     access_dialog_open_ = true;
     UpdateAccessUi();
+    const auto generation = access_generation_;
+    const auto server_id = directory_server_->id;
 
     const auto requests =
         pending_join_requests_;
@@ -824,8 +880,21 @@ ServerView::ShowAccessDialog() {
     }
 
     dialog.Content(content);
-    const auto result =
-        co_await dialog.ShowAsync();
+    controls::ContentDialogResult result;
+    try {
+        result = co_await dialog.ShowAsync();
+    } catch (const winrt::hresult_error& failure) {
+        if (generation != lifetime->access_generation_ || !lifetime->directory_server_ ||
+            lifetime->directory_server_->id != server_id) {
+            co_return;
+        }
+        lifetime->access_dialog_open_ = false;
+        lifetime->UpdateAccessUi();
+        lifetime->ShowServerActionFailure("Server access confirmation", "Open confirmation dialog",
+            {catro::platform::windows::DirectoryErrorCode::rejected,
+             "The access dialog could not open. Close any other dialog and retry.", failure.code().value});
+        co_return;
+    }
 
     lifetime->access_dialog_open_ = false;
     lifetime->UpdateAccessUi();
@@ -834,6 +903,10 @@ ServerView::ShowAccessDialog() {
             controls::ContentDialogResult::Primary &&
         result !=
             controls::ContentDialogResult::Secondary) {
+        co_return;
+    }
+    if (generation != lifetime->access_generation_ || !lifetime->directory_server_ ||
+        lifetime->directory_server_->id != server_id || lifetime->directory_server_->role != "owner") {
         co_return;
     }
 
@@ -876,6 +949,7 @@ ServerView::BeginJoinRequestDecision(
     const auto access_token =
         directory_access_token_;
     access_decision_pending_ = true;
+    ServerActionNotice().IsOpen(false);
     UpdateAccessUi();
     OnlineStatusText().Text(
         approve
@@ -909,13 +983,9 @@ ServerView::BeginJoinRequestDecision(
             std::get_if<
                 catro::platform::windows::
                     DirectoryError>(&result)) {
-        lifetime->OnlineStatusText().Text(
-            to_hstring(failure->message));
-        controls::ToolTipService::SetToolTip(
-            lifetime->AccessButton(),
-            box_value(
-                to_hstring(
-                    failure->message)));
+        lifetime->ShowServerActionFailure(
+            approve ? "Approve access request" : "Reject access request",
+            "POST /v1/join-requests/decision", *failure);
         // A requester may have cancelled or another owner-side action may have resolved the
         // snapshot while the dialog was open. Refresh immediately so the stale row disappears
         // without waiting for the next five-second poll.
@@ -1195,6 +1265,7 @@ ServerView::BeginInvite() {
 
     const auto generation = ++invite_generation_;
     invite_pending_ = true;
+    ServerActionNotice().IsOpen(false);
     InviteButton().IsEnabled(false);
     OnlineStatusText().Text(L"Creating invite…");
 
@@ -1219,8 +1290,7 @@ ServerView::BeginInvite() {
             std::get_if<
                 catro::platform::windows::
                     DirectoryError>(&result)) {
-        const auto message =
-            failure->message;
+        const auto error = *failure;
         co_await ui_thread;
         if (generation != lifetime->invite_generation_ ||
             !lifetime->directory_server_ ||
@@ -1233,11 +1303,7 @@ ServerView::BeginInvite() {
             lifetime->directory_server_ &&
             lifetime->directory_server_->role ==
                 "owner");
-        lifetime->OnlineStatusText().Text(
-            to_hstring(message));
-        controls::ToolTipService::SetToolTip(
-            lifetime->InviteButton(),
-            box_value(to_hstring(message)));
+        lifetime->ShowServerActionFailure("Create invite", "POST /v1/invites", error);
         co_return;
     }
 
@@ -1323,6 +1389,7 @@ void ServerView::SetDirectorySession(
         voice_join_pending_ = false;
         invite_pending_ = false;
         moderation_pending_ = false;
+        ServerActionNotice().IsOpen(false);
         // Keep an in-flight access decision marked pending across server switches. Its generation
         // check will discard stale presentation state after completion, while this flag prevents a
         // second owner decision from overlapping the first request.

@@ -37,6 +37,17 @@ template <class T>
                       server.member_count};
 }
 
+[[nodiscard]] std::string directory_error_detail(const DirectoryError& error) {
+    auto detail = error.message;
+    if (error.http_status != 0) {
+        detail += " (HTTP " + std::to_string(error.http_status) + ")";
+    }
+    if (error.native_code != 0) {
+        detail += " (native code " + std::to_string(error.native_code) + ")";
+    }
+    return detail;
+}
+
 [[nodiscard]] ServerItem personal_item(const community::PersonalServer& server) {
     ServerItem item{to_hex(server.id), server.name, {}, {}, {}, true, server.members.size()};
     for (const auto& channel : server.channels) {
@@ -205,7 +216,9 @@ struct ProductSession::Impl {
         }
         bootstrapped_ = true;
         if (!deps_.local_state) {
-            state_.workspace.fail("Local profile is unavailable.");
+            state_.workspace.fail(deps_.local_state_error.empty()
+                                      ? "Local profile is unavailable."
+                                      : "Local profile is unavailable: " + deps_.local_state_error);
             return;
         }
         const auto& local = *deps_.local_state;
@@ -218,14 +231,15 @@ struct ProductSession::Impl {
 
         auto config = deps_.load_config();
         if (const auto* error = error_of(config)) {
-            state_.workspace.fail(error->code == DirectoryErrorCode::not_configured ? std::string{kLocalOnlyMessage}
-                                                                                    : error->message);
+            state_.workspace.fail(error->code == DirectoryErrorCode::not_configured
+                                      ? std::string{kLocalOnlyMessage} + " " + directory_error_detail(*error)
+                                      : directory_error_detail(*error));
             return;
         }
         const auto service = std::get<community::DirectoryServiceConfig>(config);
         auto credential = deps_.load_credential();
         if (const auto* error = error_of(credential)) {
-            state_.workspace.fail("Directory credential unavailable: " + error->message);
+            state_.workspace.fail("Directory credential unavailable: " + directory_error_detail(*error));
             return;
         }
         transport_ = deps_.make_transport(service);
@@ -250,14 +264,14 @@ struct ProductSession::Impl {
         };
         auto access = client_->register_identity(local.identity, credential_, token());
         if (const auto* error = error_of(access)) {
-            retry(error->message);
+            retry("identity registration: " + directory_error_detail(*error));
             return;
         }
         access_token_ = std::get<std::string>(access);
         auto synced = client_->sync_personal_server(access_token_, local.personal_server, token());
         if (const auto* error = error_of(synced)) {
             access_token_.clear();
-            retry(error->message);
+            retry("server synchronization: " + directory_error_detail(*error));
             return;
         }
         reconnect_attempt_ = 0;
@@ -503,7 +517,7 @@ struct ProductSession::Impl {
         }
         const auto* server = state_.active_server();
         if (server == nullptr || server->voice_channel_id.empty()) {
-            media.status = "This server has no voice channel.";
+            fail_voice("This server has no voice channel. Select a server with Voice and retry.");
             return;
         }
         const auto server_id = server->id;
@@ -514,7 +528,7 @@ struct ProductSession::Impl {
 
         auto provisioned = client_->request_rtc_provisioning(access_token_, server_id, channel_id, token());
         if (const auto* error = error_of(provisioned)) {
-            fail_voice("Room authorization failed: " + error->message);
+            fail_voice("Room authorization failed: " + directory_error_detail(*error));
             return;
         }
         // The parser already rejects incomplete provisioning (peers 2..5, ICE, signaling URL).
@@ -546,10 +560,16 @@ struct ProductSession::Impl {
             .allow_insecure_signaling = rtc.allow_insecure_signaling ? std::uint8_t{1} : std::uint8_t{0},
             .allow_no_turn = rtc.allow_no_turn ? std::uint8_t{1} : std::uint8_t{0},
         };
-        if (deps_.media.room_start(room_, &room_config) != 0) {
+        // Report only counts and policy flags; signaling URLs and ICE URLs can contain credentials.
+        media.status = "Connecting room: " + std::to_string(rtc.ice_servers.size()) + " ICE server(s), " +
+                       std::to_string(rtc.max_room_peers - 1) + " remote peers, TURN " +
+                       (rtc.allow_no_turn ? "optional" : "required") + "…";
+        publish();
+        const auto room_result = deps_.media.room_start(room_, &room_config);
+        if (room_result != 0) {
             const auto room = deps_.media.screen.snapshot(room_);
-            fail_voice(room.error[0] == '\0' ? std::string{"Room connection error"}
-                                             : std::string{"Room connection error: "} + room.error);
+            fail_voice("Room connection error (code " + std::to_string(room_result) + "): " +
+                       (room.error[0] == '\0' ? "No native detail. Check online services and retry." : room.error));
             return;
         }
         std::string input_device;
@@ -571,11 +591,15 @@ struct ProductSession::Impl {
             .input_endpoint = input_device.c_str(),
             .output_endpoint = output_device.c_str(),
         };
-        if (deps_.media.voice_start(voice_, &voice_config) != 0) {
+        media.status = "Starting microphone and audio output…";
+        publish();
+        const auto voice_result = deps_.media.voice_start(voice_, &voice_config);
+        if (voice_result != 0) {
             const auto voice = deps_.media.voice_snapshot(voice_);
             deps_.media.room_stop(room_);
-            fail_voice(voice.error[0] == '\0' ? std::string{"Voice could not start."}
-                                              : std::string{"Voice could not start: "} + voice.error);
+            fail_voice("Voice could not start (code " + std::to_string(voice_result) + "): " +
+                       (voice.error[0] == '\0' ? "No native detail. Check audio devices in Settings and retry."
+                                               : voice.error));
             return;
         }
         peer_id_ = rtc.peer_id;
@@ -905,7 +929,13 @@ void ProductSession::decide_request(std::string request_id, bool approve) {
 }
 
 void ProductSession::join_voice() {
-    impl_->enqueue([impl = impl_.get()] { impl->online_command([&] { impl->join_voice(); }); });
+    impl_->enqueue([impl = impl_.get()] {
+        if (!impl->online()) {
+            impl->fail_voice("Voice unavailable: " + impl->state_.workspace.connection_message);
+            return;
+        }
+        impl->join_voice();
+    });
 }
 
 void ProductSession::leave_voice() {

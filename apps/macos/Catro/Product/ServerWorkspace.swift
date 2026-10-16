@@ -27,6 +27,9 @@ struct ServerWorkspace: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: model.starting)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: updater.installing)
         .toolbar {
+            ToolbarItem {
+                Button("Voice Diagnostics…") { model.showVoiceDiagnostics() }
+            }
             ToolbarItem(placement: .primaryAction) {
                 if updater.available != nil && !updater.installing {
                     Button { updater.confirming = true } label: {

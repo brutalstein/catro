@@ -56,7 +56,7 @@ TEST_CASE("macOS product bridge delivers immutable snapshots on the main thread"
     CHECK_FALSE([on_main containsObject:@NO]);
     CatroProductSnapshot* latest = received.lastObject;
     CHECK([latest.connectionMessage
-        isEqualToString:@"Online services are not configured. Local mode remains available."]);
+        isEqualToString:@"Online services are not configured. Local mode remains available. missing"]);
     CHECK_FALSE(latest.canSendMessage);
     CHECK([latest.identityName isEqualToString:@"Owner"]);
     REQUIRE(latest.servers.count == 1);

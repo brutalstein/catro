@@ -28,7 +28,7 @@ struct CatroApp: App {
             CommandMenu("Voice") {
                 Button(product.inVoice ? "Leave Voice" : "Join Voice") { product.toggleVoice() }
                     .keyboardShortcut("j", modifiers: [.command, .shift])
-                    .disabled(!product.inVoice && !(product.snapshot?.canJoinVoice ?? false))
+                Button("Voice Diagnostics…") { product.showVoiceDiagnostics() }
                 Button((product.snapshot?.muted ?? false) ? "Unmute" : "Mute") { product.toggleMute() }
                     .keyboardShortcut("m", modifiers: [.command, .shift])
                     .disabled(product.snapshot?.voicePhase != .joined)

@@ -152,6 +152,7 @@ struct ProductSnapshot {
 struct ProductSessionDependencies {
     // Absent when the local profile could not be loaded; the session then stays failed.
     std::optional<community::LocalState> local_state;
+    std::string local_state_error;
     std::function<community::DirectoryConfigResult()> load_config;
     std::function<community::DirectoryStringResult()> load_credential;
     // Persists a renamed profile; returns a user-facing reason on failure.

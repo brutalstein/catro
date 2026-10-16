@@ -7,6 +7,6 @@ preset=${CATRO_PRESET:-macos-clang}
 root=$(cd "$(dirname "$0")/.." && pwd)
 
 cd "$root"
-cmake --preset "$preset"
+cmake --preset "$preset" "-DCATRO_BUILD_TESTS=${CATRO_BUILD_TESTS:-ON}"
 cmake --build "out/build/$preset" --config "$configuration"
 echo "Shell: out/build/$preset/$configuration/Catro.app"

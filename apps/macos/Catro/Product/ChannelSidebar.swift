@@ -41,9 +41,10 @@ struct ChannelSidebar: View {
                     if server.hasVoice {
                         Button { model.toggleVoice() } label: {
                             Label("Voice", systemImage: "speaker.wave.2")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .disabled(!model.inVoice && !(model.snapshot?.canJoinVoice ?? false))
+                        .buttonStyle(.borderless)
                         .help(model.inVoice ? "Leave this voice channel" : "Join this voice channel")
                         let participants = (model.snapshot?.members ?? []).filter {
                             $0.voiceChannelID == server.voiceChannelID

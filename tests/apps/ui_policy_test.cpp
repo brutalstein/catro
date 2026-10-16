@@ -586,3 +586,17 @@ TEST_CASE("Windows owner moderation is visible, authoritative, and bounded") {
     CHECK(source.find("ResetMessages();") != std::string::npos);
     CHECK(source.find("They will lose text and voice access immediately") != std::string::npos);
 }
+
+TEST_CASE("Windows owner failures remain visible and copyable outside polling status") {
+    const auto root = std::filesystem::path(CATRO_WINDOWS_XAML_DIR);
+    const auto xaml = read(root / "Server/ServerView.xaml");
+    const auto source = read_server_sources(root);
+    CHECK(xaml.find("x:Name=\"ServerActionNotice\"") != std::string::npos);
+    CHECK(xaml.find("x:Name=\"ServerActionDetail\"") != std::string::npos);
+    CHECK(xaml.find("IsTextSelectionEnabled=\"True\"") != std::string::npos);
+    CHECK(source.find("failure.http_status") != std::string::npos);
+    CHECK(source.find("failure.native_code") != std::string::npos);
+    CHECK(source.find("POST /v1/members/remove") != std::string::npos);
+    CHECK(source.find("POST /v1/messages/delete") != std::string::npos);
+    CHECK(source.find("Update the Catro online service") != std::string::npos);
+}
