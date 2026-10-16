@@ -864,6 +864,79 @@ TEST_CASE("macOS product session shows a rejoining room without leaving voice") 
     session.stop();
 }
 
+TEST_CASE("macOS product session waits for the signaling join before starting voice") {
+    MediaScope scope;
+    auto& media = scope.media;
+    {
+        std::scoped_lock lock(media.mutex);
+        media.room_reconnecting = true;
+    }
+    product::ProductSession session(online(seeded_directory()), {});
+    session.start();
+    REQUIRE(wait_until(session, synchronized_with_messages));
+
+    session.join_voice();
+    REQUIRE(wait_until(session, [&media](const auto& snapshot) {
+        return media.called("room_start") && snapshot.media.status.starts_with("Connecting room:");
+    }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK_FALSE(media.called("voice_start"));
+    CHECK(session.snapshot().media.phase == product::VoicePhase::joining);
+    {
+        std::scoped_lock lock(media.mutex);
+        media.room_reconnecting = false;
+    }
+    REQUIRE(wait_until(session, joined));
+    CHECK(media.called("voice_start"));
+    CHECK(session.snapshot().media.status == "Voice connected");
+    session.stop();
+}
+
+TEST_CASE("macOS product session reports a room failure that happens before the join") {
+    MediaScope scope;
+    auto& media = scope.media;
+    {
+        std::scoped_lock lock(media.mutex);
+        media.room_error = "TLS handshake failed";
+    }
+    product::ProductSession session(online(seeded_directory()), {});
+    session.start();
+    REQUIRE(wait_until(session, synchronized_with_messages));
+
+    session.join_voice();
+    REQUIRE(wait_until(session, [](const auto& snapshot) {
+        return snapshot.media.phase == product::VoicePhase::failed;
+    }));
+    CHECK(session.snapshot().media.status == "Room connection failed: TLS handshake failed");
+    CHECK_FALSE(media.called("voice_start"));
+    CHECK(media.called("room_stop"));
+    session.stop();
+}
+
+TEST_CASE("macOS product session times out a room the server never admits") {
+    MediaScope scope;
+    auto& media = scope.media;
+    {
+        std::scoped_lock lock(media.mutex);
+        media.room_reconnecting = true;
+    }
+    product::ProductSession session(online(seeded_directory()), {});
+    session.start();
+    REQUIRE(wait_until(session, synchronized_with_messages));
+
+    session.join_voice();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+    while (session.snapshot().media.phase != product::VoicePhase::failed &&
+           std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    REQUIRE(session.snapshot().media.phase == product::VoicePhase::failed);
+    CHECK(session.snapshot().media.status.starts_with("Room connection timed out after 12 s"));
+    CHECK_FALSE(media.called("voice_start"));
+    CHECK(media.called("room_stop"));
+    session.stop();
+}
+
 TEST_CASE("macOS product session reports voice join failures and requires online services") {
     MediaScope scope;
     auto& media = scope.media;

@@ -572,6 +572,11 @@ struct ProductSession::Impl {
                        (room.error[0] == '\0' ? "No native detail. Check online services and retry." : room.error));
             return;
         }
+        // room_start() only opens the WSS signaling socket. Voice starts once the server admits
+        // this peer, so "Voice connected" is never shown for a room that is still connecting.
+        if (!await_room_join()) {
+            return;
+        }
         std::string input_device;
         std::string output_device;
         {
@@ -612,6 +617,29 @@ struct ProductSession::Impl {
             media.status = "Stream viewing unavailable: " + failure->message;
         }
         refresh_media();
+    }
+
+    // ponytail: blocks the serial worker for up to 12 s, like await_screen_ownership; other
+    // commands queue behind it. The signaling socket itself times out after 10 s.
+    [[nodiscard]] bool await_room_join() {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(12);
+        while (!stopping_.load(std::memory_order_acquire)) {
+            const auto room = deps_.media.screen.snapshot(room_);
+            if (room.state == CATRO_ROOM_JOINED) {
+                return true;
+            }
+            if (room.state == CATRO_ROOM_FAILED || std::chrono::steady_clock::now() >= deadline) {
+                deps_.media.room_stop(room_);
+                const std::string detail =
+                    room.error[0] != '\0' ? room.error : "the signaling server did not admit this peer";
+                fail_voice(room.state == CATRO_ROOM_FAILED ? "Room connection failed: " + detail
+                                                           : "Room connection timed out after 12 s: " + detail);
+                return false;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        deps_.media.room_stop(room_);
+        return false;
     }
 
     void leave_voice() {

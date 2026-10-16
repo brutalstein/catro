@@ -159,9 +159,10 @@ jobs:
           version="${{ steps.version.outputs.version }}"
           tag="${{ steps.version.outputs.tag }}"
           cat > release-notes.md <<'EOF'
-          macOS voice connection fix.
+          macOS voice join reliability.
 
-          - macOS: voice channels now connect. The secure signaling connection verifies the server against the macOS system root certificates; before this, every Mac rejected the server certificate because no trusted roots were configured.
-          - Includes the 0.3.14 voice and owner-action diagnostics.
+          - macOS: voice starts only after the server admits you to the room, so "Voice connected" is no longer shown for a room that is still connecting.
+          - macOS: a room that fails before admission shows "Room connection failed: <reason>"; a room the server never admits stops after 12 seconds with "Room connection timed out" instead of hanging on "Reconnecting...".
+          - Includes the 0.3.15 fix: macOS verifies the secure signaling connection against the system root certificates, so Macs can join voice channels.
           EOF
           gh release create "$tag"             release-assets/Catro-windows-x64.zip             release-assets/Catro-windows-x64.zip.sha256             release-assets/Catro-macos-arm64.zip             release-assets/Catro-macos-arm64.zip.sha256             release-assets/Catro-macos-x64.zip             release-assets/Catro-macos-x64.zip.sha256             scripts/install-windows.ps1             scripts/uninstall-windows.ps1             scripts/install-macos.sh             --target "$GITHUB_SHA"             --title "Catro $version"             --notes-file release-notes.md
